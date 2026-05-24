@@ -125,13 +125,13 @@ function NewScreening() {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("patient_id", selectedPatient.patient_id);
-      formData.append("eye_side", eyeSide);
+      formData.append("image", file);
 
-      const res = await API.post("/screenings/", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await API.post(
+        `/screenings/?patient_id=${selectedPatient.patient_id}&eye_side=${eyeSide}`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
 
       navigate(`/results/${res.data.screening_id}`);
     } catch (err) {

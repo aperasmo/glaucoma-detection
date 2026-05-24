@@ -9,6 +9,7 @@ import NewPatient from "./pages/NewPatient";
 import PatientProfile from "./pages/PatientProfile";
 import NewScreening from "./pages/NewScreening";
 import Settings from "./pages/Settings";
+import ScreeningResult from "./pages/ScreeningResult";
 
 function ProtectedRoute({ children }) {
   const { token } = useAuth();
@@ -28,6 +29,7 @@ function AppRoutes() {
       <Route path="/patients/:patientId" element={<ProtectedRoute><PatientProfile /></ProtectedRoute>} />
       {/* SCREENINGS */}
       <Route path="/screenings/new" element={<ProtectedRoute><NewScreening /></ProtectedRoute>} />
+      <Route path="/results/:screeningId" element={<ProtectedRoute><ScreeningResult /></ProtectedRoute>} />
       {/* SETTINGS */}
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
     </Routes>
