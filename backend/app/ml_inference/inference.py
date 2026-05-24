@@ -249,6 +249,18 @@ async def run_inference_pipeline(
                 import cv2
                 cv2.imwrite(save_path, overlay)
                 gradcam_paths[model_name] = save_path
+
+                # Update individual model result with its gradcam path
+                result = await db.execute(
+                    select(ScreeningResult).where(
+                        ScreeningResult.screening_id == screening_id,
+                        ScreeningResult.model_used == model_name,
+                    )
+                )
+                model_record = result.scalar_one_or_none()
+                if model_record:
+                    model_record.gradcam_path = save_path
+
                 logger.info(f"Grad-CAM++ generated for {model_name}")
 
             # Generate ensemble heatmap using numpy arrays
@@ -257,6 +269,17 @@ async def run_inference_pipeline(
                 original_image_path=image_path,
                 screening_id=screening_id,
             )
+            # Update ensemble result record with Grad-CAM path
+            result = await db.execute(
+                select(ScreeningResult).where(
+                    ScreeningResult.screening_id == screening_id,
+                    ScreeningResult.model_used == "ensemble",
+                    ScreeningResult.llm_used.is_(None),
+                )
+            )
+            ensemble_record = result.scalar_one_or_none()
+            if ensemble_record:
+                ensemble_record.gradcam_path = ensemble_gradcam_path            
             logger.info(f"Ensemble Grad-CAM++ saved: {ensemble_gradcam_path}")
 
 
