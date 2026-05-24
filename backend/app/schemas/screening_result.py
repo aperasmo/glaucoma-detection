@@ -25,6 +25,10 @@ class ScreeningResultResponse(BaseModel):
     referral_letter: Optional[str] = None
     llm_used: Optional[str] = None
     created_at: datetime
+    cdr: Optional[float] = None
+    disc_radius: Optional[float] = None
+    cup_radius: Optional[float] = None
+
 
     model_config = {"from_attributes": True}
 
