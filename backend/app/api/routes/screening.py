@@ -90,6 +90,42 @@ async def list_patient_screenings(
     # Accessible to all authenticated roles.
     return await get_screenings_by_patient(db, patient_id)
 
+@router.get("/", response_model=list, status_code=status.HTTP_200_OK)
+async def list_all_screenings(
+    skip: int = 0,
+    limit: int = 10,
+    status: str = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # List all screenings across all patients with pagination.
+    # Optionally filter by status e.g. ?status=complete
+    from app.services.screening_service import get_all_screenings
+    return await get_all_screenings(db, skip, limit, status)
+
+
+@router.get("/recent", response_model=list, status_code=status.HTTP_200_OK)
+async def recent_screenings(
+    limit: int = 5,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Return last N complete screenings with ensemble result data.
+    # Used for Dashboard recent screenings panel.
+    from app.services.screening_service import get_recent_screenings
+    return await get_recent_screenings(db, limit)
+
+
+@router.get("/stats", response_model=dict, status_code=status.HTTP_200_OK)
+async def dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Return dashboard summary statistics.
+    # Powers the stats cards on the Dashboard page.
+    from app.services.screening_service import get_dashboard_stats
+    return await get_dashboard_stats(db)
+
 
 @router.get("/{screening_id}", response_model=ScreeningResponse, status_code=status.HTTP_200_OK)
 async def get_screening(

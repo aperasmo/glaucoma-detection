@@ -1,6 +1,6 @@
 // src/pages/Dashboard.jsx
-// Matches mock UI dashboard exactly.
-// Sections: stat cards, recent screenings + quick actions, high risk patients table.
+// Main dashboard - Tailwind CSS implementation.
+// Sections: stat cards, recent screenings + quick actions, high risk patients.
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,132 +8,64 @@ import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
-const V = {
-  surface:   "#131D2E",
-  surface2:  "#1A2840",
-  surface3:  "#1F3050",
-  border:    "rgba(255,255,255,0.07)",
-  border2:   "rgba(255,255,255,0.12)",
-  accent:    "#3B9EFF",
-  accent2:   "#5BB8FF",
-  accentDim: "rgba(59,158,255,0.12)",
-  accentDim2:"rgba(59,158,255,0.2)",
-  pos:       "#22C994",
-  posDim:    "rgba(34,201,148,0.12)",
-  neg:       "#FF6B6B",
-  negDim:    "rgba(255,107,107,0.12)",
-  warn:      "#FFB84D",
-  warnDim:   "rgba(255,184,77,0.12)",
-  text:      "#E8EEF7",
-  text2:     "#8FA3BF",
-  text3:     "#4E6580",
-};
+const GRADIENTS = [
+  "from-accent to-accent2",
+  "from-pos to-emerald-700",
+  "from-warn to-amber-700",
+  "from-purple-500 to-purple-800",
+  "from-neg to-red-800",
+];
 
-// Avatar initials with gradient
-function Avatar({ name, size = 28, gradient = "linear-gradient(135deg,#3B9EFF,#1A5FBB)" }) {
+function Avatar({ name, index = 0 }) {
   const initials = name
     ? name.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
     : "?";
   return (
-    <div style={{
-      width: size, height: size,
-      borderRadius: "50%",
-      background: gradient,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.38, fontWeight: "600", color: "white",
-      flexShrink: 0,
-    }}>
+    <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${GRADIENTS[index % GRADIENTS.length]} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
       {initials}
     </div>
   );
 }
 
-// Result badge
 function ResultBadge({ prediction }) {
   const map = {
-    glaucoma: { cls: "bpos", label: "Positive" },
-    normal:   { cls: "bneg", label: "Negative" },
-    pending:  { cls: "bpen", label: "Pending" },
+    glaucoma: { cls: "bg-neg/10 text-neg border-neg/20",    label: "Positive" },
+    normal:   { cls: "bg-pos/10 text-pos border-pos/20",    label: "Negative" },
+    pending:  { cls: "bg-warn/10 text-warn border-warn/20", label: "Pending"  },
   };
-  const { cls, label } = map[prediction?.toLowerCase()] || map.pending;
-  const colors = {
-    bpos: { bg: V.negDim,  color: V.neg },
-    bneg: { bg: V.posDim,  color: V.pos },
-    bpen: { bg: V.warnDim, color: V.warn },
-  };
-  const c = colors[cls];
+  const c = map[prediction?.toLowerCase()] || map.pending;
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: "4px",
-      padding: "3px 8px", borderRadius: "20px",
-      fontSize: "11.5px", fontWeight: "500",
-      background: c.bg, color: c.color,
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-      {label}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${c.cls}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+      {c.label}
     </span>
   );
 }
 
-// Risk score bar
 function RiskBar({ score }) {
   const pct = Math.round((score || 0) * 100);
-  const color = pct > 70 ? V.neg : pct > 50 ? V.warn : V.pos;
+  const color = pct > 70 ? "bg-neg" : pct > 50 ? "bg-warn" : "bg-pos";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-      <div style={{ width: 70, height: 4, background: V.surface3, borderRadius: 3, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} />
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-1 bg-surface3 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span style={{ fontSize: "11.5px", color: V.text2, fontFamily: "'DM Mono',monospace" }}>
-        {score?.toFixed(2) ?? "-"}
+      <span className="text-xs text-text2 font-mono">
+        {score ? score.toFixed(2) : "-"}
       </span>
     </div>
   );
 }
 
-// Stat card matching mock sc class
-function StatCard({ label, value, sub, subColor, accent }) {
+function StatCard({ label, value, sub }) {
   return (
-    <div style={{
-      background: V.surface,
-      border: `1px solid ${V.border}`,
-      borderRadius: "11px",
-      padding: "16px 18px",
-      flex: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      <div style={{ fontSize: "11px", color: V.text3, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "7px" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: "26px", fontWeight: "600", color: V.text, fontFamily: "'DM Mono',monospace", lineHeight: 1, marginBottom: "5px" }}>
-        {value}
-      </div>
-      <div style={{ fontSize: "11.5px", color: subColor || V.text3 }}>
-        {sub}
-      </div>
+    <div className="bg-surface border border-white/7 rounded-xl p-4 flex-1">
+      <div className="text-xs text-text3 uppercase tracking-wider mb-2">{label}</div>
+      <div className="text-2xl font-semibold font-mono text-text1 mb-1">{value}</div>
+      <div className="text-xs text-text3">{sub}</div>
     </div>
   );
 }
-
-// Btn styles
-const btn = {
-  primary: {
-    padding: "6px 13px", borderRadius: "7px", fontSize: "12.5px",
-    fontWeight: "500", cursor: "pointer", border: "none",
-    fontFamily: "'DM Sans',sans-serif",
-    background: V.accent, color: "white",
-    display: "inline-flex", alignItems: "center", gap: "5px",
-  },
-  ghost: {
-    padding: "6px 13px", borderRadius: "7px", fontSize: "12.5px",
-    fontWeight: "500", cursor: "pointer",
-    fontFamily: "'DM Sans',sans-serif",
-    background: "transparent", color: V.text2,
-    border: `1px solid ${V.border2}`,
-    display: "inline-flex", alignItems: "center", gap: "5px",
-  },
-};
 
 function Dashboard() {
   const { user } = useAuth();
@@ -150,14 +82,6 @@ function Dashboard() {
   const totalPatients = patients.length;
   const activePatients = patients.filter(p => p.is_active).length;
 
-  const gradients = [
-    "linear-gradient(135deg,#3B9EFF,#1A5FBB)",
-    "linear-gradient(135deg,#22C994,#0F7A58)",
-    "linear-gradient(135deg,#FFB84D,#A06B00)",
-    "linear-gradient(135deg,#9B59B6,#6C3483)",
-    "linear-gradient(135deg,#E74C3C,#922B21)",
-  ];
-
   function formatDate(d) {
     if (!d) return "-";
     return new Date(d).toLocaleDateString("en-NZ", {
@@ -166,48 +90,66 @@ function Dashboard() {
     });
   }
 
+  const greeting = new Date().getHours() < 12 ? "Good morning" : "Good afternoon";
+  const today = new Date().toLocaleDateString("en-NZ", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+    timeZone: "Pacific/Auckland",
+  });
+
   return (
     <Layout title="Dashboard">
 
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-text1 mb-0.5">
+          {greeting}, {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}.
+        </h2>
+        <p className="text-xs text-text3">{today}</p>
+      </div>
+
       {/* STAT CARDS */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "14px", marginBottom: "20px" }}>
+      <div className="grid grid-cols-4 gap-3 mb-5">
         <StatCard
           label="Total Patients"
           value={loading ? "-" : totalPatients}
-          sub={<><span style={{ color: V.pos }}>+{activePatients}</span> active</>}
+          sub={<span className="text-pos">+{activePatients} active</span>}
         />
         <StatCard
           label="Glaucoma Positive"
           value="—"
-          sub="Pending screening data"
-          subColor={V.neg}
+          sub={<span className="text-neg">Pending screening data</span>}
         />
         <StatCard
           label="Ensemble AUC"
           value="0.9270"
-          sub={<><span style={{ color: V.pos }}>Best</span> overall model</>}
+          sub={<span className="text-pos">Best overall model</span>}
         />
         <StatCard
           label="Sensitivity"
           value="85.4%"
-          sub={<span style={{ color: V.warn }}>At clinical threshold</span>}
+          sub={<span className="text-warn">At clinical threshold</span>}
         />
       </div>
 
       {/* RECENT SCREENINGS + QUICK ACTIONS */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "18px" }}>
+      <div className="grid grid-cols-2 gap-4 mb-4">
 
         {/* Recent Screenings */}
-        <div style={{ background: V.surface, border: `1px solid ${V.border}`, borderRadius: "11px", overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}`, display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text, flex: 1 }}>Recent Screenings</span>
-            <button style={btn.ghost} onClick={() => navigate("/screenings")}>View All</button>
+        <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/7">
+            <span className="text-sm font-semibold text-text1 flex-1">Recent Screenings</span>
+            <button
+              onClick={() => navigate("/screenings")}
+              className="px-3 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+            >
+              View All
+            </button>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="w-full border-collapse">
             <thead>
-              <tr style={{ borderBottom: `1px solid ${V.border}` }}>
+              <tr className="border-b border-white/7">
                 {["Patient", "Result", "Model", "Date"].map(h => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: V.text3, textTransform: "uppercase", letterSpacing: "0.7px", background: "rgba(255,255,255,.02)" }}>
+                  <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider bg-white/[0.02]">
                     {h}
                   </th>
                 ))}
@@ -218,28 +160,28 @@ function Dashboard() {
                 <tr
                   key={p.patient_id}
                   onClick={() => navigate(`/patients/${p.patient_id}`)}
-                  style={{ borderBottom: `1px solid ${V.border}`, cursor: "pointer", transition: "background .1s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = V.accentDim}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
                 >
-                  <td style={{ padding: "12px 14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                      <Avatar name={`${p.first_name} ${p.last_name}`} gradient={gradients[i % gradients.length]} />
-                      <span style={{ fontWeight: "500", fontSize: "13px" }}>{p.first_name} {p.last_name}</span>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Avatar name={`${p.first_name} ${p.last_name}`} index={i} />
+                      <span className="text-sm font-medium text-text1">
+                        {p.first_name} {p.last_name}
+                      </span>
                     </div>
                   </td>
-                  <td style={{ padding: "12px 14px" }}>
+                  <td className="px-4 py-3">
                     <ResultBadge prediction="pending" />
                   </td>
-                  <td style={{ padding: "12px 14px", color: V.text3, fontSize: "12px" }}>—</td>
-                  <td style={{ padding: "12px 14px", color: V.text3, fontSize: "12px", fontFamily: "'DM Mono',monospace" }}>
+                  <td className="px-4 py-3 text-xs text-text3">—</td>
+                  <td className="px-4 py-3 text-xs text-text2 font-mono">
                     {formatDate(p.created_at)}
                   </td>
                 </tr>
               ))}
               {patients.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={4} style={{ padding: "24px", textAlign: "center", color: V.text3, fontSize: "13px" }}>
+                  <td colSpan={4} className="px-4 py-6 text-center text-text3 text-sm">
                     No screenings yet.
                   </td>
                 </tr>
@@ -249,32 +191,32 @@ function Dashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div style={{ background: V.surface, border: `1px solid ${V.border}`, borderRadius: "11px", overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-            <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>Quick Actions</span>
+        <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-white/7">
+            <span className="text-sm font-semibold text-text1">Quick Actions</span>
           </div>
-          <div style={{ padding: "18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          <div className="p-4 grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate("/patients/new")}
-              style={{ ...btn.primary, justifyContent: "center", padding: "14px", fontSize: "13px" }}
+              className="flex items-center justify-center gap-1.5 py-3.5 bg-accent hover:bg-accent2 text-white text-sm font-medium rounded-xl border-0 transition-colors cursor-pointer font-sans"
             >
               ➕ New Patient
             </button>
             <button
               onClick={() => navigate("/screenings/new")}
-              style={{ ...btn.ghost, justifyContent: "center", padding: "14px", fontSize: "13px" }}
+              className="flex items-center justify-center gap-1.5 py-3.5 text-text2 border border-white/12 text-sm font-medium rounded-xl bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
             >
               🔬 Run Screening
             </button>
             <button
               onClick={() => navigate("/reports")}
-              style={{ ...btn.ghost, justifyContent: "center", padding: "14px", fontSize: "13px" }}
+              className="flex items-center justify-center gap-1.5 py-3.5 text-text2 border border-white/12 text-sm font-medium rounded-xl bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
             >
               📄 Reports
             </button>
             <button
               onClick={() => navigate("/analytics")}
-              style={{ ...btn.ghost, justifyContent: "center", padding: "14px", fontSize: "13px" }}
+              className="flex items-center justify-center gap-1.5 py-3.5 text-text2 border border-white/12 text-sm font-medium rounded-xl bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
             >
               📊 Analytics
             </button>
@@ -283,16 +225,16 @@ function Dashboard() {
       </div>
 
       {/* HIGH RISK PATIENTS */}
-      <div style={{ background: V.surface, border: `1px solid ${V.border}`, borderRadius: "11px", overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}`, display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text, flex: 1 }}>High Risk Patients</span>
-          <span style={{ fontSize: "12px", color: V.text3 }}>Requires follow-up</span>
+      <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/7">
+          <span className="text-sm font-semibold text-text1 flex-1">High Risk Patients</span>
+          <span className="text-xs text-text3">Requires follow-up</span>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="w-full border-collapse">
           <thead>
-            <tr style={{ borderBottom: `1px solid ${V.border}` }}>
+            <tr className="border-b border-white/7">
               {["Patient", "Last Screening", "Risk Score", "Model", "Action"].map(h => (
-                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: V.text3, textTransform: "uppercase", letterSpacing: "0.7px", background: "rgba(255,255,255,.02)" }}>
+                <th key={h} className="px-5 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider bg-white/[0.02]">
                   {h}
                 </th>
               ))}
@@ -303,32 +245,30 @@ function Dashboard() {
               <tr
                 key={p.patient_id}
                 onClick={() => navigate(`/patients/${p.patient_id}`)}
-                style={{ borderBottom: `1px solid ${V.border}`, cursor: "pointer", transition: "background .1s" }}
-                onMouseEnter={e => e.currentTarget.style.background = V.accentDim}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
               >
-                <td style={{ padding: "12px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                    <Avatar name={`${p.first_name} ${p.last_name}`} gradient={gradients[i % gradients.length]} />
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={`${p.first_name} ${p.last_name}`} index={i} />
                     <div>
-                      <div style={{ fontWeight: "500", fontSize: "13px" }}>{p.first_name} {p.last_name}</div>
-                      <div style={{ fontSize: "11px", color: V.text3, fontFamily: "'DM Mono',monospace" }}>{p.patient_code}</div>
+                      <div className="text-sm font-medium text-text1">
+                        {p.first_name} {p.last_name}
+                      </div>
+                      <div className="text-xs text-text3 font-mono">{p.patient_code}</div>
                     </div>
                   </div>
                 </td>
-                <td style={{ padding: "12px 14px", color: V.text2, fontSize: "12px", fontFamily: "'DM Mono',monospace" }}>
+                <td className="px-5 py-3 text-xs text-text2 font-mono">
                   {formatDate(p.created_at)}
                 </td>
-                    <td style={{ padding: "12px 14px" }}>
-                    <RiskBar score={null} />
-                    </td>
-                    <td style={{ padding: "12px 14px", color: V.text3, fontSize: "12px" }}>
-                    —
-                    </td>
-                <td style={{ padding: "12px 14px" }}>
+                <td className="px-5 py-3">
+                  <RiskBar score={null} />
+                </td>
+                <td className="px-5 py-3 text-xs text-text3">—</td>
+                <td className="px-5 py-3">
                   <button
                     onClick={e => { e.stopPropagation(); navigate("/screenings/new"); }}
-                    style={{ ...btn.ghost, fontSize: "11px", padding: "4px 10px" }}
+                    className="px-2.5 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
                   >
                     Screen Again
                   </button>
@@ -337,7 +277,7 @@ function Dashboard() {
             ))}
             {patients.length === 0 && !loading && (
               <tr>
-                <td colSpan={5} style={{ padding: "24px", textAlign: "center", color: V.text3, fontSize: "13px" }}>
+                <td colSpan={5} className="px-5 py-6 text-center text-text3 text-sm">
                   No high risk patients.
                 </td>
               </tr>

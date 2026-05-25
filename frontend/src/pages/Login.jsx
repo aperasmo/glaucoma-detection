@@ -1,6 +1,6 @@
 // src/pages/Login.jsx
-// Login page - connects to POST /auth/login
-// FastAPI expects OAuth2 form data: username (email) + password
+// Login page - Tailwind CSS implementation.
+// Connects to POST /auth/login via OAuth2 form data.
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -28,11 +28,14 @@ function Login() {
 
       const res = await API.post("/auth/login", formData);
       const accessToken = res.data.access_token;
-      const userData = res.data.user;
 
-      login(accessToken, userData);
+      const userRes = await API.get("/auth/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      login(accessToken, userRes.data);
       navigate("/dashboard");
-    } catch (err) {
+    } catch {
       setError("Invalid email or password. Please try again.");
     } finally {
       setLoading(false);
@@ -40,129 +43,80 @@ function Login() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "#0f1117",
-    }}>
-      <div style={{
-        background: "#1a1d27",
-        border: "1px solid #2a2d3a",
-        borderRadius: "12px",
-        padding: "40px",
-        width: "100%",
-        maxWidth: "400px",
-      }}>
-        <h1 style={{
-          color: "#ffffff",
-          fontSize: "20px",
-          fontWeight: "600",
-          marginBottom: "4px",
-        }}>
-          Glaucoma Detection System
-        </h1>
-        <p style={{
-          color: "#6b7280",
-          fontSize: "13px",
-          marginBottom: "32px",
-        }}>
-          Sign in to your account
-        </p>
+    <div className="min-h-screen flex items-center justify-center bg-bg">
+      <div className="w-full max-w-sm">
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "16px" }}>
-            <label style={{
-              display: "block",
-              color: "#9ca3af",
-              fontSize: "13px",
-              marginBottom: "6px",
-            }}>
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                background: "#0f1117",
-                border: "1px solid #2a2d3a",
-                borderRadius: "8px",
-                color: "#ffffff",
-                fontSize: "14px",
-                boxSizing: "border-box",
-              }}
-            />
+        {/* Logo */}
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center text-lg">
+            👁
           </div>
+          <span className="font-serif text-xl text-text1">GlaucomaAI Screening System</span>
+        </div>
 
-          <div style={{ marginBottom: "24px" }}>
-            <label style={{
-              display: "block",
-              color: "#9ca3af",
-              fontSize: "13px",
-              marginBottom: "6px",
-            }}>
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                background: "#0f1117",
-                border: "1px solid #2a2d3a",
-                borderRadius: "8px",
-                color: "#ffffff",
-                fontSize: "14px",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
+        {/* Card */}
+        <div className="bg-surface border border-white/7 rounded-2xl p-8">
+          <h1 className="text-lg font-semibold text-text1 mb-1">
+            Sign in to your account
+          </h1>
+          <p className="text-xs text-text3 mb-7">
+            Clinical Screening System — authorised personnel only
+          </p>
 
-          {error && (
-            <p style={{
-              color: "#ef4444",
-              fontSize: "13px",
-              marginBottom: "16px",
-            }}>
-              {error}
-            </p>
-          )}
+          <form onSubmit={handleSubmit}>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: "11px",
-              background: loading ? "#374151" : "#3b82f6",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: "500",
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+            {/* Email */}
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-text2 mb-1.5">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="you@clinic.com"
+                className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors"
+              />
+            </div>
 
-        <p style={{
-          color: "#4b5563",
-          fontSize: "11px",
-          textAlign: "center",
-          marginTop: "24px",
-        }}>
-          Clinical use only. Authorised personnel only.
-        </p>
+            {/* Password */}
+            <div className="mb-6">
+              <label className="block text-xs font-medium text-text2 mb-1.5">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors"
+              />
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 px-3 py-2.5 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg">
+                {error}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 bg-accent hover:bg-accent2 disabled:bg-surface3 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors border-0 cursor-pointer font-sans"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+
+          </form>
+
+          <p className="text-xs text-text3 text-center mt-6">
+            Clinical use only. Unauthorised access is prohibited.
+          </p>
+        </div>
       </div>
     </div>
   );

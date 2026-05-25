@@ -1,102 +1,52 @@
 // src/pages/PatientProfile.jsx
-// Patient detail page - matches mock UI pg-patient-detail exactly.
-// Left panel: avatar, patient info, edit and screen buttons.
-// Right panel: screening history table, longitudinal risk chart placeholder.
-// All data from API - no hardcoded values.
+// Patient detail page - Tailwind CSS implementation.
+// Left panel: patient info. Right panel: screening history + risk chart.
 
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
-const V = {
-  surface:   "#131D2E",
-  surface2:  "#1A2840",
-  surface3:  "#1F3050",
-  border:    "rgba(255,255,255,0.07)",
-  border2:   "rgba(255,255,255,0.12)",
-  accent:    "#3B9EFF",
-  accent2:   "#5BB8FF",
-  accentDim: "rgba(59,158,255,0.12)",
-  pos:       "#22C994",
-  posDim:    "rgba(34,201,148,0.12)",
-  neg:       "#FF6B6B",
-  negDim:    "rgba(255,107,107,0.12)",
-  warn:      "#FFB84D",
-  warnDim:   "rgba(255,184,77,0.12)",
-  text:      "#E8EEF7",
-  text2:     "#8FA3BF",
-  text3:     "#4E6580",
-};
-
 const GRADIENTS = [
-  "linear-gradient(135deg,#3B9EFF,#1A5FBB)",
-  "linear-gradient(135deg,#22C994,#0F7A58)",
-  "linear-gradient(135deg,#FFB84D,#A06B00)",
-  "linear-gradient(135deg,#9B59B6,#6C3483)",
-  "linear-gradient(135deg,#E74C3C,#922B21)",
+  "from-accent to-accent2",
+  "from-pos to-emerald-700",
+  "from-warn to-amber-700",
+  "from-purple-500 to-purple-800",
+  "from-neg to-red-800",
 ];
 
 function getInitials(firstName, lastName) {
   return `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase();
 }
 
-function getGradient(name) {
-  if (!name) return GRADIENTS[0];
-  const i = name.charCodeAt(0) % GRADIENTS.length;
-  return GRADIENTS[i];
+function getGradientIndex(name) {
+  if (!name) return 0;
+  return name.charCodeAt(0) % GRADIENTS.length;
 }
 
 function ResultBadge({ prediction }) {
   const map = {
-    glaucoma: { bg: V.negDim,  color: V.neg,  label: "Positive" },
-    normal:   { bg: V.posDim,  color: V.pos,  label: "Negative" },
-    pending:  { bg: V.warnDim, color: V.warn, label: "Pending"  },
+    glaucoma: { cls: "bg-neg/10 text-neg border-neg/20",  label: "Positive" },
+    normal:   { cls: "bg-pos/10 text-pos border-pos/20",  label: "Negative" },
+    pending:  { cls: "bg-warn/10 text-warn border-warn/20", label: "Pending" },
   };
   const c = map[prediction?.toLowerCase()] || map.pending;
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: "4px",
-      padding: "3px 8px", borderRadius: "20px",
-      fontSize: "11.5px", fontWeight: "500",
-      background: c.bg, color: c.color,
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${c.cls}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
       {c.label}
     </span>
   );
 }
 
-function InfoRow({ label, value }) {
+function InfoRow({ label, value, valueClass }) {
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between",
-      fontSize: "13px", marginBottom: "8px",
-    }}>
-      <span style={{ color: V.text3 }}>{label}</span>
-      <span style={{ color: V.text }}>{value || "-"}</span>
+    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-white/7">
+      <span className="text-text3">{label}</span>
+      <span className={valueClass || "text-text1"}>{value || "-"}</span>
     </div>
   );
 }
-
-const btnGhost = {
-  padding: "6px 13px", borderRadius: "7px",
-  fontSize: "12px", fontWeight: "500", cursor: "pointer",
-  background: "transparent", color: V.text2,
-  border: `1px solid ${V.border2}`,
-  fontFamily: "'DM Sans',sans-serif",
-  display: "inline-flex", alignItems: "center",
-  justifyContent: "center", gap: "5px",
-};
-
-const btnPrimary = {
-  padding: "6px 13px", borderRadius: "7px",
-  fontSize: "12px", fontWeight: "500", cursor: "pointer",
-  background: V.accent, color: "white", border: "none",
-  fontFamily: "'DM Sans',sans-serif",
-  display: "inline-flex", alignItems: "center",
-  justifyContent: "center", gap: "5px",
-};
 
 function PatientProfile() {
   const { patientId } = useParams();
@@ -112,9 +62,9 @@ function PatientProfile() {
       API.get(`/patients/${patientId}`),
       API.get(`/screenings/patient/${patientId}`),
     ])
-      .then(([patientRes, screeningsRes]) => {
-        setPatient(patientRes.data);
-        setScreenings(screeningsRes.data);
+      .then(([pRes, sRes]) => {
+        setPatient(pRes.data);
+        setScreenings(sRes.data);
         setLoading(false);
       })
       .catch(() => {
@@ -125,8 +75,7 @@ function PatientProfile() {
 
   function calcAge(dob) {
     if (!dob) return "-";
-    const diff = Date.now() - new Date(dob).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25)) + " years";
+    return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) + " years";
   }
 
   function formatDate(d) {
@@ -137,161 +86,103 @@ function PatientProfile() {
     });
   }
 
-  function formatGender(g) {
-    if (!g) return "-";
-    return g.charAt(0).toUpperCase() + g.slice(1);
-  }
-
   if (loading) return (
     <Layout title="Patient Profile">
-      <p style={{ color: V.text3, fontSize: "13px" }}>Loading...</p>
+      <p className="text-text3 text-sm">Loading...</p>
     </Layout>
   );
 
   if (error) return (
     <Layout title="Patient Profile">
-      <p style={{ color: V.neg, fontSize: "13px" }}>{error}</p>
+      <p className="text-neg text-sm">{error}</p>
     </Layout>
   );
 
   const fullName = `${patient.first_name} ${patient.last_name}`;
-  const gradient = getGradient(patient.first_name);
+  const gradIdx = getGradientIndex(patient.first_name);
   const initials = getInitials(patient.first_name, patient.last_name);
 
   return (
     <Layout title="Patient Profile">
 
       {/* Breadcrumb */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "6px",
-        fontSize: "12px", color: V.text3, marginBottom: "18px",
-      }}>
-        <span
-          onClick={() => navigate("/patients")}
-          style={{ cursor: "pointer" }}
-          onMouseEnter={e => e.currentTarget.style.color = V.accent2}
-          onMouseLeave={e => e.currentTarget.style.color = V.text3}
-        >
+      <div className="flex items-center gap-1.5 text-xs text-text3 mb-5">
+        <span onClick={() => navigate("/patients")}
+          className="cursor-pointer hover:text-accent2 transition-colors">
           Patients
         </span>
         <span>›</span>
-        <span style={{ color: V.text2 }}>{fullName}</span>
+        <span className="text-text2">{fullName}</span>
       </div>
 
       {/* Two column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "290px 1fr", gap: "16px" }}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "290px 1fr" }}>
 
-        {/* LEFT - Patient Info Card */}
-        <div>
-          <div style={{
-            background: V.surface,
-            border: `1px solid ${V.border}`,
-            borderRadius: "11px",
-            overflow: "hidden",
-          }}>
-            {/* Avatar + Name */}
-            <div style={{ textAlign: "center", padding: "24px 18px" }}>
-              <div style={{
-                width: "56px", height: "56px",
-                borderRadius: "50%",
-                background: gradient,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "20px", fontWeight: "600", color: "white",
-                margin: "0 auto 12px",
-              }}>
-                {initials}
-              </div>
-              <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "3px", color: V.text }}>
-                {fullName}
-              </div>
-              <div style={{
-                fontSize: "12px", color: V.text3,
-                fontFamily: "'DM Mono',monospace", marginBottom: "12px",
-              }}>
-                #{patient.patient_code}
-              </div>
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: "4px",
-                padding: "3px 8px", borderRadius: "20px",
-                fontSize: "11.5px", fontWeight: "500",
-                background: patient.is_active ? V.posDim : V.negDim,
-                color: patient.is_active ? V.pos : V.neg,
-              }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-                {patient.is_active ? "Active" : "Inactive"}
-              </span>
-            </div>
+        {/* LEFT - Patient Info */}
+        <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
 
-            {/* Info Rows */}
-            <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${V.border}` }}>
-              <div style={{ paddingTop: "14px" }}>
-                <InfoRow label="Age"       value={calcAge(patient.dob)} />
-                <InfoRow label="Gender"    value={formatGender(patient.gender)} />
-                <InfoRow label="DOB"       value={formatDate(patient.dob)} />
-                <InfoRow label="Contact"   value={patient.mobile_number} />
-                <InfoRow label="Email"     value={patient.email} />
-                <InfoRow label="IOP"       value={patient.iop ? `${patient.iop} mmHg` : "-"} />
-                <InfoRow label="CCT"       value={patient.cct ? `${patient.cct} µm` : "-"} />
-                <InfoRow label="Screenings" value={`${screenings.length} total`} />
-              </div>
+          {/* Avatar + Name */}
+          <div className="text-center p-6 border-b border-white/7">
+            <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${GRADIENTS[gradIdx]} flex items-center justify-center text-xl font-semibold text-white mx-auto mb-3`}>
+              {initials}
             </div>
+            <div className="text-base font-semibold text-text1 mb-1">{fullName}</div>
+            <div className="text-xs text-text3 font-mono mb-3">#{patient.patient_code}</div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${patient.is_active ? "bg-pos/10 text-pos border-pos/20" : "bg-neg/10 text-neg border-neg/20"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {patient.is_active ? "Active" : "Inactive"}
+            </span>
+          </div>
 
-            {/* Action Buttons */}
-            <div style={{
-              padding: "0 18px 18px",
-              display: "flex", gap: "8px",
-            }}>
-              <button
-                style={{ ...btnGhost, flex: 1 }}
-                onClick={() => navigate(`/patients/${patientId}/edit`)}
-              >
-                ✏️ Edit
-              </button>
-              <button
-                style={{ ...btnPrimary, flex: 1 }}
-                onClick={() => navigate("/screenings/new", { state: { patientId } })}
-              >
-                🔬 Screen
-              </button>
-            </div>
+          {/* Info rows */}
+          <div className="p-4">
+            <InfoRow label="Age"        value={calcAge(patient.dob)} />
+            <InfoRow label="Gender"     value={patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : "-"} />
+            <InfoRow label="DOB"        value={formatDate(patient.dob)} />
+            <InfoRow label="Contact"    value={patient.mobile_number} />
+            <InfoRow label="Email"      value={patient.email} />
+            <InfoRow label="IOP"        value={patient.iop ? `${patient.iop} mmHg` : "-"} />
+            <InfoRow label="CCT"        value={patient.cct ? `${patient.cct} µm` : "-"} />
+            <InfoRow label="Screenings" value={`${screenings.length} total`} valueClass="text-accent2 font-medium" />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-2 p-4 pt-0">
+            <button
+              onClick={() => navigate(`/patients/${patientId}/edit`)}
+              className="flex-1 py-2 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={() => navigate("/screenings/new", { state: { patientId } })}
+              className="flex-1 py-2 text-xs font-medium text-white bg-accent hover:bg-accent2 rounded-lg border-0 transition-colors cursor-pointer font-sans"
+            >
+              🔬 Screen
+            </button>
           </div>
         </div>
 
         {/* RIGHT - Screening History + Chart */}
-        <div>
+        <div className="flex flex-col gap-4">
 
           {/* Screening History */}
-          <div style={{
-            background: V.surface,
-            border: `1px solid ${V.border}`,
-            borderRadius: "11px",
-            overflow: "hidden",
-            marginBottom: "16px",
-          }}>
-            <div style={{
-              padding: "14px 18px",
-              borderBottom: `1px solid ${V.border}`,
-              display: "flex", alignItems: "center", gap: "10px",
-            }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text, flex: 1 }}>
-                Screening History
-              </span>
-              <button style={btnGhost} onClick={() => navigate("/screenings")}>
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1 flex-1">Screening History</span>
+              <button
+                onClick={() => navigate("/screenings")}
+                className="px-3 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+              >
                 View All
               </button>
             </div>
 
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ borderBottom: `1px solid ${V.border}` }}>
-                  {["Date", "Result", "Score", "Model", "Actions"].map(h => (
-                    <th key={h} style={{
-                      padding: "10px 14px", textAlign: "left",
-                      fontSize: "11px", fontWeight: "600",
-                      color: V.text3, textTransform: "uppercase",
-                      letterSpacing: "0.7px",
-                      background: "rgba(255,255,255,.02)",
-                    }}>
+                <tr className="border-b border-white/7">
+                  {["Date", "Eye", "Result", "Score", "Actions"].map(h => (
+                    <th key={h} className="px-5 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider bg-white/[0.02]">
                       {h}
                     </th>
                   ))}
@@ -300,10 +191,7 @@ function PatientProfile() {
               <tbody>
                 {screenings.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{
-                      padding: "32px", textAlign: "center",
-                      color: V.text3, fontSize: "13px",
-                    }}>
+                    <td colSpan={5} className="px-5 py-8 text-center text-text3 text-sm">
                       No screenings yet.
                     </td>
                   </tr>
@@ -312,26 +200,22 @@ function PatientProfile() {
                     <tr
                       key={s.screening_id}
                       onClick={() => navigate(`/results/${s.screening_id}`)}
-                      style={{ borderBottom: `1px solid ${V.border}`, cursor: "pointer", transition: "background .1s" }}
-                      onMouseEnter={e => e.currentTarget.style.background = V.accentDim}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
                     >
-                      <td style={{ padding: "12px 14px", fontFamily: "'DM Mono',monospace", fontSize: "12px", color: V.text2 }}>
+                      <td className="px-5 py-3 text-xs text-text2 font-mono">
                         {formatDate(s.created_at)}
                       </td>
-                      <td style={{ padding: "12px 14px" }}>
+                      <td className="px-5 py-3 text-xs text-text2 capitalize">
+                        {s.eye_side}
+                      </td>
+                      <td className="px-5 py-3">
                         <ResultBadge prediction={s.status === "complete" ? "pending" : s.status} />
                       </td>
-                      <td style={{ padding: "12px 14px", fontFamily: "'DM Mono',monospace", fontSize: "12px", color: V.text }}>
-                        —
-                      </td>
-                      <td style={{ padding: "12px 14px", color: V.text3, fontSize: "12px" }}>
-                        —
-                      </td>
-                      <td style={{ padding: "12px 14px" }}>
+                      <td className="px-5 py-3 text-xs text-text2 font-mono">—</td>
+                      <td className="px-5 py-3">
                         <button
                           onClick={e => { e.stopPropagation(); navigate(`/results/${s.screening_id}`); }}
-                          style={{ ...btnGhost, fontSize: "11px", padding: "4px 10px" }}
+                          className="px-2.5 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
                         >
                           View
                         </button>
@@ -343,34 +227,14 @@ function PatientProfile() {
             </table>
           </div>
 
-          {/* Longitudinal Chart Placeholder */}
-          <div style={{
-            background: V.surface,
-            border: `1px solid ${V.border}`,
-            borderRadius: "11px",
-            overflow: "hidden",
-          }}>
-            <div style={{
-              padding: "14px 18px",
-              borderBottom: `1px solid ${V.border}`,
-              display: "flex", alignItems: "center", gap: "10px",
-            }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text, flex: 1 }}>
-                Risk Progression
-              </span>
-              <span style={{ fontSize: "12px", color: V.text3 }}>
-                Longitudinal tracking
-              </span>
+          {/* Risk Progression */}
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1 flex-1">Risk Progression</span>
+              <span className="text-xs text-text3">Longitudinal tracking</span>
             </div>
-            <div style={{ padding: "18px" }}>
-              <div style={{
-                background: V.surface2,
-                borderRadius: "10px",
-                height: "180px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: V.text3, fontSize: "13px",
-                border: `1px dashed ${V.border2}`,
-              }}>
+            <div className="p-5">
+              <div className="bg-surface2 rounded-xl h-44 flex items-center justify-center border border-dashed border-white/12 text-text3 text-sm">
                 📈 Longitudinal Risk Chart — Plotly
               </div>
             </div>
@@ -378,7 +242,6 @@ function PatientProfile() {
 
         </div>
       </div>
-
     </Layout>
   );
 }

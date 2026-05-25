@@ -7,6 +7,7 @@
 import uuid
 import os
 import shutil
+
 from datetime import datetime
 
 from fastapi import UploadFile
@@ -16,6 +17,10 @@ from sqlalchemy import select
 from app.models.screening import Screening
 from app.schemas.screening import CreateScreening
 from app.core.logger import get_logger
+
+from sqlalchemy import func, cast, Date
+from app.models.patient import Patient
+from app.models.screening_result import ScreeningResult
 
 logger = get_logger(__name__)
 
@@ -142,3 +147,155 @@ async def update_screening_status(
     screening.updated_at = datetime.utcnow()
 
     return screening
+
+
+async def get_all_screenings(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 10,
+    status: str = None,
+) -> list:
+    # Fetch all screenings across all patients with patient name joined.
+    # Optionally filter by status.
+
+    query = (
+        select(
+            Screening.screening_id,
+            Screening.patient_id,
+            Screening.eye_side,
+            Screening.status,
+            Screening.created_at,
+            Patient.first_name,
+            Patient.last_name,
+            Patient.patient_code,
+        )
+        .join(Patient, Screening.patient_id == Patient.patient_id)
+        .order_by(Screening.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+
+    if status:
+        query = query.where(Screening.status == status)
+
+    result = await db.execute(query)
+    rows = result.fetchall()
+
+    return [
+        {
+            "screening_id": row.screening_id,
+            "patient_id": row.patient_id,
+            "patient_name": f"{row.first_name} {row.last_name}",
+            "patient_code": row.patient_code,
+            "eye_side": row.eye_side,
+            "status": row.status,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
+
+
+async def get_recent_screenings(db: AsyncSession, limit: int = 5) -> list:
+    # Fetch last N complete screenings with ensemble result data joined.
+    # Used for the Dashboard recent screenings panel.
+
+    query = (
+        select(
+            Screening.screening_id,
+            Screening.eye_side,
+            Screening.created_at,
+            Patient.first_name,
+            Patient.last_name,
+            Patient.patient_code,
+            ScreeningResult.prediction,
+            ScreeningResult.confidence_score,
+            ScreeningResult.model_used,
+            ScreeningResult.ohts_tier,
+        )
+        .join(Patient, Screening.patient_id == Patient.patient_id)
+        .join(
+            ScreeningResult,
+            (ScreeningResult.screening_id == Screening.screening_id)
+            & (ScreeningResult.model_used == "ensemble")
+            & (ScreeningResult.llm_used.is_(None)),
+        )
+        .where(Screening.status == "complete")
+        .order_by(Screening.created_at.desc())
+        .limit(limit)
+    )
+
+    result = await db.execute(query)
+    rows = result.fetchall()
+
+    return [
+        {
+            "screening_id": row.screening_id,
+            "patient_name": f"{row.first_name} {row.last_name}",
+            "patient_code": row.patient_code,
+            "eye_side": row.eye_side,
+            "prediction": row.prediction,
+            "confidence_score": float(row.confidence_score),
+            "model_used": row.model_used,
+            "ohts_tier": row.ohts_tier,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
+
+
+async def get_dashboard_stats(db: AsyncSession) -> dict:
+    # Fetch summary statistics for the Dashboard.
+    # Single query per stat - efficient and straightforward.
+
+    from datetime import date
+
+    # Total active patients
+    total_patients = await db.execute(
+        select(func.count()).select_from(Patient).where(Patient.is_active == True)
+    )
+    total_patients = total_patients.scalar()
+
+    # Total glaucoma positive screenings (ensemble only)
+    glaucoma_positive = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.prediction == "glaucoma",
+            ScreeningResult.llm_used.is_(None),
+        )
+    )
+    glaucoma_positive = glaucoma_positive.scalar()
+
+    # Screenings today
+    screenings_today = await db.execute(
+        select(func.count()).select_from(Screening).where(
+            cast(Screening.created_at, Date) == date.today()
+        )
+    )
+    screenings_today = screenings_today.scalar()
+
+    # High risk count - glaucoma + OHTS critical or possible
+    high_risk_count = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.prediction == "glaucoma",
+            ScreeningResult.ohts_tier.in_(["critical", "possible"]),
+            ScreeningResult.llm_used.is_(None),
+        )
+    )
+    high_risk_count = high_risk_count.scalar()
+
+    # Pending screenings
+    pending_count = await db.execute(
+        select(func.count()).select_from(Screening).where(
+            Screening.status == "pending"
+        )
+    )
+    pending_count = pending_count.scalar()
+
+    return {
+        "total_patients": total_patients,
+        "glaucoma_positive": glaucoma_positive,
+        "screenings_today": screenings_today,
+        "high_risk_count": high_risk_count,
+        "pending_count": pending_count,
+    }
