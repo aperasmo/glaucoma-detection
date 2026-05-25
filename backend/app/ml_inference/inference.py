@@ -312,10 +312,12 @@ async def run_inference_pipeline(
                 )
 
 
-        # Step 6 - Generate referral letters if prediction is glaucoma
+        # Step 6 - Generate referral letter if prediction is glaucoma
         if ensemble_result["prediction"] == "glaucoma":
             patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
-            
+
+            active_llms = ["gpt4o"] if mode == "clinical" else ["gpt4o", "gpt4o_mini", "llama", "gemini"]
+
             letters = generate_referral_letters(
                 image_path=image_path,
                 patient_name=patient_name,
@@ -323,25 +325,36 @@ async def run_inference_pipeline(
                 confidence_score=ensemble_result["confidence_score"],
                 ohts_score=ohts_result["ohts_score"] if ohts_result else None,
                 ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
-                active_llms=["gpt4o", "gpt4o_mini", "llama", "gemini"],
+                active_llms=active_llms,
             )
 
-            for llm_name, result_data in letters.items():
-                llm_record = ScreeningResult(
-                    screening_id=screening_id,
-                    model_used="ensemble",
-                    prediction=ensemble_result["prediction"],
-                    confidence_score=ensemble_result["confidence_score"],
-                    threshold_used=ensemble_result["threshold_used"],
-                    referral_letter=result_data["letter"],
-                    llm_used=llm_name,
-                    generation_time_ms=result_data["generation_time_ms"],
-                    ohts_score=ohts_result["ohts_score"] if ohts_result else None,
-                    ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
-                    created_by=created_by,
-                    updated_by=created_by,
-                )
-                db.add(llm_record)
+            if mode == "clinical":
+                # Clinical Mode - update the existing ensemble record directly
+                # One record only - referral letter stored in the ensemble result
+                if ensemble_record and "gpt4o" in letters:
+                    ensemble_record.referral_letter = letters["gpt4o"]["letter"]
+                    ensemble_record.llm_used = "gpt4o"
+                    ensemble_record.generation_time_ms = letters["gpt4o"]["generation_time_ms"]
+                    logger.info(f"Clinical Mode - GPT-4o letter saved to ensemble record.")
+
+            else:
+                # Research Mode - create separate record per LLM
+                for llm_name, result_data in letters.items():
+                    llm_record = ScreeningResult(
+                        screening_id=screening_id,
+                        model_used="ensemble",
+                        prediction=ensemble_result["prediction"],
+                        confidence_score=ensemble_result["confidence_score"],
+                        threshold_used=ensemble_result["threshold_used"],
+                        referral_letter=result_data["letter"],
+                        llm_used=llm_name,
+                        generation_time_ms=result_data["generation_time_ms"],
+                        ohts_score=ohts_result["ohts_score"] if ohts_result else None,
+                        ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
+                        created_by=created_by,
+                        updated_by=created_by,
+                    )
+                    db.add(llm_record)
 
             logger.info(f"Referral letters generated: {list(letters.keys())}")
 
