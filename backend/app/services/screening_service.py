@@ -22,6 +22,9 @@ from sqlalchemy import func, cast, Date
 from app.models.patient import Patient
 from app.models.screening_result import ScreeningResult
 
+from datetime import date, timedelta
+from sqlalchemy import extract
+
 logger = get_logger(__name__)
 
 # Local folder where uploaded fundus images are stored.
@@ -292,10 +295,50 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     )
     pending_count = pending_count.scalar()
 
+    # New patients this month
+    new_this_month = await db.execute(
+        select(func.count()).select_from(Patient).where(
+            Patient.is_active == True,
+            extract('month', Patient.created_at) == date.today().month,
+            extract('year', Patient.created_at) == date.today().year,
+        )
+    )
+    new_this_month = new_this_month.scalar()
+
+    # Total complete screenings for percentage calculation
+    total_screenings = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+        )
+    )
+    total_screenings = total_screenings.scalar()
+
+    # Glaucoma percentage
+    glaucoma_percent = (
+        round((glaucoma_positive / total_screenings) * 100, 1)
+        if total_screenings > 0 else 0.0
+    )
+
+    # Yesterday's screening count
+    yesterday = date.today() - timedelta(days=1)
+    screenings_yesterday = await db.execute(
+        select(func.count()).select_from(Screening).where(
+            cast(Screening.created_at, Date) == yesterday
+        )
+    )
+    screenings_yesterday = screenings_yesterday.scalar()
+
+    # Difference vs yesterday
+    screenings_vs_yesterday = screenings_today - screenings_yesterday
+
     return {
         "total_patients": total_patients,
         "glaucoma_positive": glaucoma_positive,
         "screenings_today": screenings_today,
         "high_risk_count": high_risk_count,
         "pending_count": pending_count,
+        "new_this_month": new_this_month,
+        "glaucoma_percent": glaucoma_percent,
+        "screenings_vs_yesterday": screenings_vs_yesterday,
     }

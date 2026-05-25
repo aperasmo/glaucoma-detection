@@ -57,25 +57,26 @@ function RiskBar({ score }) {
   );
 }
 
-function StatCard({ label, value, sub }) {
-  return (
-    <div className="bg-surface border border-white/7 rounded-xl p-4 flex-1">
-      <div className="text-xs text-text3 uppercase tracking-wider mb-2">{label}</div>
-      <div className="text-2xl font-semibold font-mono text-text1 mb-1">{value}</div>
-      <div className="text-xs text-text3">{sub}</div>
-    </div>
-  );
-}
 
 function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
+
+  const [stats, setStats] = useState(null);
+  const [recentScreenings, setRecentScreenings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    API.get("/patients/")
-      .then(res => { setPatients(res.data); setLoading(false); })
+    Promise.all([
+      API.get("/screenings/stats"),
+      API.get("/screenings/recent?limit=5"),
+    ])
+      .then(([statsRes, recentRes]) => {
+        setStats(statsRes.data);
+        setRecentScreenings(recentRes.data);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -109,26 +110,41 @@ function Dashboard() {
 
       {/* STAT CARDS */}
       <div className="grid grid-cols-4 gap-3 mb-5">
-        <StatCard
-          label="Total Patients"
-          value={loading ? "-" : totalPatients}
-          sub={<span className="text-pos">+{activePatients} active</span>}
-        />
-        <StatCard
-          label="Glaucoma Positive"
-          value="—"
-          sub={<span className="text-neg">Pending screening data</span>}
-        />
-        <StatCard
-          label="Ensemble AUC"
-          value="0.9270"
-          sub={<span className="text-pos">Best overall model</span>}
-        />
-        <StatCard
-          label="Sensitivity"
-          value="85.4%"
-          sub={<span className="text-warn">At clinical threshold</span>}
-        />
+        <div className="bg-surface border border-white/7 rounded-xl p-4">
+          <div className="text-xs text-text3 uppercase tracking-wider mb-2">Total Patients</div>
+          <div className="text-2xl font-semibold font-mono text-text1 mb-1">
+            {loading ? "-" : stats?.total_patients ?? "-"}
+          </div>
+          <div className="text-xs text-pos">+{loading ? "-" : stats?.new_this_month ?? "0"} this month</div>
+        </div>
+
+        <div className="bg-surface border border-white/7 rounded-xl p-4">
+          <div className="text-xs text-text3 uppercase tracking-wider mb-2">Glaucoma Positive</div>
+          <div className="text-2xl font-semibold font-mono text-neg mb-1">
+            {loading ? "-" : stats?.glaucoma_positive ?? "-"}
+          </div>
+          <div className="text-xs text-text3">
+            {loading ? "-" : stats?.glaucoma_percent ?? "-"}% of screenings
+          </div>
+        </div>
+
+        <div className="bg-surface border border-white/7 rounded-xl p-4">
+          <div className="text-xs text-text3 uppercase tracking-wider mb-2">Screenings Today</div>
+          <div className="text-2xl font-semibold font-mono text-accent2 mb-1">
+            {loading ? "-" : stats?.screenings_today ?? "-"}
+          </div>
+          <div className="text-xs text-pos">
+            +{loading ? "-" : stats?.screenings_vs_yesterday ?? "0"} vs yesterday
+          </div>
+        </div>
+
+        <div className="bg-surface border border-white/7 rounded-xl p-4">
+          <div className="text-xs text-text3 uppercase tracking-wider mb-2">Pending Review</div>
+          <div className="text-2xl font-semibold font-mono text-warn mb-1">
+            {loading ? "-" : stats?.pending_count ?? "-"}
+          </div>
+          <div className="text-xs text-warn">Needs attention</div>
+        </div>
       </div>
 
       {/* RECENT SCREENINGS + QUICK ACTIONS */}
