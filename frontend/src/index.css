@@ -1,11 +1,48 @@
-*, *::before, *::after {
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Google Fonts */
+
+
+/* CSS custom properties - our design system */
+:root {
+  --bg:         #0C1220;
+  --surface:    #131D2E;
+  --surface2:   #1A2840;
+  --surface3:   #1F3050;
+  --border:     rgba(255,255,255,0.07);
+  --border2:    rgba(255,255,255,0.12);
+  --accent:     #3B9EFF;
+  --accent2:    #5BB8FF;
+  --accent-dim: rgba(59,158,255,0.12);
+  --pos:        #22C994;
+  --pos-dim:    rgba(34,201,148,0.12);
+  --neg:        #FF6B6B;
+  --neg-dim:    rgba(255,107,107,0.12);
+  --warn:       #FFB84D;
+  --warn-dim:   rgba(255,184,77,0.12);
+  --text1:      #E8EEF7;
+  --text2:      #8FA3BF;
+  --text3:      #4E6580;
+}
+
+/* Base resets */
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
 body {
-  margin: 0;
-  padding: 0;
+  background-color: var(--bg);
+  color: var(--text1);
+  font-family: 'DM Sans', sans-serif;
   overflow: hidden;
 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }

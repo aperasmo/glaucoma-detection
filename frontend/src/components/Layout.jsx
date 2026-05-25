@@ -70,14 +70,6 @@ function Layout({ title, actions, children }) {
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600&display=swap');
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'DM Sans',sans-serif; background:${V.bg}; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-thumb { background:${V.surface3}; border-radius:3px; }
-      `}</style>
-
       <div style={{
         display: "flex",
         height: "100vh",

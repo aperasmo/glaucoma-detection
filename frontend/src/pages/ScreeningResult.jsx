@@ -109,17 +109,39 @@ function ScreeningResult() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    API.get(`/results/${screeningId}/full`)
-      .then(res => {
-        setData(res.data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load screening result.");
-        setLoading(false);
-      });
-  }, [screeningId]);
+    useEffect(() => {
+    let interval = null;
+
+    function fetchResult() {
+        API.get(`/results/${screeningId}/full`)
+        .then(res => {
+            setData(res.data);
+            setLoading(false);
+
+            // Stop polling when complete or failed
+            const status = res.data?.status;
+            if (status === "complete" || status === "failed") {
+            if (interval) clearInterval(interval);
+            }
+        })
+        .catch(() => {
+            setError("Failed to load screening result.");
+            setLoading(false);
+            if (interval) clearInterval(interval);
+        });
+    }
+
+    // Fetch immediately
+    fetchResult();
+
+    // Poll every 3 seconds
+    interval = setInterval(fetchResult, 3000);
+
+    // Cleanup on unmount
+    return () => {
+        if (interval) clearInterval(interval);
+    };
+    }, [screeningId]);
 
   function formatDate(d) {
     if (!d) return "-";
@@ -404,33 +426,226 @@ function ScreeningResult() {
             </div>
           </div>
 
-          {/* Biomarker Visualization Placeholder */}
+{/* Biomarker Visualization Card */}
+<div style={{
+  background: V.surface, border: `1px solid ${V.border}`,
+  borderRadius: "11px", overflow: "hidden", marginTop: "16px",
+}}>
+  <div style={{
+    padding: "14px 18px", borderBottom: `1px solid ${V.border}`,
+    display: "flex", alignItems: "center", gap: "10px",
+  }}>
+    <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text, flex: 1 }}>
+      Biomarker Visualization
+    </span>
+    <span style={{
+      fontSize: "11px", padding: "2px 8px", borderRadius: "10px",
+      background: V.warnDim, color: V.warn, fontWeight: "500",
+    }}>
+      Approximate
+    </span>
+  </div>
+  <div style={{ padding: "18px" }}>
+    {result?.cdr != null && result?.disc_radius != null && result?.cup_radius != null ? (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "center" }}>
+
+        {/* SVG Diagram */}
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          {(() => {
+            const cdr = parseFloat(result.cdr);
+            const discR = parseFloat(result.disc_radius);
+            const cupR = parseFloat(result.cup_radius);
+            const scale = 90 / discR;
+            const scaledDisc = discR * scale;
+            const scaledCup = cupR * scale;
+            const cx = 150;
+            const cy = 110;
+            const discColor = cdr > 0.7 ? V.neg : cdr >= 0.5 ? V.warn : V.pos;
+            const cupColor = cdr > 0.7 ? "#FF4444" : cdr >= 0.5 ? "#FFB84D" : "#44CC88";
+
+            return (
+              <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg"
+                style={{ width: "100%", maxWidth: "280px", height: "220px" }}>
+
+                {/* Background */}
+                <rect width="300" height="220" rx="8" fill="#0C1018" />
+
+                {/* Fundus circle background */}
+                <circle cx={cx} cy={cy} r={scaledDisc + 20} fill="#1A0803" opacity="0.6" />
+
+                {/* Optic disc */}
+                <circle cx={cx} cy={cy} r={scaledDisc}
+                  fill="none" stroke={discColor} strokeWidth="2.5" />
+                <circle cx={cx} cy={cy} r={scaledDisc}
+                  fill="#FFEEBB" opacity="0.15" />
+
+                {/* Optic cup */}
+                <circle cx={cx} cy={cy} r={scaledCup}
+                  fill="none" stroke={cupColor} strokeWidth="2" />
+                <circle cx={cx} cy={cy} r={scaledCup}
+                  fill={cupColor} opacity="0.2" />
+
+                {/* CDR diameter line */}
+                <line
+                  x1={cx - scaledDisc} y1={cy}
+                  x2={cx + scaledDisc} y2={cy}
+                  stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="3,3"
+                />
+                <line
+                  x1={cx - scaledCup} y1={cy}
+                  x2={cx + scaledCup} y2={cy}
+                  stroke={cupColor} strokeWidth="1.5" opacity="0.6"
+                />
+
+                {/* CDR label inside */}
+                <text x={cx} y={cy + 4} textAnchor="middle"
+                  fill="white" fontSize="11" fontWeight="700"
+                  fontFamily="DM Mono,monospace">
+                  {cdr.toFixed(2)}
+                </text>
+
+                {/* Legend */}
+                <rect x="168" y="16" width="120" height="88" rx="5"
+                  fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
+                <text x="178" y="31" fill="rgba(160,180,200,0.8)"
+                  fontSize="9.5" fontWeight="600" fontFamily="DM Sans,sans-serif">
+                  Segmentation Legend
+                </text>
+
+                {/* Disc legend */}
+                <circle cx="178" cy="46" r="5" fill="none" stroke={discColor} strokeWidth="2" />
+                <text x="188" y="50" fill="rgba(160,200,160,0.9)"
+                  fontSize="9.5" fontFamily="DM Sans,sans-serif">Optic Disc</text>
+                <text x="188" y="61" fill="rgba(120,160,120,0.65)"
+                  fontSize="9" fontFamily="DM Mono,monospace">
+                  r = {discR.toFixed(0)}px
+                </text>
+
+                {/* Cup legend */}
+                <circle cx="178" cy="76" r="5" fill="none" stroke={cupColor} strokeWidth="2" />
+                <text x="188" y="80" fill="rgba(220,140,140,0.9)"
+                  fontSize="9.5" fontFamily="DM Sans,sans-serif">Optic Cup</text>
+                <text x="188" y="91" fill="rgba(180,100,100,0.65)"
+                  fontSize="9" fontFamily="DM Mono,monospace">
+                  r = {cupR.toFixed(0)}px
+                </text>
+
+                {/* CDR badge at bottom */}
+                <rect x="168" y="112" width="120" height="18" rx="4"
+                  fill={`rgba(${cdr > 0.7 ? "255,60,60" : cdr >= 0.5 ? "255,184,77" : "34,201,148"},0.15)`}
+                  stroke={`rgba(${cdr > 0.7 ? "255,80,80" : cdr >= 0.5 ? "255,200,100" : "34,201,148"},0.3)`}
+                  strokeWidth="1" />
+                <text x="228" y="125" textAnchor="middle"
+                  fill={discColor} fontSize="10" fontWeight="700"
+                  fontFamily="DM Mono,monospace">
+                  CDR = {cdr.toFixed(2)} {cdr > 0.7 ? "▲ Elevated" : cdr >= 0.5 ? "— Borderline" : "✓ Normal"}
+                </text>
+
+                {/* Thinning indicators */}
+                {cdr > 0.5 && (
+                  <>
+                    <text x={cx} y={cy - scaledDisc - 6} textAnchor="middle"
+                      fill="#FF9944" fontSize="9" fontFamily="DM Mono,monospace">
+                      ↓ thin
+                    </text>
+                    <text x={cx} y={cy + scaledDisc + 14} textAnchor="middle"
+                      fill="#FF9944" fontSize="9" fontFamily="DM Mono,monospace">
+                      ↑ thin
+                    </text>
+                  </>
+                )}
+
+                {/* Bottom note */}
+                <text x="150" y="210" textAnchor="middle"
+                  fill="rgba(140,165,190,0.45)" fontSize="8.5"
+                  fontFamily="DM Sans,sans-serif">
+                  Approximate CDR — classical image processing
+                </text>
+              </svg>
+            );
+          })()}
+        </div>
+
+        {/* Right panel - metrics */}
+        <div>
+          {/* CDR value */}
           <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden",
+            background: V.surface2, borderRadius: "10px",
+            padding: "14px 16px", marginBottom: "12px",
           }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Biomarker Visualization
-              </span>
+            <div style={{ fontSize: "11px", color: V.text3, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+              Approximate CDR
             </div>
-            <div style={{ padding: "18px" }}>
-              <div style={{
-                background: V.surface2, borderRadius: "10px",
-                height: "160px", display: "flex",
-                alignItems: "center", justifyContent: "center",
-                border: `1px dashed ${V.border2}`,
-                color: V.text3, fontSize: "13px", textAlign: "center",
-              }}>
-                <div>
-                  <div style={{ fontSize: "28px", marginBottom: "8px" }}>👁</div>
-                  <div>Optic Disc/Cup Segmentation</div>
-                  <div style={{ fontSize: "11px", marginTop: "4px" }}>Coming soon</div>
-                </div>
-              </div>
+            <div style={{
+              fontSize: "28px", fontWeight: "700",
+              fontFamily: "'DM Mono',monospace",
+              color: parseFloat(result.cdr) > 0.7 ? V.neg : parseFloat(result.cdr) >= 0.5 ? V.warn : V.pos,
+            }}>
+              {parseFloat(result.cdr).toFixed(2)}
+            </div>
+            <div style={{ fontSize: "12px", color: V.text3, marginTop: "4px" }}>
+              {parseFloat(result.cdr) > 0.7 ? "Suspicious — refer for evaluation"
+                : parseFloat(result.cdr) >= 0.5 ? "Borderline — monitor closely"
+                : "Within normal range"}
             </div>
           </div>
 
+          {/* Clinical ranges */}
+          <div style={{ marginBottom: "12px" }}>
+            {[
+              { label: "Normal", range: "CDR < 0.5", color: V.pos, active: parseFloat(result.cdr) < 0.5 },
+              { label: "Borderline", range: "CDR 0.5 - 0.7", color: V.warn, active: parseFloat(result.cdr) >= 0.5 && parseFloat(result.cdr) <= 0.7 },
+              { label: "Suspicious", range: "CDR > 0.7", color: V.neg, active: parseFloat(result.cdr) > 0.7 },
+            ].map(r => (
+              <div key={r.label} style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "7px 10px", borderRadius: "7px", marginBottom: "4px",
+                background: r.active ? `rgba(${r.color === V.pos ? "34,201,148" : r.color === V.warn ? "255,184,77" : "255,107,107"},0.1)` : "transparent",
+                border: `1px solid ${r.active ? r.color + "44" : "transparent"}`,
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: r.active ? r.color : V.text3,
+                  display: "inline-block", flexShrink: 0,
+                }} />
+                <span style={{ fontSize: "12px", color: r.active ? r.color : V.text3, fontWeight: r.active ? "600" : "400" }}>
+                  {r.label}
+                </span>
+                <span style={{ fontSize: "11px", color: V.text3, marginLeft: "auto", fontFamily: "'DM Mono',monospace" }}>
+                  {r.range}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Disclaimer */}
+          <div style={{
+            fontSize: "11px", color: V.text3, lineHeight: "1.6",
+            padding: "10px 12px", borderRadius: "7px",
+            background: V.surface2, border: `1px solid ${V.border}`,
+          }}>
+            ℹ CDR approximated using classical image processing. A dedicated segmentation model is planned as future work.
+          </div>
+        </div>
+
+      </div>
+    ) : (
+      <div style={{
+        background: V.surface2, borderRadius: "10px",
+        height: "160px", display: "flex",
+        alignItems: "center", justifyContent: "center",
+        border: `1px dashed ${V.border2}`,
+        color: V.text3, fontSize: "13px", textAlign: "center",
+      }}>
+        <div>
+          <div style={{ fontSize: "28px", marginBottom: "8px" }}>👁</div>
+          <div>Segmentation pending</div>
+          <div style={{ fontSize: "11px", marginTop: "4px" }}>CDR not yet available</div>
+        </div>
+      </div>
+    )}
+  </div>
+</div>
         </div>
 
         {/* RIGHT COLUMN */}

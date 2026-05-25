@@ -10,7 +10,7 @@ import PatientProfile from "./pages/PatientProfile";
 import NewScreening from "./pages/NewScreening";
 import Settings from "./pages/Settings";
 import ScreeningResult from "./pages/ScreeningResult";
-
+import UserManagement from "./pages/UserManagement";
 function ProtectedRoute({ children }) {
   const { token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
@@ -32,6 +32,8 @@ function AppRoutes() {
       <Route path="/results/:screeningId" element={<ProtectedRoute><ScreeningResult /></ProtectedRoute>} />
       {/* SETTINGS */}
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      {/* USER MANAGEMENT */}
+      <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
     </Routes>
   );
 }
