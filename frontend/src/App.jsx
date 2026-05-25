@@ -7,10 +7,17 @@ import Dashboard from "./pages/Dashboard";
 import PatientList from "./pages/PatientList";
 import NewPatient from "./pages/NewPatient";
 import PatientProfile from "./pages/PatientProfile";
+
 import NewScreening from "./pages/NewScreening";
-import Settings from "./pages/Settings";
 import ScreeningResult from "./pages/ScreeningResult";
+import ScreeningHistory from "./pages/ScreeningHistory";
+
+import Settings from "./pages/Settings";
+
 import UserManagement from "./pages/UserManagement";
+import NewUser from "./pages/NewUser";
+
+
 function ProtectedRoute({ children }) {
   const { token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
@@ -30,10 +37,12 @@ function AppRoutes() {
       {/* SCREENINGS */}
       <Route path="/screenings/new" element={<ProtectedRoute><NewScreening /></ProtectedRoute>} />
       <Route path="/results/:screeningId" element={<ProtectedRoute><ScreeningResult /></ProtectedRoute>} />
+      <Route path="/screenings" element={<ProtectedRoute><ScreeningHistory /></ProtectedRoute>} />
       {/* SETTINGS */}
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       {/* USER MANAGEMENT */}
       <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+      <Route path="/users/new" element={<ProtectedRoute><NewUser /></ProtectedRoute>} />
     </Routes>
   );
 }

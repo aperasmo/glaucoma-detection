@@ -1,6 +1,7 @@
 // src/pages/Dashboard.jsx
 // Main dashboard - Tailwind CSS implementation.
-// Sections: stat cards, recent screenings + quick actions, high risk patients.
+// Fixed: uses recentScreenings for both Recent Screenings and High Risk tables.
+// Removed unused patients state.
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -51,17 +52,15 @@ function RiskBar({ score }) {
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs text-text2 font-mono">
-        {score ? score.toFixed(2) : "-"}
+        {score ? parseFloat(score).toFixed(2) : "-"}
       </span>
     </div>
   );
 }
 
-
 function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [patients, setPatients] = useState([]);
 
   const [stats, setStats] = useState(null);
   const [recentScreenings, setRecentScreenings] = useState([]);
@@ -80,9 +79,6 @@ function Dashboard() {
       .catch(() => setLoading(false));
   }, []);
 
-  const totalPatients = patients.length;
-  const activePatients = patients.filter(p => p.is_active).length;
-
   function formatDate(d) {
     if (!d) return "-";
     return new Date(d).toLocaleDateString("en-NZ", {
@@ -96,6 +92,12 @@ function Dashboard() {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
     timeZone: "Pacific/Auckland",
   });
+
+  const highRisk = recentScreenings.filter(s =>
+    s.prediction === "glaucoma" ||
+    s.ohts_tier === "critical" ||
+    s.ohts_tier === "possible"
+  );
 
   return (
     <Layout title="Dashboard">
@@ -115,7 +117,9 @@ function Dashboard() {
           <div className="text-2xl font-semibold font-mono text-text1 mb-1">
             {loading ? "-" : stats?.total_patients ?? "-"}
           </div>
-          <div className="text-xs text-pos">+{loading ? "-" : stats?.new_this_month ?? "0"} this month</div>
+          <div className="text-xs text-pos">
+            +{loading ? "-" : stats?.new_this_month ?? "0"} this month
+          </div>
         </div>
 
         <div className="bg-surface border border-white/7 rounded-xl p-4">
@@ -172,35 +176,45 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {patients.slice(0, 3).map((p, i) => (
-                <tr
-                  key={p.patient_id}
-                  onClick={() => navigate(`/patients/${p.patient_id}`)}
-                  className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Avatar name={`${p.first_name} ${p.last_name}`} index={i} />
-                      <span className="text-sm font-medium text-text1">
-                        {p.first_name} {p.last_name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ResultBadge prediction="pending" />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-text3">—</td>
-                  <td className="px-4 py-3 text-xs text-text2 font-mono">
-                    {formatDate(p.created_at)}
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-text3 text-sm">
+                    Loading...
                   </td>
                 </tr>
-              ))}
-              {patients.length === 0 && !loading && (
+              ) : recentScreenings.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-6 text-center text-text3 text-sm">
                     No screenings yet.
                   </td>
                 </tr>
+              ) : (
+                recentScreenings.map((s, i) => (
+                  <tr
+                    key={s.screening_id}
+                    onClick={() => navigate(`/results/${s.screening_id}`)}
+                    className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={s.patient_name} index={i} />
+                        <div>
+                          <div className="text-sm font-medium text-text1">{s.patient_name}</div>
+                          <div className="text-xs text-text3 font-mono">#{s.patient_code}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ResultBadge prediction={s.prediction} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text3 capitalize">
+                      {s.model_used || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text2 font-mono">
+                      {formatDate(s.created_at)}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -257,46 +271,53 @@ function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {patients.slice(0, 2).map((p, i) => (
-              <tr
-                key={p.patient_id}
-                onClick={() => navigate(`/patients/${p.patient_id}`)}
-                className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
-              >
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name={`${p.first_name} ${p.last_name}`} index={i} />
-                    <div>
-                      <div className="text-sm font-medium text-text1">
-                        {p.first_name} {p.last_name}
-                      </div>
-                      <div className="text-xs text-text3 font-mono">{p.patient_code}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-3 text-xs text-text2 font-mono">
-                  {formatDate(p.created_at)}
-                </td>
-                <td className="px-5 py-3">
-                  <RiskBar score={null} />
-                </td>
-                <td className="px-5 py-3 text-xs text-text3">—</td>
-                <td className="px-5 py-3">
-                  <button
-                    onClick={e => { e.stopPropagation(); navigate("/screenings/new"); }}
-                    className="px-2.5 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
-                  >
-                    Screen Again
-                  </button>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-6 text-center text-text3 text-sm">
+                  Loading...
                 </td>
               </tr>
-            ))}
-            {patients.length === 0 && !loading && (
+            ) : highRisk.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-6 text-center text-text3 text-sm">
                   No high risk patients.
                 </td>
               </tr>
+            ) : (
+              highRisk.slice(0, 3).map((s, i) => (
+                <tr
+                  key={s.screening_id}
+                  onClick={() => navigate(`/results/${s.screening_id}`)}
+                  className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
+                >
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={s.patient_name} index={i} />
+                      <div>
+                        <div className="text-sm font-medium text-text1">{s.patient_name}</div>
+                        <div className="text-xs text-text3 font-mono">#{s.patient_code}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-xs text-text2 font-mono">
+                    {formatDate(s.created_at)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <RiskBar score={s.confidence_score} />
+                  </td>
+                  <td className="px-5 py-3 text-xs text-text3 capitalize">
+                    {s.model_used || "—"}
+                  </td>
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={e => { e.stopPropagation(); navigate("/screenings/new"); }}
+                      className="px-2.5 py-1 text-xs text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+                    >
+                      Screen Again
+                    </button>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
