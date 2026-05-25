@@ -158,8 +158,8 @@ async def get_all_screenings(
     limit: int = 10,
     status: str = None,
 ) -> list:
-    # Fetch all screenings across all patients with patient name joined.
-    # Optionally filter by status.
+    # Fetch all screenings across all patients with patient name and
+    # ensemble result joined. Optionally filter by status.
 
     query = (
         select(
@@ -171,8 +171,18 @@ async def get_all_screenings(
             Patient.first_name,
             Patient.last_name,
             Patient.patient_code,
+            ScreeningResult.prediction,
+            ScreeningResult.confidence_score,
+            ScreeningResult.ohts_tier,
+            ScreeningResult.model_used,
         )
         .join(Patient, Screening.patient_id == Patient.patient_id)
+        .outerjoin(
+            ScreeningResult,
+            (ScreeningResult.screening_id == Screening.screening_id)
+            & (ScreeningResult.model_used == "ensemble")
+            & (ScreeningResult.llm_used.is_(None)),
+        )
         .order_by(Screening.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -192,6 +202,10 @@ async def get_all_screenings(
             "patient_code": row.patient_code,
             "eye_side": row.eye_side,
             "status": row.status,
+            "prediction": row.prediction,
+            "confidence_score": float(row.confidence_score) if row.confidence_score else None,
+            "ohts_tier": row.ohts_tier,
+            "model_used": row.model_used,
             "created_at": row.created_at,
         }
         for row in rows
