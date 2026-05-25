@@ -8,6 +8,8 @@
 # Updates screening status on completion or failure.
 
 import uuid
+import numpy as np
+import cv2
 from datetime import datetime
 
 from app.core.logger import get_logger
@@ -40,6 +42,8 @@ import math
 
 from app.utils.notifications import send_high_risk_notification
 from app.utils.settings_helper import get_setting
+
+from app.services.segmentation_service import extract_cdr_classical
 
 # Sensitivity-first thresholds per model - confirmed from evaluation_results.json
 # These match the thresholds used during evaluation reporting.
@@ -281,6 +285,31 @@ async def run_inference_pipeline(
             if ensemble_record:
                 ensemble_record.gradcam_path = ensemble_gradcam_path            
             logger.info(f"Ensemble Grad-CAM++ saved: {ensemble_gradcam_path}")
+
+            # Extract CDR using ensemble heatmap and original fundus image
+            # Resize all heatmaps to same size before averaging for CDR extraction
+            target_size = (224, 224)
+            resized_heatmaps = [
+                cv2.resize(hm, target_size) for hm in heatmaps.values()
+            ]
+            averaged_heatmap = np.mean(resized_heatmaps, axis=0)
+
+            # Extract CDR using averaged heatmap and original fundus image
+            segmentation_result = extract_cdr_classical(
+                fundus_image_path=image_path,
+                heatmap=averaged_heatmap,
+            )
+
+            # Update ensemble result record with CDR values
+            if ensemble_record and segmentation_result["cdr"] is not None:
+                ensemble_record.cdr = segmentation_result["cdr"]
+                ensemble_record.disc_radius = segmentation_result["disc_radius"]
+                ensemble_record.cup_radius = segmentation_result["cup_radius"]
+                logger.info(
+                    f"CDR saved: {segmentation_result['cdr']} "
+                    f"disc={segmentation_result['disc_radius']} "
+                    f"cup={segmentation_result['cup_radius']}"
+                )
 
 
         # Step 6 - Generate referral letters if prediction is glaucoma
