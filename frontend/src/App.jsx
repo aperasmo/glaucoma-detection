@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import ModelPerformance from "./pages/ModelPerformance";
+
 
 import PatientList from "./pages/PatientList";
 import NewPatient from "./pages/NewPatient";
@@ -20,6 +22,8 @@ import UserManagement from "./pages/UserManagement";
 import NewUser from "./pages/NewUser";
 import UserProfile from "./pages/UserProfile";
 import UserDetail from "./pages/UserDetail";
+
+
 
 function ProtectedRoute({ children }) {
   const { token } = useAuth();
@@ -57,6 +61,8 @@ function AppRoutes() {
       <Route path="/users/:userId" element={<AdminRoute><UserDetail /></AdminRoute>} />
       {/* PROFILE */}
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+      {/* ANALYTICS */}
+      <Route path="/models" element={<ProtectedRoute><ModelPerformance /></ProtectedRoute>} />
     </Routes>
   );
 }

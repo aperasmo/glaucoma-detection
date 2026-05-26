@@ -36,6 +36,9 @@ function Settings() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
 
+  const [apiStatus, setApiStatus] = useState({});
+  const [apiTesting, setApiTesting] = useState({});
+
   useEffect(() => {
     API.get("/settings/")
       .then(res => {
@@ -65,6 +68,27 @@ function Settings() {
       setSaving(false);
     }
   }
+  
+async function testApi(provider) {
+  const key = provider || "all";
+  setApiTesting(prev => ({ ...prev, [key]: true }));
+  try {
+    const url = provider
+      ? `/settings/api-keys/status?provider=${provider}`
+      : "/settings/api-keys/status";
+    const res = await API.get(url);
+    setApiStatus(prev => ({ ...prev, ...res.data }));
+  } catch {
+    if (provider) {
+      setApiStatus(prev => ({
+        ...prev,
+        [provider]: { configured: false, valid: false, status: "error" }
+      }));
+    }
+  } finally {
+    setApiTesting(prev => ({ ...prev, [key]: false }));
+  }
+}
 
   return (
     <Layout title="Settings">
@@ -239,48 +263,85 @@ function Settings() {
       {activeTab === "API Keys" && (
         <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-white/7">
-            <span className="text-sm font-semibold text-text1">API Key Settings</span>
+            <span className="text-sm font-semibold text-text1">API Key Status</span>
           </div>
           <div className="p-5">
-            <SectionDivider label="OpenAI" />
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <FormField label="OpenAI API Key">
-                <input type="password" className={inputClass}
-                  placeholder="sk-••••••••••••••••••••" />
-              </FormField>
-              <FormField label="GPT Model">
-                <select className={`${inputClass} cursor-pointer`}>
-                  <option>gpt-4o</option>
-                  <option>gpt-4o-mini</option>
-                </select>
-              </FormField>
+
+            {/* Info note */}
+            <div className="px-4 py-3 bg-accent/10 border border-accent/20 rounded-lg text-xs text-accent2 mb-5 leading-relaxed">
+              ℹ API keys are managed via server environment variables. Contact your system administrator to update them.
             </div>
 
-            <SectionDivider label="Groq (LLaMA)" />
-            <div className="mb-4">
-              <FormField label="Groq API Key">
-                <input type="password" className={inputClass}
-                  placeholder="gsk_••••••••••••••••••••" />
-              </FormField>
-            </div>
+            {/* Service rows */}
+            {[
+              { key: "openai", label: "OpenAI",      sub: "GPT-4o Vision + GPT-4o-mini" },
+              { key: "groq",   label: "Groq",        sub: "LLaMA Vision" },
+              { key: "gemini", label: "Gemini",      sub: "Google Gemini Vision" },
+            ].map(service => {
+              const status = apiStatus[service.key];
+              const testing = apiTesting[service.key];
 
-            <SectionDivider label="Google Gemini" />
-            <div className="mb-4">
-              <FormField label="Gemini API Key">
-                <input type="password" className={inputClass}
-                  placeholder="AIza••••••••••••••••••••" />
-              </FormField>
-            </div>
+              let badgeCls = "bg-surface3 text-text3 border-white/12";
+              let badgeLabel = "Unknown";
 
-            <div className="flex justify-end pt-4 border-t border-white/7">
-              <button className="px-4 py-2 text-xs font-medium text-white bg-accent hover:bg-accent2 rounded-lg border-0 transition-colors cursor-pointer font-sans">
-                Save API Keys
+              if (status) {
+                if (!status.configured) {
+                  badgeCls = "bg-surface3 text-text3 border-white/12";
+                  badgeLabel = "Not Configured";
+                } else if (!status.valid) {
+                  badgeCls = "bg-neg/10 text-neg border-neg/20";
+                  badgeLabel = "Invalid Key";
+                } else {
+                  badgeCls = "bg-pos/10 text-pos border-pos/20";
+                  badgeLabel = "Connected";
+                }
+              }
+
+              return (
+                <div key={service.key} className="flex items-center gap-4 px-4 py-3.5 bg-surface2 border border-white/7 rounded-xl mb-3">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-text1">{service.label}</div>
+                    <div className="text-xs text-text3 mt-0.5">{service.sub}</div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${badgeCls}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    {badgeLabel}
+                  </span>
+                  <button
+                    onClick={() => testApi(service.key)}
+                    disabled={testing}
+                    className="px-3 py-1.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {testing ? (
+                      <>
+                        <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
+                        Testing...
+                      </>
+                    ) : "Test"}
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Test All */}
+            <div className="pt-4 border-t border-white/7">
+              <button
+                onClick={() => testApi(null)}
+                disabled={apiTesting["all"]}
+                className="w-full py-2.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {apiTesting["all"] ? (
+                  <>
+                    <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
+                    Testing All...
+                  </>
+                ) : "🔄 Test All Connections"}
               </button>
             </div>
+
           </div>
         </div>
       )}
-
     </Layout>
   );
 }
