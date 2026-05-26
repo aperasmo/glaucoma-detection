@@ -19,6 +19,9 @@ from app.utils.security import hash_password
 from app.utils.validators import validate_password_strength
 from datetime import datetime
 
+from app.core.logger import get_logger
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
@@ -158,5 +161,50 @@ async def activate_user(
     user.updated_at = datetime.utcnow()
 
     logger.info(f"User {user.user_code} reactivated by {current_user.user_code}")
+
+    return user
+
+@router.put("/{user_id}/reset-password", response_model=ResponseUser, status_code=status.HTTP_200_OK)
+async def reset_user_password(
+    user_id: UUID,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    # Admin resets a user's password - admin only.
+    # Requires new_password in the request body.
+    # Password is validated against strength policy before saving.
+
+    from app.utils.validators import validate_password_strength
+    from app.utils.security import hash_password
+
+    new_password = data.get("new_password")
+    if not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new_password is required."
+        )
+
+    try:
+        validate_password_strength(new_password)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found."
+        )
+
+    user.hashed_password = hash_password(new_password)
+    user.updated_by = current_user.user_id
+    user.updated_at = datetime.utcnow()
+
+    logger.info(f"Password reset for user {user.user_code} by admin {current_user.user_code}")
 
     return user
