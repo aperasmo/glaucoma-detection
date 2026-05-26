@@ -73,3 +73,65 @@ async def modify_setting(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+    
+@router.get("/api-keys/status", status_code=status.HTTP_200_OK)
+async def check_api_keys_status(
+    current_user: User = Depends(require_role("admin")),
+):
+    # Test each API key by making a minimal call to each provider.
+    # Called on demand when admin clicks the Test button - not on page load.
+    # Returns status per provider without revealing the actual key value.
+
+    import httpx
+    from app.core.config import settings
+
+    results = {}
+
+    # Test OpenAI
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                timeout=5.0,
+            )
+        results["openai"] = {
+            "configured": bool(settings.OPENAI_API_KEY),
+            "valid": response.status_code == 200,
+            "status": "connected" if response.status_code == 200 else "invalid key",
+        }
+    except Exception:
+        results["openai"] = {"configured": bool(settings.OPENAI_API_KEY), "valid": False, "status": "unreachable"}
+
+    # Test Groq
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+                timeout=5.0,
+            )
+        results["groq"] = {
+            "configured": bool(settings.GROQ_API_KEY),
+            "valid": response.status_code == 200,
+            "status": "connected" if response.status_code == 200 else "invalid key",
+        }
+    except Exception:
+        results["groq"] = {"configured": bool(settings.GROQ_API_KEY), "valid": False, "status": "unreachable"}
+
+    # Test Gemini
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.GEMINI_API_KEY}",
+                timeout=5.0,
+            )
+        results["gemini"] = {
+            "configured": bool(settings.GEMINI_API_KEY),
+            "valid": response.status_code == 200,
+            "status": "connected" if response.status_code == 200 else "invalid key",
+        }
+    except Exception:
+        results["gemini"] = {"configured": bool(settings.GEMINI_API_KEY), "valid": False, "status": "unreachable"}
+
+    return results
