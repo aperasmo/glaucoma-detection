@@ -1,41 +1,19 @@
 // src/pages/NewScreening.jsx
-// New screening page - matches mock UI pg-screening exactly.
-// Step 1: Select patient. Step 2: Upload fundus image. Step 3: Select eye side.
-// Right panel: summary card with Run Screening button.
-// Connects to POST /screenings/ with multipart form data.
+// New screening page - Tailwind CSS implementation.
+// Step 1: Select patient. Step 2: Upload fundus image.
+// Step 3: Select eye side. Step 4: Model selection (Research Mode only).
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
-const V = {
-  surface:    "#131D2E",
-  surface2:   "#1A2840",
-  surface3:   "#1F3050",
-  border:     "rgba(255,255,255,0.07)",
-  border2:    "rgba(255,255,255,0.12)",
-  accent:     "#3B9EFF",
-  accent2:    "#5BB8FF",
-  accentDim:  "rgba(59,158,255,0.12)",
-  accentDim2: "rgba(59,158,255,0.2)",
-  pos:        "#22C994",
-  posDim:     "rgba(34,201,148,0.12)",
-  neg:        "#FF6B6B",
-  negDim:     "rgba(255,107,107,0.12)",
-  warn:       "#FFB84D",
-  warnDim:    "rgba(255,184,77,0.12)",
-  text:       "#E8EEF7",
-  text2:      "#8FA3BF",
-  text3:      "#4E6580",
-};
-
 const GRADIENTS = [
-  "linear-gradient(135deg,#3B9EFF,#1A5FBB)",
-  "linear-gradient(135deg,#22C994,#0F7A58)",
-  "linear-gradient(135deg,#FFB84D,#A06B00)",
-  "linear-gradient(135deg,#9B59B6,#6C3483)",
-  "linear-gradient(135deg,#E74C3C,#922B21)",
+  "from-accent to-accent2",
+  "from-pos to-emerald-700",
+  "from-warn to-amber-700",
+  "from-purple-500 to-purple-800",
+  "from-neg to-red-800",
 ];
 
 function getInitials(p) {
@@ -48,14 +26,11 @@ function calcAge(dob) {
   return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
 }
 
-function SummaryRow({ label, value, valueColor }) {
+function SummaryRow({ label, value, valueClass }) {
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between",
-      fontSize: "13px", marginBottom: "8px",
-    }}>
-      <span style={{ color: V.text3 }}>{label}</span>
-      <span style={{ color: valueColor || V.text }}>{value || "—"}</span>
+    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-white/7">
+      <span className="text-text3">{label}</span>
+      <span className={valueClass || "text-text1"}>{value || "—"}</span>
     </div>
   );
 }
@@ -71,17 +46,14 @@ function NewScreening() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [eyeSide, setEyeSide] = useState("left");
+  const [inferenceMode, setInferenceMode] = useState("clinical");
+  const [selectedModel, setSelectedModel] = useState("ensemble");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const [inferenceMode, setInferenceMode] = useState("clinical");
-  const [selectedModel, setSelectedModel] = useState("ensemble");
-
-  // If navigated from patient profile with patientId in state
   useEffect(() => {
     API.get("/patients/").then(res => {
       setPatients(res.data);
-      // Auto-select patient if passed via navigation state
       const preselectedId = location.state?.patientId;
       if (preselectedId) {
         const found = res.data.find(p => p.patient_id === preselectedId);
@@ -90,9 +62,8 @@ function NewScreening() {
     });
     API.get("/settings/INFERENCE_MODE")
       .then(res => setInferenceMode(res.data.set_value))
-      .catch(() => setInferenceMode("clinical"));    
+      .catch(() => setInferenceMode("clinical"));
   }, []);
-
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -122,98 +93,65 @@ function NewScreening() {
     if (!canRun) return;
     setLoading(true);
     setError(null);
-
     try {
       const formData = new FormData();
       formData.append("image", file);
-
       const res = await API.post(
         `/screenings/?patient_id=${selectedPatient.patient_id}&eye_side=${eyeSide}`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
-
       navigate(`/results/${res.data.screening_id}`);
     } catch (err) {
-      setError(err.response?.data?.detail || "Screening failed. Please try again.");
+      const detail = err.response?.data?.detail;
+      setError(Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : detail || "Screening failed. Please try again.");
       setLoading(false);
     }
   }
 
   return (
     <Layout title="Run Screening">
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "16px" }}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 300px" }}>
 
         {/* LEFT - Steps */}
-        <div>
+        <div className="flex flex-col gap-3">
 
           {/* Step 1 - Select Patient */}
-          <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden", marginBottom: "14px",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Step 1 — Select Patient
-              </span>
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1">Step 1 — Select Patient</span>
             </div>
-            <div style={{ padding: "18px" }}>
+            <div className="p-4">
 
               {/* Search */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: "7px",
-                background: V.surface2, border: `1px solid ${V.border}`,
-                borderRadius: "7px", padding: "5px 11px",
-                marginBottom: "12px",
-              }}>
-                <span style={{ color: V.text3 }}>🔍</span>
+              <div className="flex items-center gap-2 bg-surface2 border border-white/7 rounded-lg px-3 py-2 mb-3">
+                <span className="text-text3">🔍</span>
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search patient by name or ID..."
-                  style={{
-                    background: "none", border: "none", outline: "none",
-                    color: V.text, fontSize: "12.5px",
-                    fontFamily: "'DM Sans',sans-serif", width: "100%",
-                  }}
+                  className="bg-transparent border-0 outline-none text-text1 text-xs w-full font-sans placeholder:text-text3"
                 />
               </div>
 
-              {/* Selected patient display */}
+              {/* Selected patient */}
               {selectedPatient && (
-                <div style={{
-                  background: V.accentDim2,
-                  border: `1px solid ${V.accent}`,
-                  borderRadius: "8px", padding: "12px",
-                  display: "flex", alignItems: "center", gap: "10px",
-                  marginBottom: "12px",
-                }}>
-                  <div style={{
-                    width: "28px", height: "28px", borderRadius: "50%",
-                    background: GRADIENTS[0],
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "11px", fontWeight: "600", color: "white", flexShrink: 0,
-                  }}>
+                <div className="flex items-center gap-3 p-3 bg-accent/10 border border-accent rounded-lg mb-3">
+                  <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${GRADIENTS[0]} flex items-center justify-center text-xs font-semibold text-white flex-shrink-0`}>
                     {getInitials(selectedPatient)}
                   </div>
-                  <div>
-                    <div style={{ fontWeight: "500", fontSize: "13px", color: V.text }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-text1">
                       {selectedPatient.first_name} {selectedPatient.last_name}
                     </div>
-                    <div style={{ fontSize: "11px", color: V.text3, fontFamily: "'DM Mono',monospace" }}>
+                    <div className="text-xs text-text3 font-mono">
                       #{selectedPatient.patient_code} · {calcAge(selectedPatient.dob)}{selectedPatient.gender?.[0]?.toUpperCase()}
                     </div>
                   </div>
-                  <span style={{ marginLeft: "auto", color: V.accent2, fontSize: "12px" }}>
-                    ✓ Selected
-                  </span>
+                  <span className="text-xs text-accent2">✓ Selected</span>
                   <button
                     onClick={() => setSelectedPatient(null)}
-                    style={{
-                      background: "none", border: "none",
-                      color: V.text3, cursor: "pointer", fontSize: "12px",
-                    }}
+                    className="text-text3 hover:text-text2 bg-transparent border-0 cursor-pointer text-sm"
                   >
                     ✕
                   </button>
@@ -222,42 +160,24 @@ function NewScreening() {
 
               {/* Patient list */}
               {!selectedPatient && (
-                <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                <div className="max-h-48 overflow-y-auto">
                   {filtered.map((p, i) => (
                     <div
                       key={p.patient_id}
                       onClick={() => { setSelectedPatient(p); setSearch(""); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: "10px",
-                        padding: "10px 12px", borderRadius: "8px",
-                        cursor: "pointer", marginBottom: "4px",
-                        transition: "background .1s",
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = V.accentDim}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-accent/[0.08] transition-colors mb-1"
                     >
-                      <div style={{
-                        width: "28px", height: "28px", borderRadius: "50%",
-                        background: GRADIENTS[i % GRADIENTS.length],
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "11px", fontWeight: "600", color: "white", flexShrink: 0,
-                      }}>
+                      <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]} flex items-center justify-center text-xs font-semibold text-white flex-shrink-0`}>
                         {getInitials(p)}
                       </div>
                       <div>
-                        <div style={{ fontSize: "13px", fontWeight: "500", color: V.text }}>
-                          {p.first_name} {p.last_name}
-                        </div>
-                        <div style={{ fontSize: "11px", color: V.text3, fontFamily: "'DM Mono',monospace" }}>
-                          #{p.patient_code}
-                        </div>
+                        <div className="text-sm font-medium text-text1">{p.first_name} {p.last_name}</div>
+                        <div className="text-xs text-text3 font-mono">#{p.patient_code}</div>
                       </div>
                     </div>
                   ))}
                   {filtered.length === 0 && (
-                    <p style={{ color: V.text3, fontSize: "13px", textAlign: "center", padding: "16px" }}>
-                      No patients found.
-                    </p>
+                    <p className="text-text3 text-sm text-center py-4">No patients found.</p>
                   )}
                 </div>
               )}
@@ -265,114 +185,69 @@ function NewScreening() {
           </div>
 
           {/* Step 2 - Upload Fundus Image */}
-          <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden", marginBottom: "14px",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Step 2 — Upload Fundus Image
-              </span>
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1">Step 2 — Upload Fundus Image</span>
             </div>
-            <div style={{ padding: "18px" }}>
+            <div className="p-4">
               <input
                 type="file"
                 accept="image/jpeg,image/png"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                style={{ display: "none" }}
+                className="hidden"
               />
 
               {preview ? (
-                <div style={{ position: "relative" }}>
+                <div className="relative">
                   <img
                     src={preview}
                     alt="Fundus preview"
-                    style={{
-                      width: "100%", maxHeight: "240px",
-                      objectFit: "contain", borderRadius: "8px",
-                      background: "#060A10",
-                    }}
+                    className="w-full max-h-56 object-contain rounded-lg bg-black"
                   />
                   <button
                     onClick={() => { setFile(null); setPreview(null); }}
-                    style={{
-                      position: "absolute", top: "8px", right: "8px",
-                      background: V.negDim, border: `1px solid ${V.neg}`,
-                      color: V.neg, borderRadius: "6px",
-                      padding: "4px 10px", fontSize: "11px", cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                    }}
+                    className="absolute top-2 right-2 px-2.5 py-1 text-xs text-neg bg-neg/10 border border-neg/20 rounded-lg cursor-pointer font-sans"
                   >
                     ✕ Remove
                   </button>
-                  <p style={{ fontSize: "12px", color: V.pos, marginTop: "8px" }}>
-                    ✓ {file?.name}
-                  </p>
+                  <p className="text-xs text-pos mt-2">✓ {file?.name}</p>
                 </div>
               ) : (
                 <div
                   onClick={() => fileInputRef.current.click()}
                   onDrop={handleDrop}
                   onDragOver={e => e.preventDefault()}
-                  style={{
-                    border: `2px dashed ${V.border2}`,
-                    borderRadius: "10px", padding: "32px",
-                    textAlign: "center", cursor: "pointer",
-                    background: V.surface2, transition: "all .2s",
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = V.accent;
-                    e.currentTarget.style.background = V.accentDim;
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = V.border2;
-                    e.currentTarget.style.background = V.surface2;
-                  }}
+                  className="border-2 border-dashed border-white/12 rounded-xl p-8 text-center cursor-pointer hover:border-accent hover:bg-accent/[0.06] transition-all bg-surface2"
                 >
-                  <div style={{ fontSize: "32px", marginBottom: "10px" }}>📤</div>
-                  <div style={{ fontSize: "14px", fontWeight: "500", marginBottom: "5px", color: V.text }}>
+                  <div className="text-3xl mb-2">📤</div>
+                  <div className="text-sm font-medium text-text1 mb-1">
                     Drop fundus image here or click to upload
                   </div>
-                  <div style={{ fontSize: "12px", color: V.text3 }}>
-                    Supported: JPG, PNG · Max 10MB
-                  </div>
+                  <div className="text-xs text-text3">Supported: JPG, PNG · Max 10MB</div>
                 </div>
               )}
             </div>
           </div>
 
           {/* Step 3 - Eye Side */}
-          <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Step 3 — Select Eye Side
-              </span>
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1">Step 3 — Select Eye Side</span>
             </div>
-            <div style={{ padding: "18px", display: "flex", gap: "12px" }}>
+            <div className="p-4 flex gap-3">
               {["left", "right"].map(side => (
                 <div
                   key={side}
                   onClick={() => setEyeSide(side)}
-                  style={{
-                    flex: 1, padding: "14px", borderRadius: "10px",
-                    border: `2px solid ${eyeSide === side ? V.accent : V.border}`,
-                    background: eyeSide === side ? V.accentDim : V.surface2,
-                    cursor: "pointer", textAlign: "center",
-                    transition: "all .15s",
-                  }}
+                  className={`flex-1 p-4 rounded-xl text-center cursor-pointer transition-all border-2 ${
+                    eyeSide === side
+                      ? "border-accent bg-accent/10"
+                      : "border-white/7 bg-surface2 hover:border-white/20"
+                  }`}
                 >
-                  <div style={{ fontSize: "20px", marginBottom: "6px" }}>
-                    {side === "left" ? "👁" : "👁"}
-                  </div>
-                  <div style={{
-                    fontSize: "13px", fontWeight: "600",
-                    color: eyeSide === side ? V.accent2 : V.text,
-                    textTransform: "capitalize",
-                  }}>
+                  <div className="text-xl mb-2">👁</div>
+                  <div className={`text-sm font-semibold capitalize ${eyeSide === side ? "text-accent2" : "text-text1"}`}>
                     {side} Eye
                   </div>
                 </div>
@@ -380,149 +255,104 @@ function NewScreening() {
             </div>
           </div>
 
-        {/* Step 4 - Model Selection (Research Mode only) */}
-        {inferenceMode === "research" && (
-          <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden", marginTop: "14px",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Step 4 — Select Model
-              </span>
-              <span style={{
-                marginLeft: "10px", fontSize: "11px",
-                background: V.warnDim, color: V.warn,
-                padding: "2px 8px", borderRadius: "10px",
-              }}>
-                Research Mode
-              </span>
-            </div>
-            <div style={{ padding: "18px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                {[
-                  { id: "efficientnetb0", label: "EfficientNetB0", icon: "🏆", desc: "Default · AUC 0.9108" },
-                  { id: "vgg16",          label: "VGG16",          icon: "🔷", desc: "AUC 0.9198" },
-                  { id: "efficientnetv2", label: "EfficientNetV2", icon: "⚡", desc: "AUC 0.9091" },
-                ].map(m => (
-                  <div
-                    key={m.id}
-                    onClick={() => setSelectedModel(m.id)}
-                    style={{
-                      padding: "14px", borderRadius: "10px", textAlign: "center",
-                      border: `2px solid ${selectedModel === m.id ? V.accent : V.border}`,
-                      background: selectedModel === m.id ? V.accentDim : V.surface2,
-                      cursor: "pointer", transition: "all .15s",
-                    }}
-                  >
-                    <div style={{ fontSize: "20px", marginBottom: "6px" }}>{m.icon}</div>
-                    <div style={{ fontSize: "13px", fontWeight: "600", color: selectedModel === m.id ? V.accent2 : V.text }}>
-                      {m.label}
+          {/* Step 4 - Model Selection (Research Mode only) */}
+          {inferenceMode === "research" && (
+            <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-white/7 flex items-center gap-3">
+                <span className="text-sm font-semibold text-text1">Step 4 — Select Model</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-warn/10 text-warn border border-warn/20">
+                  Research Mode
+                </span>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {[
+                    { id: "efficientnetb0", label: "EfficientNetB0", icon: "🏆", desc: "Default · AUC 0.9108" },
+                    { id: "vgg16",          label: "VGG16",          icon: "🔷", desc: "AUC 0.9198" },
+                    { id: "efficientnetv2", label: "EfficientNetV2", icon: "⚡", desc: "AUC 0.9091" },
+                  ].map(m => (
+                    <div
+                      key={m.id}
+                      onClick={() => setSelectedModel(m.id)}
+                      className={`p-3 rounded-xl text-center cursor-pointer transition-all border-2 ${
+                        selectedModel === m.id
+                          ? "border-accent bg-accent/10"
+                          : "border-white/7 bg-surface2 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="text-xl mb-1">{m.icon}</div>
+                      <div className={`text-xs font-semibold ${selectedModel === m.id ? "text-accent2" : "text-text1"}`}>
+                        {m.label}
+                      </div>
+                      <div className="text-xs text-text3 mt-0.5">{m.desc}</div>
                     </div>
-                    <div style={{ fontSize: "11px", color: V.text3, marginTop: "3px" }}>{m.desc}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Ensemble / Consensus option */}
-              <div
-                onClick={() => setSelectedModel("ensemble")}
-                style={{
-                  padding: "14px 16px", borderRadius: "10px",
-                  border: `2px solid ${selectedModel === "ensemble" ? V.warn : V.border}`,
-                  background: selectedModel === "ensemble" ? V.warnDim : V.surface2,
-                  cursor: "pointer", transition: "all .15s",
-                }}
-              >
-                <div style={{ fontSize: "13px", fontWeight: "600", color: V.warn, marginBottom: "4px" }}>
-                  🔀 Run All Three Models — Consensus Mode
+                  ))}
                 </div>
-                <div style={{ fontSize: "12px", color: V.text3 }}>
-                  Flags disagreement between models for closer clinical review
+                <div
+                  onClick={() => setSelectedModel("ensemble")}
+                  className={`p-3 rounded-xl cursor-pointer transition-all border-2 ${
+                    selectedModel === "ensemble"
+                      ? "border-warn bg-warn/10"
+                      : "border-white/7 bg-surface2 hover:border-white/20"
+                  }`}
+                >
+                  <div className="text-sm font-semibold text-warn mb-1">
+                    🔀 Run All Three Models — Consensus Mode
+                  </div>
+                  <div className="text-xs text-text3">
+                    Flags disagreement between models for closer clinical review
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         </div>
 
         {/* RIGHT - Summary */}
         <div>
-          <div style={{
-            background: V.surface, border: `1px solid ${V.border}`,
-            borderRadius: "11px", overflow: "hidden",
-            position: "sticky", top: "0",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${V.border}` }}>
-              <span style={{ fontSize: "13.5px", fontWeight: "600", color: V.text }}>
-                Summary
-              </span>
+          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden sticky top-0">
+            <div className="px-5 py-3.5 border-b border-white/7">
+              <span className="text-sm font-semibold text-text1">Summary</span>
             </div>
-            <div style={{ padding: "18px" }}>
-              <p style={{ fontSize: "12px", color: V.text3, marginBottom: "12px" }}>
-                Review before running
-              </p>
+            <div className="p-4">
+              <p className="text-xs text-text3 mb-4">Review before running</p>
 
-              <SummaryRow
-                label="Patient"
-                value={selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : "—"}
-              />
-              <SummaryRow
-                label="ID"
-                value={selectedPatient ? `#${selectedPatient.patient_code}` : "—"}
-              />
-              <SummaryRow
-                label="Eye Side"
-                value={eyeSide.charAt(0).toUpperCase() + eyeSide.slice(1)}
-              />
-              <SummaryRow
-                label="Model"
+              <SummaryRow label="Patient"
+                value={selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : "—"} />
+              <SummaryRow label="ID"
+                value={selectedPatient ? `#${selectedPatient.patient_code}` : "—"} />
+              <SummaryRow label="Eye Side"
+                value={eyeSide.charAt(0).toUpperCase() + eyeSide.slice(1)} />
+              <SummaryRow label="Image"
+                value={file ? "✓ Ready" : "Not uploaded"}
+                valueClass={file ? "text-pos" : "text-text3"} />
+              <SummaryRow label="Model"
                 value={inferenceMode === "research"
                   ? selectedModel === "ensemble" ? "All Models (Consensus)" : selectedModel
-                  : "Ensemble (Auto)"}
-              />              
-              <SummaryRow
-                label="Image"
-                value={file ? "✓ Ready" : "Not uploaded"}
-                valueColor={file ? V.pos : V.text3}
-              />
+                  : "Ensemble (Auto)"} />
 
-              <div style={{ marginBottom: "16px" }} />
+              <div className="mt-4" />
 
               {error && (
-                <div style={{
-                  padding: "10px 12px", borderRadius: "8px",
-                  fontSize: "12px", marginBottom: "12px",
-                  background: V.negDim,
-                  border: `1px solid rgba(255,107,107,.2)`,
-                  color: V.neg,
-                }}>
+                <div className="px-3 py-2.5 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg mb-3">
                   {error}
                 </div>
               )}
 
-              <button
-                onClick={handleRun}
-                disabled={!canRun || loading}
-                style={{
-                  width: "100%", padding: "12px",
-                  borderRadius: "7px", fontSize: "14px",
-                  fontWeight: "500", cursor: canRun && !loading ? "pointer" : "not-allowed",
-                  background: canRun && !loading ? V.accent : V.surface3,
-                  color: canRun && !loading ? "white" : V.text3,
-                  border: "none", fontFamily: "'DM Sans',sans-serif",
-                  justifyContent: "center", display: "flex", alignItems: "center",
-                  transition: "all .15s",
-                }}
-              >
-                {loading ? "Running..." : "▶ Run Screening"}
-              </button>
+                <button
+                  onClick={handleRun}
+                  disabled={!canRun || loading}
+                  className={`w-full py-3 rounded-lg text-sm font-medium border-0 transition-all font-sans ${
+                    canRun
+                      ? "bg-accent hover:bg-accent2 text-white cursor-pointer"
+                      : "bg-surface3 text-text3 cursor-not-allowed"
+                  }`}
+                >
+                  {loading ? "Running..." : "▶ Run Screening"}
+                </button>
 
-              <p style={{
-                fontSize: "11px", color: V.text3,
-                textAlign: "center", marginTop: "10px",
-              }}>
+              <p className="text-xs text-text3 text-center mt-3">
                 Inference → Grad-CAM++ → GPT-4o → PDF
               </p>
             </div>
@@ -530,6 +360,19 @@ function NewScreening() {
         </div>
 
       </div>
+
+    {/* Loading Overlay */}
+    {loading && (
+      <div className="loading-overlay">
+        <div className="loading-content">
+          <div className="spinner" />
+          <h3 className="text-text1 text-lg font-semibold mb-2">Analysing Image...</h3>
+          <p className="text-text2 text-sm mb-1">AI model is processing your fundus image</p>
+          <p className="text-text3 text-xs">Inference → Grad-CAM++ → GPT-4o → PDF</p>
+        </div>
+      </div>
+    )}
+
     </Layout>
   );
 }

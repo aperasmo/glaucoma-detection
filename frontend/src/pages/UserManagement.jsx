@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
+import { useAuth } from "../context/AuthContext";
 
 // Role badge component
 function RoleBadge({ role }) {
@@ -51,6 +52,7 @@ function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [error, setError] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     API.get("/users/")
@@ -165,7 +167,7 @@ function UserManagement() {
                 <tr
                   key={u.user_id}
                   className="border-b border-white/[0.04] hover:bg-accent/[0.06] transition-colors cursor-pointer"
-                  onClick={() => navigate(`/users/${u.user_id}`)}
+                  onClick={() => navigate(`/users/${u.user_id}`)}            
                 >
                   {/* User */}
                   <td className="px-5 py-3">

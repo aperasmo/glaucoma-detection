@@ -1,29 +1,9 @@
 // src/components/Layout.jsx
-// Matches the mock UI shell exactly.
-// DM Sans + DM Mono + Playfair Display fonts.
-// CSS variables match the mock UI design system.
+// Main layout wrapper - Tailwind CSS implementation.
+// Sidebar with grouped nav, top bar, page content area.
 
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-const V = {
-  bg:         "#0C1220",
-  surface:    "#131D2E",
-  surface2:   "#1A2840",
-  surface3:   "#1F3050",
-  border:     "rgba(255,255,255,0.07)",
-  border2:    "rgba(255,255,255,0.12)",
-  accent:     "#3B9EFF",
-  accent2:    "#5BB8FF",
-  accentDim:  "rgba(59,158,255,0.12)",
-  accentDim2: "rgba(59,158,255,0.2)",
-  pos:        "#22C994",
-  neg:        "#FF6B6B",
-  warn:       "#FFB84D",
-  text:       "#E8EEF7",
-  text2:      "#8FA3BF",
-  text3:      "#4E6580",
-};
 
 const NAV_GROUPS = [
   {
@@ -69,215 +49,108 @@ function Layout({ title, actions, children }) {
   }
 
   return (
-    <>
-      <div style={{
-        display: "flex",
-        height: "100vh",
-        width: "100vw",
-        overflow: "hidden",
-        background: V.bg,
-        color: V.text,
-        fontFamily: "'DM Sans', sans-serif",
-      }}>
+    <div className="flex h-screen w-screen overflow-hidden bg-bg text-text1 font-sans">
 
-        {/* ── SIDEBAR ── */}
-        <div style={{
-          width: "240px",
-          minWidth: "240px",
-          background: V.surface,
-          borderRight: `1px solid ${V.border}`,
-          display: "flex",
-          flexDirection: "column",
-          zIndex: 10,
-        }}>
+      {/* SIDEBAR */}
+      <div className="w-60 min-w-60 bg-surface border-r border-white/7 flex flex-col z-10">
 
-          {/* Logo */}
-          <div style={{
-            padding: "20px 16px 16px",
-            borderBottom: `1px solid ${V.border}`,
-          }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"3px" }}>
-              <div style={{
-                width: "30px", height: "30px",
-                background: `linear-gradient(135deg, ${V.accent}, ${V.accent2})`,
-                borderRadius: "7px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "15px",
-              }}>
-                👁
-              </div>
-              <span style={{
-                fontFamily: "'Playfair Display', serif",
-                fontSize: "17px",
-                color: V.text,
-              }}>
-                GlaucomaAI
-              </span>
+        {/* Logo */}
+        <div className="px-4 py-5 border-b border-white/7">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center text-base">
+              👁
             </div>
-            <div style={{
-              fontSize: "10px",
-              color: V.text3,
-              letterSpacing: "0.8px",
-              textTransform: "uppercase",
-              marginLeft: "40px",
-            }}>
-              Clinical Screening System
-            </div>
+            <span className="font-serif text-lg text-text1">GlaucomaAI</span>
           </div>
+          <div className="text-xs text-text3 uppercase tracking-widest ml-10">
+            Clinical System
+          </div>
+        </div>
 
-          {/* Nav Groups */}
-          <div style={{ padding: "12px 10px 6px", flex: 1, overflowY: "auto" }}>
-            {NAV_GROUPS.map(group => {
-              const visible = group.items.filter(i => i.roles.includes(user?.role));
-              if (!visible.length) return null;
-              return (
-                <div key={group.label} style={{ marginBottom: "8px" }}>
-                  <div style={{
-                    fontSize: "10px",
-                    letterSpacing: "1.2px",
-                    textTransform: "uppercase",
-                    color: V.text3,
-                    padding: "0 8px",
-                    marginBottom: "4px",
-                  }}>
-                    {group.label}
-                  </div>
-                  {visible.map(item => {
-                    const isActive = location.pathname === item.path;
-                    return (
-                      <div
-                        key={item.path}
-                        onClick={() => navigate(item.path)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "9px",
-                          padding: "8px 10px",
-                          borderRadius: "7px",
-                          cursor: "pointer",
-                          fontSize: "13px",
-                          color: isActive ? V.accent2 : V.text2,
-                          background: isActive ? V.accentDim2 : "transparent",
-                          fontWeight: isActive ? "500" : "400",
-                          marginBottom: "1px",
-                          position: "relative",
-                          transition: "all 0.15s",
-                        }}
-                        onMouseEnter={e => {
-                          if (!isActive) {
-                            e.currentTarget.style.background = V.accentDim;
-                            e.currentTarget.style.color = V.text;
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (!isActive) {
-                            e.currentTarget.style.background = "transparent";
-                            e.currentTarget.style.color = V.text2;
-                          }
-                        }}
-                      >
-                        {isActive && (
-                          <div style={{
-                            position: "absolute",
-                            left: 0, top: "50%",
-                            transform: "translateY(-50%)",
-                            width: "3px", height: "16px",
-                            background: V.accent,
-                            borderRadius: "0 3px 3px 0",
-                          }} />
-                        )}
-                        <span style={{ fontSize:"14px", width:"18px", textAlign:"center" }}>
-                          {item.icon}
-                        </span>
-                        {item.label}
-                      </div>
-                    );
-                  })}
+        {/* Nav Groups */}
+        <div className="flex-1 overflow-y-auto px-2.5 py-3">
+          {NAV_GROUPS.map(group => {
+            const visible = group.items.filter(i => i.roles.includes(user?.role));
+            if (!visible.length) return null;
+            return (
+              <div key={group.label} className="mb-4">
+                <div className="text-xs text-text3 uppercase tracking-widest px-2 mb-1.5">
+                  {group.label}
                 </div>
-              );
-            })}
-          </div>
+                {visible.map(item => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <div
+                      key={item.path}
+                      onClick={() => navigate(item.path)}
+                      className={`relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-sm mb-0.5 transition-all ${
+                        isActive
+                          ? "bg-accent/20 text-accent2 font-medium"
+                          : "text-text2 hover:bg-accent/10 hover:text-text1"
+                      }`}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-accent rounded-r" />
+                      )}
+                      <span className="text-sm w-4 text-center">{item.icon}</span>
+                      {item.label}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
 
-          {/* User Footer */}
-          <div style={{
-            padding: "12px 10px",
-            borderTop: `1px solid ${V.border}`,
-          }}>
-            <div
-              onClick={handleLogout}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "9px",
-                padding: "8px",
-                borderRadius: "7px",
-                cursor: "pointer",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = V.surface2}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        {/* User Footer */}
+        <div className="px-2.5 py-3 border-t border-white/7">
+          <div
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-surface2 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-accent2 flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
+              {getInitials(user)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-text1 truncate">
+                {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}
+              </div>
+              <div className="text-xs text-text3 capitalize">{user?.role}</div>
+            </div>
+            <button
+              onClick={e => { e.stopPropagation(); handleLogout(); }}
+              className="text-text3 hover:text-text2 bg-transparent border-0 cursor-pointer text-base p-0.5 flex-shrink-0"
+              title="Sign out"
             >
-              <div style={{
-                width: "30px", height: "30px",
-                borderRadius: "50%",
-                background: `linear-gradient(135deg, ${V.accent}, ${V.accent2})`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "12px", fontWeight: "600", color: "white",
-                flexShrink: 0,
-              }}>
-                {getInitials(user)}
-              </div>
-              <div>
-                <div style={{ fontSize:"13px", fontWeight:"500", color: V.text }}>
-                  {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}
-                </div>
-                <div style={{ fontSize:"11px", color: V.text3, textTransform:"capitalize" }}>
-                  {user?.role} · Sign out
-                </div>
-              </div>
-            </div>
+              ⏻
+            </button>
           </div>
-
         </div>
 
-        {/* ── MAIN ── */}
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minWidth: 0,
-        }}>
-
-          {/* Top Bar */}
-          <div style={{
-            height: "52px",
-            borderBottom: `1px solid ${V.border}`,
-            display: "flex",
-            alignItems: "center",
-            padding: "0 22px",
-            gap: "14px",
-            background: V.surface,
-            flexShrink: 0,
-          }}>
-            <span style={{ fontSize:"14px", fontWeight:"600", color: V.text, flex: 1 }}>
-              {title || location.pathname.replace("/","").replace(/^\w/, c => c.toUpperCase())}
-            </span>
-            {actions && (
-              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                {actions}
-              </div>
-            )}
-          </div>
-
-          {/* Page Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "22px" }}>
-            {children}
-          </div>
-
-        </div>
       </div>
-    </>
+
+      {/* MAIN */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+
+        {/* Top Bar */}
+        <div className="h-13 border-b border-white/7 flex items-center px-6 gap-3 bg-surface flex-shrink-0" style={{ height: "52px" }}>
+          <span className="text-sm font-semibold text-text1 flex-1">
+            {title || location.pathname.replace("/", "").replace(/^\w/, c => c.toUpperCase())}
+          </span>
+          {actions && (
+            <div className="flex items-center gap-2">
+              {actions}
+            </div>
+          )}
+        </div>
+
+        {/* Page Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {children}
+        </div>
+
+      </div>
+    </div>
   );
 }
 
