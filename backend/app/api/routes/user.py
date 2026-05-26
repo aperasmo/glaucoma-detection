@@ -7,7 +7,7 @@
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, logger, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -134,5 +134,29 @@ async def deactivate_user(
     user.is_active = False
     user.updated_by = current_user.user_id
     user.updated_at = datetime.utcnow()
+
+    return user
+
+@router.put("/{user_id}/activate", response_model=ResponseUser, status_code=status.HTTP_200_OK)
+async def activate_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    # Reactivate a previously deactivated user account - admin only.
+    # Sets is_active=True so the user can log in again.
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found."
+        )
+
+    user.is_active = True
+    user.updated_by = current_user.user_id
+    user.updated_at = datetime.utcnow()
+
+    logger.info(f"User {user.user_code} reactivated by {current_user.user_code}")
 
     return user
