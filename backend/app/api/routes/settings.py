@@ -76,12 +76,13 @@ async def modify_setting(
     
 @router.get("/api-keys/status", status_code=status.HTTP_200_OK)
 async def check_api_keys_status(
+    provider: Optional[str] = None,
     current_user: User = Depends(require_role("admin")),
 ):
-    # Test each API key by making a minimal call to each provider.
-    # Called on demand when admin clicks the Test button - not on page load.
-    # Returns status per provider without revealing the actual key value.
-
+    # Test API key(s) on demand.
+    # If provider is specified, test only that provider.
+    # If no provider, test all three.
+    # provider options: openai, groq, gemini
     import httpx
     from app.core.config import settings
 
@@ -134,4 +135,14 @@ async def check_api_keys_status(
     except Exception:
         results["gemini"] = {"configured": bool(settings.GEMINI_API_KEY), "valid": False, "status": "unreachable"}
 
+    # Filter to single provider if specified
+    if provider:
+        if provider not in results:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown provider: {provider}. Valid options: openai, groq, gemini"
+            )
+        return {provider: results[provider]}
+
     return results
+
