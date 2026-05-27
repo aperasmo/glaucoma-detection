@@ -41,15 +41,20 @@ function ResultBadge({ prediction }) {
 }
 
 function RiskBar({ score }) {
-  const pct = Math.round((score || 0) * 100);
+  const hasScore = score !== null && score !== undefined && !Number.isNaN(score);
+  const pct = hasScore ? Math.round(score * 100) : 0;
   const color = pct > 70 ? "bg-neg" : pct > 50 ? "bg-warn" : "bg-pos";
+
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1 bg-surface3 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: hasScore ? `${pct}%` : "0%" }}
+        />
       </div>
       <span className="text-xs text-text2 font-mono">
-        {score ? score.toFixed(2) : "-"}
+        {hasScore ? score.toFixed(2) : "-"}
       </span>
     </div>
   );
@@ -83,12 +88,76 @@ function PatientList() {
     });
   }
 
-  const filtered = patients.filter(p => {
-    const name = `${p.first_name} ${p.last_name}`.toLowerCase();
-    const code = p.patient_code?.toLowerCase();
-    const q = search.toLowerCase();
-    return name.includes(q) || code.includes(q);
-  });
+function getLatestResult(p) {
+  return p.latest_screening?.result || null;
+}
+
+function getPrediction(p) {
+  return getLatestResult(p)?.prediction || "pending";
+}
+
+function getRiskScore(p) {
+  const score = getLatestResult(p)?.confidence_score;
+  return score === null || score === undefined ? null : Number(score);
+}
+
+function getModelName(p) {
+  return getLatestResult(p)?.model_used || "—";
+}
+
+function getLastScreeningDate(p) {
+  return p.latest_screening?.created_at || p.created_at;
+}
+
+function isRecentScreening(p, days = 7) {
+  const dateValue = p.latest_screening?.created_at;
+
+  if (!dateValue) return false;
+
+  const screeningDate = new Date(dateValue);
+  const now = new Date();
+
+  const diffMs = now - screeningDate;
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  return diffDays <= days;
+}
+
+const filtered = patients.filter(p => {
+  const name = `${p.first_name} ${p.last_name}`.toLowerCase();
+  const code = p.patient_code?.toLowerCase() || "";
+  const q = search.toLowerCase();
+
+  const matchesSearch = name.includes(q) || code.includes(q);
+
+  const prediction = getPrediction(p).toLowerCase();
+  const hasResult = !!p.latest_screening?.result;
+
+  const matchesTab =
+    activeTab === "All Patients" ||
+    (activeTab === "High Risk" && prediction === "glaucoma") ||
+    (activeTab === "Recent" && isRecentScreening(p)) ||
+    (activeTab === "Pending" && !hasResult);
+
+  return matchesSearch && matchesTab;
+});
+
+const patientStats = {
+  total: patients.length,
+
+  highRisk: patients.filter(
+    p => getPrediction(p).toLowerCase() === "glaucoma"
+  ).length,
+
+  normal: patients.filter(
+    p => getPrediction(p).toLowerCase() === "normal"
+  ).length,
+
+  pending: patients.filter(
+    p => !p.latest_screening?.result
+  ).length,
+};
+
 
   const actions = (
     <>
@@ -133,10 +202,10 @@ function PatientList() {
       {/* STAT CARDS */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Total",     value: loading ? "-" : patients.length, color: "text-accent2" },
-          { label: "High Risk", value: "—",                             color: "text-neg" },
-          { label: "Normal",    value: "—",                             color: "text-pos" },
-          { label: "Pending",   value: "—",                             color: "text-warn" },
+          { label: "Total", value: loading ? "-" : patientStats.total, color: "text-accent2" },
+          { label: "High Risk", value: loading ? "-" : patientStats.highRisk, color: "text-neg" },
+          { label: "Normal", value: loading ? "-" : patientStats.normal, color: "text-pos" },
+          { label: "Pending", value: loading ? "-" : patientStats.pending, color: "text-warn" },
         ].map(card => (
           <div key={card.label} className="bg-surface border border-white/7 rounded-xl p-4">
             <div className="text-xs text-text3 uppercase tracking-wider mb-2">{card.label}</div>
@@ -200,15 +269,15 @@ function PatientList() {
                     {calcAge(p.dob)} / {p.gender?.[0]?.toUpperCase() || "-"}
                   </td>
                   <td className="px-5 py-3 text-xs text-text2 font-mono">
-                    {formatDate(p.created_at)}
+                    {formatDate(getLastScreeningDate(p))}
                   </td>
                   <td className="px-5 py-3">
-                    <ResultBadge prediction="pending" />
+                    <ResultBadge prediction={getPrediction(p)} />
                   </td>
                   <td className="px-5 py-3">
-                    <RiskBar score={null} />
+                    <RiskBar score={getRiskScore(p)} />
                   </td>
-                  <td className="px-5 py-3 text-xs text-text3">—</td>
+                  <td className="px-5 py-3 text-xs text-text3">{getModelName(p)}</td>
                   <td className="px-5 py-3">
                     <button
                       onClick={e => { e.stopPropagation(); navigate(`/patients/${p.patient_id}`); }}

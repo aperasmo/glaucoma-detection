@@ -38,6 +38,12 @@ def build_clinical_prompt(
     ohts_info = ""
     if ohts_score is not None and ohts_tier is not None:
         ohts_info = f"OHTS 5-year risk score: {ohts_score} ({ohts_tier.upper()} tier)."
+        if ohts_tier.lower() == "low":
+            ohts_info += (
+                " Note: The OHTS score reflects future risk based on IOP and corneal thickness. "
+                "A low OHTS score does not exclude current structural glaucomatous damage "
+                "which has been flagged by the AI screening system."
+            )
 
     return f"""
 You are a clinical assistant helping a general ophthalmologist prepare a referral letter 

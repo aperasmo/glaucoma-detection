@@ -134,14 +134,16 @@ function ScreeningResult() {
     </Layout>
   );
 
-  const result = data?.results?.find(r => r.model_used === "ensemble") || data?.results?.[0];
+  // Clinical result - ensemble, no LLM letter
+const result = data?.results?.find(r => r.model_used === "ensemble" && r.llm_used === null) || data?.results?.find(r => r.llm_used === null) || data?.results?.[0];
+
   const confidence = parseFloat(result?.confidence_score || 0);
   const confidencePct = (confidence * 100).toFixed(1);
   const isGlaucoma = result?.prediction?.toLowerCase() === "glaucoma";
   const isProcessing = data && (data.status === "pending" || data.status === "processing");
 
-  // LLM referral letters
-  const referralResults = data?.results?.filter(r => r.referral_letter != null) || [];
+  // LLM referral letters - separate records
+  const referralResults = data?.results?.filter(r => r.referral_letter != null && r.llm_used !== null) || [];
   const gpt4o     = referralResults.find(r => r.llm_used === "gpt4o");
   const gpt4oMini = referralResults.find(r => r.llm_used === "gpt4o_mini");
   const llama     = referralResults.find(r => r.llm_used === "llama");
@@ -268,26 +270,44 @@ function ScreeningResult() {
             <div className="p-4">
               {result?.ohts_score ? (
                 <>
-                  <div className="flex items-center gap-4 p-4 bg-surface2 rounded-xl mb-4">
+                <div className="flex gap-4 mb-4">
+                {/* OHTS Score - left half */}
+                <div className="flex items-center justify-center gap-4 p-4 bg-surface2 rounded-xl w-1/2">
                     <div className="text-center">
-                      <div className={`text-4xl font-bold font-mono ${
+                    <div className={`text-4xl font-bold font-mono ${
                         result.ohts_tier === "critical" ? "text-neg" :
                         result.ohts_tier === "possible" ? "text-warn" : "text-pos"
-                      }`}>
+                    }`}>
                         {parseFloat(result.ohts_score).toFixed(0)}
-                      </div>
-                      <div className="text-xs text-text3 mt-1">/ 16 pts</div>
+                    </div>
+                    <div className="text-xs text-text3 mt-1">/ 16 pts</div>
                     </div>
                     <div>
-                      <OHTSTierBadge tier={result.ohts_tier} />
-                      <div className="text-xs text-text3 mt-2">
+                    <OHTSTierBadge tier={result.ohts_tier} />
+                    <div className="text-xs text-text3 mt-2">
                         Estimated 5-year POAG risk: {
-                          parseFloat(result.ohts_score) > 12 ? "≥33%" :
-                          parseFloat(result.ohts_score) >= 7 ? "10-20%" : "≤4%"
+                        parseFloat(result.ohts_score) > 12 ? "≥33%" :
+                        parseFloat(result.ohts_score) >= 7 ? "10-20%" : "≤4%"
                         }
-                      </div>
                     </div>
-                  </div>
+                    </div>
+                </div>
+
+                {/* Right half - contradiction banner or empty */}
+                <div className="w-1/2 flex items-center">
+                    {isGlaucoma && result.ohts_tier?.toLowerCase() === "low" ? (
+                    <div className="px-3 py-3 bg-warn/10 border border-warn/20 rounded-lg text-xs text-warn leading-relaxed w-full">
+                        ℹ AI detected structural changes consistent with glaucoma in this fundus image.
+                        The OHTS score reflects future risk based on current IOP and corneal thickness measurements,
+                        which may not capture existing damage. These are two complementary clinical assessments —
+                        the AI evaluates current structural appearance while OHTS predicts future progression risk.
+                        Both should be considered together when making a referral decision.
+                    </div>
+                    ) : (
+                    <div className="w-full" />
+                    )}
+                </div>
+                </div>
                   <div className="text-xs text-text3 text-center mb-3">
                     0-6 = Low · 7-12 = Moderate · &gt;12 = High
                   </div>
