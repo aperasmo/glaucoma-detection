@@ -65,5 +65,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
+    # --- Test images directory ---
+    TEST_IMAGES_DIR: str = "test_images"
+    TEST_IMAGES_DONE_DIR: str = "test_images/done"
+
 
 settings = Settings()

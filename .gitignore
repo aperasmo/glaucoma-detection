@@ -78,3 +78,6 @@ Thumbs.db
 # ============================================
 *.dockerignore
 docker-compose.override.yml
+
+# Test images - local only, not for version control
+backend/test_images/

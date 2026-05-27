@@ -22,9 +22,13 @@ logger = get_logger(__name__)
 
 
 async def generate_user_code(db: AsyncSession) -> str:
-    # Count existing users and generate the next sequential code.
-    # Pads to 5 digits e.g. USR00001, USR00002.
-    result = await db.execute(select(func.count()).select_from(User))
+    # Generate next sequential user code e.g. USR00001.
+    # Excludes SYS prefixed codes from the count.
+    result = await db.execute(
+        select(func.count()).select_from(User).where(
+            User.user_code.notlike("SYS%")
+        )
+    )
     count = result.scalar()
     return f"USR{str(count + 1).zfill(5)}"
 

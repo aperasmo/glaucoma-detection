@@ -7,6 +7,7 @@
 # Saves results to screening_results table.
 # Updates screening status on completion or failure.
 
+from turtle import mode
 import uuid
 import numpy as np
 import cv2
@@ -329,13 +330,26 @@ async def run_inference_pipeline(
             )
 
             if mode == "clinical":
-                # Clinical Mode - update the existing ensemble record directly
-                # One record only - referral letter stored in the ensemble result
-                if ensemble_record and "gpt4o" in letters:
-                    ensemble_record.referral_letter = letters["gpt4o"]["letter"]
-                    ensemble_record.llm_used = "gpt4o"
-                    ensemble_record.generation_time_ms = letters["gpt4o"]["generation_time_ms"]
-                    logger.info(f"Clinical Mode - GPT-4o letter saved to ensemble record.")
+                # Clinical Mode - create a separate record for GPT-4o letter.
+                # Ensemble record stays clean with llm_used = NULL.
+                # This ensures llm_used IS NULL filter always finds the clinical result.
+                if "gpt4o" in letters:
+                    llm_record = ScreeningResult(
+                        screening_id=screening_id,
+                        model_used="ensemble",
+                        prediction=ensemble_result["prediction"],
+                        confidence_score=ensemble_result["confidence_score"],
+                        threshold_used=ensemble_result["threshold_used"],
+                        referral_letter=letters["gpt4o"]["letter"],
+                        llm_used="gpt4o",
+                        generation_time_ms=letters["gpt4o"]["generation_time_ms"],
+                        ohts_score=ohts_result["ohts_score"] if ohts_result else None,
+                        ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
+                        created_by=created_by,
+                        updated_by=created_by,
+                    )
+                    db.add(llm_record)
+                    logger.info("Clinical Mode - GPT-4o letter saved as separate record.")
 
             else:
                 # Research Mode - create separate record per LLM

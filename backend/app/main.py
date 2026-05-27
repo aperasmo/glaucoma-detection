@@ -25,6 +25,8 @@ from app.api.routes.user import router as user_router # User management routes -
 from fastapi.staticfiles import StaticFiles # Serve uploaded images from the /uploads URL path. The actual files are stored in the uploads/ folder on disk.
 from app.api.routes.settings import router as settings_router # System settings routes - admin-only settings management
 
+from app.api.routes.admin import router as admin_router # Admin-only routes for system monitoring and maintenance tasks
+
 # Module-level logger for main application events
 logger = get_logger(__name__)
 
@@ -77,6 +79,7 @@ app.include_router (screening_router) # Screening routes - image upload and mana
 app.include_router(screening_result_router) # Screening result routes - returns ML inference results to frontend
 app.include_router(user_router) # User management routes - admin-only user CRUD operations
 app.include_router(settings_router) # System settings routes - admin-only settings management
+app.include_router(admin_router) # Admin-only routes for system monitoring and maintenance tasks
 # --- Health Check Endpoint ---
 # This is the first route we register.
 # It confirms the API is running and returns basic app info.
