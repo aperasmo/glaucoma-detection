@@ -74,3 +74,36 @@ async def update_setting(
     logger.info(f"Setting updated: {set_code} = {setting.set_value}")
 
     return setting
+
+async def upsert_setting(
+    db: AsyncSession,
+    set_code: str,
+    set_value: str,
+    updated_by,
+    category: str = "General",
+    set_name: str = None,
+) -> SystemSettings:
+    # Update setting if it exists, create it if it does not.
+    # Used for settings that may not be seeded yet e.g. CLINIC_NAME.
+
+    setting = await get_setting_by_code(db, set_code)
+
+    if setting:
+        setting.set_value = set_value
+        setting.updated_by = updated_by
+        setting.updated_at = datetime.utcnow()
+        logger.info(f"Setting updated: {set_code} = {set_value}")
+    else:
+        setting = SystemSettings(
+            category=category,
+            set_code=set_code,
+            set_name=set_name or set_code,
+            set_value=set_value,
+            status="A",
+            created_by=updated_by,
+            updated_by=updated_by,
+        )
+        db.add(setting)
+        logger.info(f"Setting created: {set_code} = {set_value}")
+
+    return setting
