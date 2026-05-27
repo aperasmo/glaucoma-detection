@@ -44,10 +44,16 @@ async def get_setting(
     # Get a single setting by set_code - admin only.
     setting = await get_setting_by_code(db, set_code)
     if not setting:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Setting not found: {set_code}",
-        )
+        return {
+            "id": None,
+            "category": None,
+            "set_code": set_code,
+            "set_name": None,
+            "set_value": None,
+            "remark": None,
+            "status": None,
+            "updated_at": None,
+        }
     return setting
 
 
@@ -74,6 +80,38 @@ async def modify_setting(
             detail=str(e),
         )
     
+@router.post("/", response_model=SettingResponse, status_code=status.HTTP_200_OK)
+async def save_setting(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    # Create or update a setting - upsert.
+    # Use this for settings that may not exist yet.
+    # Required fields: set_code, set_value
+    # Optional fields: category, set_name
+
+    from app.services.system_settings_service import upsert_setting
+
+    set_code = data.get("set_code")
+    set_value = data.get("set_value")
+
+    if not set_code or set_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="set_code and set_value are required."
+        )
+
+    return await upsert_setting(
+        db=db,
+        set_code=set_code,
+        set_value=set_value,
+        updated_by=current_user.user_id,
+        category=data.get("category", "General"),
+        set_name=data.get("set_name"),
+    )
+
+
 @router.get("/api-keys/status", status_code=status.HTTP_200_OK)
 async def check_api_keys_status(
     provider: Optional[str] = None,
