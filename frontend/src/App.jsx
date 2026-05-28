@@ -17,6 +17,7 @@ import NewUser from "./pages/NewUser";
 import UserProfile from "./pages/UserProfile";
 import UserDetail from "./pages/UserDetail";
 import ModelPerformance from "./pages/ModelPerformance";
+import Analytics from "./pages/Analytics";
 
 function ProtectedRoute() {
   const { token } = useAuth();
@@ -53,7 +54,7 @@ const router = createBrowserRouter([
       { path: "/screenings/new",         element: <NewScreening /> },
       { path: "/screenings",             element: <ScreeningHistory /> },
       { path: "/results/:screeningId",   element: <ScreeningResult /> },
-      { path: "/analytics",              element: <div>Analytics</div> },
+      { path: "/analytics",              element: <Analytics /> },
       { path: "/models",                 element: <ModelPerformance /> },
       { path: "/reports",                element: <div>Reports</div> },
       { path: "/profile",                element: <UserProfile /> },
