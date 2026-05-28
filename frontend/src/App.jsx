@@ -19,6 +19,9 @@ import UserDetail from "./pages/UserDetail";
 import ModelPerformance from "./pages/ModelPerformance";
 import Analytics from "./pages/Analytics";
 
+
+import { ThemeProvider } from "./theme/ThemeProvider";
+
 function ProtectedRoute() {
   const { token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
@@ -32,13 +35,6 @@ function AdminRoute() {
   return <Outlet />;
 }
 
-function AppWrapper() {
-  return (
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
-  );
-}
 
 const router = createBrowserRouter([
   { path: "/", element: <Login /> },
@@ -88,7 +84,9 @@ function AdminRouteWrapper() {
 function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -8,6 +8,9 @@ import { useBlocker } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
+import { useTheme } from "../theme/ThemeProvider";
+import { THEME_GROUPS } from "../theme/themes";
+
 const inputClass = "w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans";
 
 function SectionDivider({ label }) {
@@ -28,7 +31,52 @@ function FormField({ label, hint, children }) {
   );
 }
 
-const TABS = ["General", "AI Models", "Notifications", "API Keys"];
+const TABS = ["General", "AI Models", "Notifications", "API Keys", "Appearance"];
+
+function ThemeCard({ theme, selected, onSelect }) {
+  const badgeClass = {
+    Dark: "bg-white/10 text-text3",
+    Light: "bg-accent/10 text-accent2",
+    "Eye-Safe": "bg-pos/10 text-pos",
+    Default: "bg-warn/10 text-warn",
+  };
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`relative bg-surface2 border-2 rounded-xl p-3.5 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg ${
+        selected ? "border-accent" : "border-border hover:border-border2"
+      }`}
+    >
+      {selected && (
+        <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
+          ✓
+        </div>
+      )}
+
+      <div className="flex h-12 rounded-lg overflow-hidden mb-2.5 gap-0.5">
+        <div style={{ background: theme.preview[0], flex: 1.2 }} />
+        <div style={{ background: theme.preview[1], flex: 2 }} />
+        <div style={{ background: theme.preview[2], flex: 0.8 }} />
+      </div>
+
+      <div className="text-sm font-semibold text-text1 mb-1.5">
+        {theme.name}
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {theme.badges.map(badge => (
+          <span
+            key={badge}
+            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${badgeClass[badge] || "bg-surface3 text-text3"}`}
+          >
+            {badge}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Settings() {
   const [activeTab, setActiveTab] = useState("General");
@@ -39,6 +87,8 @@ function Settings() {
   const [error, setError] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
+
+  const { currentTheme, setTheme, themes } = useTheme();
 
   // Form states
   const [general, setGeneral] = useState({
@@ -507,7 +557,40 @@ function updateThresholds(key, value) {
           </div>
         </div>
       )}
+      {/* APPEARANCE TAB */}
+      {activeTab === "Appearance" && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-border">
+            <span className="text-sm font-semibold text-text1">Appearance</span>
+            <p className="text-xs text-text3 mt-1">
+              Choose a comfortable colour theme for long clinical review sessions.
+            </p>
+          </div>
 
+          <div className="p-5">
+            <div className="px-4 py-3 bg-surface2 border border-border rounded-lg border-l-4 border-l-accent text-xs text-text3 leading-relaxed mb-5">
+              Based on PMC (2024) and WCAG 2.1 research - muted tones reduce eye fatigue for extended screen use. Light themes use soft off-white backgrounds instead of pure white. All themes meet WCAG AA contrast standards.
+            </div>
+
+            {THEME_GROUPS.map(group => (
+              <div key={group.label} className="mb-6">
+                <SectionDivider label={group.label} />
+
+                <div className="grid grid-cols-4 gap-3">
+                  {group.ids.map(id => (
+                    <ThemeCard
+                      key={id}
+                      theme={themes[id]}
+                      selected={currentTheme === id}
+                      onSelect={() => setTheme(id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

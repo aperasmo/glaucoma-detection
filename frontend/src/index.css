@@ -4,29 +4,66 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Google Fonts */
-
-
-/* CSS custom properties - our design system */
+/* CSS custom properties - design system */
 :root {
   --bg:         #0C1220;
   --surface:    #131D2E;
   --surface2:   #1A2840;
   --surface3:   #1F3050;
+
+  --bg-rgb:         12 18 32;
+  --surface-rgb:    19 29 46;
+  --surface2-rgb:   26 40 64;
+  --surface3-rgb:   31 48 80;
+
   --border:     rgba(255,255,255,0.07);
   --border2:    rgba(255,255,255,0.12);
+
   --accent:     #3B9EFF;
   --accent2:    #5BB8FF;
-  --accent-dim: rgba(59,158,255,0.12);
+  --accent-rgb:  59 158 255;
+  --accent2-rgb: 91 184 255;
+  --accent-dim:  rgba(59,158,255,0.12);
+  --accent-dim2: rgba(59,158,255,0.20);
+
   --pos:        #22C994;
+  --pos-rgb:    34 201 148;
   --pos-dim:    rgba(34,201,148,0.12);
+
   --neg:        #FF6B6B;
+  --neg-rgb:    255 107 107;
   --neg-dim:    rgba(255,107,107,0.12);
+
   --warn:       #FFB84D;
+  --warn-rgb:   255 184 77;
   --warn-dim:   rgba(255,184,77,0.12);
+
   --text1:      #E8EEF7;
   --text2:      #8FA3BF;
   --text3:      #4E6580;
+  --text1-rgb:  232 238 247;
+  --text2-rgb:  143 163 191;
+  --text3-rgb:  78 101 128;
+
+  /* Sidebar defaults */
+  --sb-bg:      #131D2E;
+  --sb-s2:      #1A2840;
+  --sb-brd:     rgba(255,255,255,0.07);
+  --sb-t:       #E8EEF7;
+  --sb-t2:      #8FA3BF;
+  --sb-t3:      #4E6580;
+  --sb-hov:     rgba(59,158,255,0.12);
+  --sb-act:     rgba(59,158,255,0.20);
+  --sb-at:      #5BB8FF;
+  --sb-bar:     #3B9EFF;
+
+  --sb-bg-rgb:  19 29 46;
+  --sb-s2-rgb:  26 40 64;
+  --sb-t-rgb:   232 238 247;
+  --sb-t2-rgb:  143 163 191;
+  --sb-t3-rgb:  78 101 128;
+  --sb-at-rgb:  91 184 255;
+  --sb-bar-rgb: 59 158 255;
 }
 
 /* Base resets */
@@ -44,9 +81,14 @@ body {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+::-webkit-scrollbar {
+  width: 5px;
+}
 
+::-webkit-scrollbar-thumb {
+  background: var(--surface3);
+  border-radius: 3px;
+}
 
 /* Loading overlay */
 .loading-overlay {
@@ -75,5 +117,7 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
