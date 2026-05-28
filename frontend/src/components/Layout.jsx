@@ -5,6 +5,8 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+import { useTheme } from "../theme/ThemeProvider";
+
 const NAV_GROUPS = [
   {
     label: "Main",
@@ -50,6 +52,12 @@ function Layout({ title, actions, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  {/* THEME */}
+  const { currentTheme, themes } = useTheme();
+  const isDarkTheme = themes[currentTheme]?.mode === "dark";
+  const logoSrc = isDarkTheme
+    ? "/assets/glaucoma-ai-logo-dark.png"
+    : "/assets/glaucoma-ai-logo-light.png";
 
   function handleLogout() {
     logout();
@@ -62,18 +70,20 @@ function Layout({ title, actions, children }) {
       {/* SIDEBAR */}
       <div className="w-60 min-w-60 bg-sbBg border-r border-sbBorder flex flex-col z-10">
 
-        {/* Logo */}
-        <div className="px-4 py-5 border-b border-sbBorder">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sbBar to-sbActiveText flex items-center justify-center text-base">
-              👁
-            </div>
-            <span className="font-serif text-lg text-sbText">GlaucomaAI</span>
-          </div>
-          <div className="text-xs text-sbText3 uppercase tracking-widest ml-10">
+      {/* Logo */}
+      <div className="px-4 py-5 border-b border-sbBorder">
+        <div className="flex flex-col items-center justify-center">
+          <img
+            src={logoSrc}
+            alt="Glaucoma AI"
+            className="h-8 w-auto max-w-[190px] object-contain"
+          />
+
+          <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
             Clinical System
           </div>
         </div>
+      </div>
 
         {/* Nav Groups */}
         <div className="flex-1 overflow-y-auto px-2.5 py-3">
@@ -124,9 +134,10 @@ function Layout({ title, actions, children }) {
             onClick={() => navigate("/profile")}
             className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-sbSurface2 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sbBar to-sbActiveText flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-white ring-1 ring-border2 shadow-sm flex-shrink-0">
               {getInitials(user)}
-            </div>
+            </div>         
+ 
 
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-sbText truncate">

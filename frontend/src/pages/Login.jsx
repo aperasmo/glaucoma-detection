@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import API from "../api/index";
+import { useTheme } from "../theme/ThemeProvider";
 
 function Login() {
   const navigate = useNavigate();
@@ -16,6 +17,14 @@ function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const { currentTheme, themes } = useTheme();
+  const isDarkTheme = themes[currentTheme]?.mode === "dark";
+  const logoSrc = isDarkTheme
+  ? "/assets/glaucoma-ai-logo-dark.png"
+  : "/assets/glaucoma-ai-logo-light.png";
+
+
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
@@ -47,11 +56,12 @@ function Login() {
       <div className="w-full max-w-sm">
 
         {/* Logo */}
-        <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center text-lg">
-            👁
-          </div>
-          <span className="font-serif text-xl text-text1">GlaucomaAI Screening System</span>
+        <div className="flex flex-col items-center text-center mb-8">
+          <img
+            src={logoSrc}
+            alt="Glaucoma AI"
+            className="h-16 w-auto max-w-[460px] object-contain mb-4"
+          />
         </div>
 
         {/* Card */}
@@ -99,7 +109,7 @@ function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text3 hover:text-text2 transition-colors bg-transparent border-0 cursor-pointer p-0"
                 >
-                  {showPassword ? "🙈" : "👁"}
+                  {showPassword ? "🫣" : "👁️"}
                 </button>
               </div>
             </div>
