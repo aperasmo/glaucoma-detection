@@ -126,6 +126,17 @@ async def dashboard_stats(
     from app.services.screening_service import get_dashboard_stats
     return await get_dashboard_stats(db)
 
+@router.get("/analytics", status_code=status.HTTP_200_OK)
+async def get_analytics(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Return analytics data for the Analytics Dashboard.
+    # days parameter controls the time range - default 30 days.
+    from app.services.screening_service import get_analytics
+    return await get_analytics(db, days)
+
 
 @router.get("/{screening_id}", response_model=ScreeningResponse, status_code=status.HTTP_200_OK)
 async def get_screening(

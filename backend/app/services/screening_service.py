@@ -346,6 +346,63 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     # Difference vs yesterday
     screenings_vs_yesterday = screenings_today - screenings_yesterday
 
+# Average confidence score across all complete ensemble results
+    avg_confidence = await db.execute(
+        select(func.avg(ScreeningResult.confidence_score)).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+        )
+    )
+    avg_confidence_score = round(float(avg_confidence.scalar() or 0), 4)
+
+    # Average CDR across screenings that have CDR
+    avg_cdr_result = await db.execute(
+        select(func.avg(ScreeningResult.cdr)).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.cdr.isnot(None),
+        )
+    )
+    avg_cdr = round(float(avg_cdr_result.scalar() or 0), 3)
+
+    # OHTS tier counts
+    possible_ohts = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.ohts_tier == "possible",
+        )
+    )
+    possible_ohts_count = possible_ohts.scalar()
+
+    critical_ohts = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.ohts_tier == "critical",
+        )
+    )
+    critical_ohts_count = critical_ohts.scalar()
+
+    # Failed screenings
+    failed_count_result = await db.execute(
+        select(func.count()).select_from(Screening).where(
+            Screening.status == "failed"
+        )
+    )
+    failed_count = failed_count_result.scalar()
+
+    # Normal count
+    normal_count_result = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.prediction == "normal",
+        )
+    )
+    normal_count = normal_count_result.scalar()
+
+
     return {
         "total_patients": total_patients,
         "glaucoma_positive": glaucoma_positive,
@@ -355,4 +412,165 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         "new_this_month": new_this_month,
         "glaucoma_percent": glaucoma_percent,
         "screenings_vs_yesterday": screenings_vs_yesterday,
+        "avg_confidence_score": avg_confidence_score,
+        "avg_cdr": avg_cdr,
+        "possible_ohts_count": possible_ohts_count,
+        "critical_ohts_count": critical_ohts_count,
+        "failed_count": failed_count,
+        "normal_count": normal_count,
+    }
+
+async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
+    # Fetch analytics data for the Analytics Dashboard.
+    # Returns screenings over time, OHTS distribution, status distribution,
+    # mode usage, and recent high risk screenings.
+
+    from datetime import date, timedelta
+    from sqlalchemy import case
+
+    start_date = date.today() - timedelta(days=days)
+
+    # --- Screenings over time ---
+    # Group by day - total and glaucoma positive per day
+    daily_query = await db.execute(
+        select(
+            cast(Screening.created_at, Date).label("date"),
+            func.count(Screening.screening_id).label("total"),
+            func.sum(
+                case(
+                    (ScreeningResult.prediction == "glaucoma", 1),
+                    else_=0
+                )
+            ).label("positive"),
+        )
+        .outerjoin(
+            ScreeningResult,
+            (ScreeningResult.screening_id == Screening.screening_id)
+            & (ScreeningResult.model_used == "ensemble")
+            & (ScreeningResult.llm_used.is_(None)),
+        )
+        .where(cast(Screening.created_at, Date) >= start_date)
+        .group_by(cast(Screening.created_at, Date))
+        .order_by(cast(Screening.created_at, Date))
+    )
+    screenings_over_time = [
+        {
+            "date": str(row.date),
+            "total": row.total,
+            "positive": int(row.positive or 0),
+        }
+        for row in daily_query.fetchall()
+    ]
+
+    # --- OHTS distribution ---
+    ohts_low = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.ohts_tier == "low",
+        )
+    )
+    ohts_possible = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.ohts_tier == "possible",
+        )
+    )
+    ohts_critical = await db.execute(
+        select(func.count()).select_from(ScreeningResult).where(
+            ScreeningResult.model_used == "ensemble",
+            ScreeningResult.llm_used.is_(None),
+            ScreeningResult.ohts_tier == "critical",
+        )
+    )
+    ohts_distribution = {
+        "low": ohts_low.scalar(),
+        "possible": ohts_possible.scalar(),
+        "critical": ohts_critical.scalar(),
+    }
+
+    # --- Status distribution ---
+    for s in ["complete", "pending", "failed", "processing"]:
+        pass
+
+    status_counts = {}
+    for s in ["complete", "pending", "failed", "processing"]:
+        result = await db.execute(
+            select(func.count()).select_from(Screening).where(
+                Screening.status == s
+            )
+        )
+        status_counts[s] = result.scalar()
+
+    # --- Mode usage ---
+    # Clinical Mode - screenings with only 1 ensemble result (llm_used IS NULL)
+    # Research Mode - screenings with individual model results saved
+    clinical_mode = await db.execute(
+        select(func.count(Screening.screening_id.distinct())).where(
+            ~Screening.screening_id.in_(
+                select(ScreeningResult.screening_id).where(
+                    ScreeningResult.model_used != "ensemble"
+                )
+            )
+        )
+    )
+    research_mode = await db.execute(
+        select(func.count(Screening.screening_id.distinct())).where(
+            Screening.screening_id.in_(
+                select(ScreeningResult.screening_id).where(
+                    ScreeningResult.model_used != "ensemble"
+                )
+            )
+        )
+    )
+    model_usage = {
+        "clinical_mode": clinical_mode.scalar(),
+        "research_mode": research_mode.scalar(),
+    }
+
+    # --- High risk screenings ---
+    high_risk = await db.execute(
+        select(
+            Screening.screening_id,
+            Screening.eye_side,
+            Screening.created_at,
+            Patient.first_name,
+            Patient.last_name,
+            Patient.patient_code,
+            ScreeningResult.confidence_score,
+            ScreeningResult.ohts_tier,
+            ScreeningResult.ohts_score,
+        )
+        .join(Patient, Screening.patient_id == Patient.patient_id)
+        .join(
+            ScreeningResult,
+            (ScreeningResult.screening_id == Screening.screening_id)
+            & (ScreeningResult.model_used == "ensemble")
+            & (ScreeningResult.llm_used.is_(None)),
+        )
+        .where(ScreeningResult.prediction == "glaucoma")
+        .order_by(Screening.created_at.desc())
+        .limit(10)
+    )
+    high_risk_screenings = [
+        {
+            "screening_id": row.screening_id,
+            "patient_name": f"{row.first_name} {row.last_name}",
+            "patient_code": row.patient_code,
+            "eye_side": row.eye_side,
+            "confidence_score": float(row.confidence_score),
+            "ohts_tier": row.ohts_tier,
+            "ohts_score": float(row.ohts_score) if row.ohts_score else None,
+            "created_at": row.created_at,
+        }
+        for row in high_risk.fetchall()
+    ]
+
+    return {
+        "screenings_over_time": screenings_over_time,
+        "ohts_distribution": ohts_distribution,
+        "status_distribution": status_counts,
+        "model_usage": model_usage,
+        "high_risk_screenings": high_risk_screenings,
     }
