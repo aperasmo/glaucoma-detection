@@ -8,22 +8,20 @@ import uuid
 import os
 import shutil
 
-from datetime import datetime
+from datetime import date, timedelta, datetime
 
 from fastapi import UploadFile
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.models.screening import Screening
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, cast, Date, extract, case
+
 from app.schemas.screening import CreateScreening
 from app.core.logger import get_logger
 
-from sqlalchemy import func, cast, Date
+from app.models.screening import Screening
 from app.models.patient import Patient
 from app.models.screening_result import ScreeningResult
 
-from datetime import date, timedelta
-from sqlalchemy import extract
 
 logger = get_logger(__name__)
 
@@ -420,18 +418,35 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         "normal_count": normal_count,
     }
 
-async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
+async def get_analytics(
+    db: AsyncSession,
+    days: int = 30,
+    start_date: str = None,
+    end_date: str = None,
+) -> dict:
     # Fetch analytics data for the Analytics Dashboard.
-    # Returns screenings over time, OHTS distribution, status distribution,
-    # mode usage, and recent high risk screenings.
+    # Accepts either days parameter or explicit start_date/end_date range.
+    # All queries respect the same date range for consistency.
 
-    from datetime import date, timedelta
+    from datetime import datetime, time
     from sqlalchemy import case
 
-    start_date = date.today() - timedelta(days=days)
+    # Resolve date range
+    if start_date:
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    else:
+        start = date.today() - timedelta(days=days)
+
+    if end_date:
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    else:
+        end = date.today()
+
+    # Convert to datetime for comparison
+    start_dt = datetime.combine(start, time.min)
+    end_dt = datetime.combine(end, time.max)
 
     # --- Screenings over time ---
-    # Group by day - total and glaucoma positive per day
     daily_query = await db.execute(
         select(
             cast(Screening.created_at, Date).label("date"),
@@ -449,7 +464,10 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
             & (ScreeningResult.model_used == "ensemble")
             & (ScreeningResult.llm_used.is_(None)),
         )
-        .where(cast(Screening.created_at, Date) >= start_date)
+        .where(
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
+        )
         .group_by(cast(Screening.created_at, Date))
         .order_by(cast(Screening.created_at, Date))
     )
@@ -464,24 +482,36 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
 
     # --- OHTS distribution ---
     ohts_low = await db.execute(
-        select(func.count()).select_from(ScreeningResult).where(
+        select(func.count()).select_from(ScreeningResult)
+        .join(Screening, Screening.screening_id == ScreeningResult.screening_id)
+        .where(
             ScreeningResult.model_used == "ensemble",
             ScreeningResult.llm_used.is_(None),
             ScreeningResult.ohts_tier == "low",
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
         )
     )
     ohts_possible = await db.execute(
-        select(func.count()).select_from(ScreeningResult).where(
+        select(func.count()).select_from(ScreeningResult)
+        .join(Screening, Screening.screening_id == ScreeningResult.screening_id)
+        .where(
             ScreeningResult.model_used == "ensemble",
             ScreeningResult.llm_used.is_(None),
             ScreeningResult.ohts_tier == "possible",
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
         )
     )
     ohts_critical = await db.execute(
-        select(func.count()).select_from(ScreeningResult).where(
+        select(func.count()).select_from(ScreeningResult)
+        .join(Screening, Screening.screening_id == ScreeningResult.screening_id)
+        .where(
             ScreeningResult.model_used == "ensemble",
             ScreeningResult.llm_used.is_(None),
             ScreeningResult.ohts_tier == "critical",
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
         )
     )
     ohts_distribution = {
@@ -491,23 +521,23 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
     }
 
     # --- Status distribution ---
-    for s in ["complete", "pending", "failed", "processing"]:
-        pass
-
     status_counts = {}
     for s in ["complete", "pending", "failed", "processing"]:
         result = await db.execute(
             select(func.count()).select_from(Screening).where(
-                Screening.status == s
+                Screening.status == s,
+                Screening.created_at >= start_dt,
+                Screening.created_at <= end_dt,
             )
         )
         status_counts[s] = result.scalar()
 
     # --- Mode usage ---
-    # Clinical Mode - screenings with only 1 ensemble result (llm_used IS NULL)
-    # Research Mode - screenings with individual model results saved
     clinical_mode = await db.execute(
-        select(func.count(Screening.screening_id.distinct())).where(
+        select(func.count(Screening.screening_id.distinct()))
+        .where(
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
             ~Screening.screening_id.in_(
                 select(ScreeningResult.screening_id).where(
                     ScreeningResult.model_used != "ensemble"
@@ -516,7 +546,10 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
         )
     )
     research_mode = await db.execute(
-        select(func.count(Screening.screening_id.distinct())).where(
+        select(func.count(Screening.screening_id.distinct()))
+        .where(
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
             Screening.screening_id.in_(
                 select(ScreeningResult.screening_id).where(
                     ScreeningResult.model_used != "ensemble"
@@ -538,9 +571,14 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
             Patient.first_name,
             Patient.last_name,
             Patient.patient_code,
+            Patient.dob,
+            Patient.gender,
+            ScreeningResult.prediction,
             ScreeningResult.confidence_score,
             ScreeningResult.ohts_tier,
             ScreeningResult.ohts_score,
+            ScreeningResult.cdr,
+            ScreeningResult.gradcam_path,
         )
         .join(Patient, Screening.patient_id == Patient.patient_id)
         .join(
@@ -549,19 +587,27 @@ async def get_analytics(db: AsyncSession, days: int = 30) -> dict:
             & (ScreeningResult.model_used == "ensemble")
             & (ScreeningResult.llm_used.is_(None)),
         )
-        .where(ScreeningResult.prediction == "glaucoma")
+        .where(
+            ScreeningResult.prediction == "glaucoma",
+            Screening.created_at >= start_dt,
+            Screening.created_at <= end_dt,
+        )
         .order_by(Screening.created_at.desc())
-        .limit(10)
     )
     high_risk_screenings = [
         {
             "screening_id": row.screening_id,
             "patient_name": f"{row.first_name} {row.last_name}",
             "patient_code": row.patient_code,
+            "dob": str(row.dob) if row.dob else None,
+            "gender": row.gender,
             "eye_side": row.eye_side,
+            "prediction": row.prediction,
             "confidence_score": float(row.confidence_score),
             "ohts_tier": row.ohts_tier,
             "ohts_score": float(row.ohts_score) if row.ohts_score else None,
+            "cdr": float(row.cdr) if row.cdr else None,
+            "gradcam_path": row.gradcam_path,
             "created_at": row.created_at,
         }
         for row in high_risk.fetchall()

@@ -27,6 +27,8 @@ from app.api.routes.settings import router as settings_router # System settings 
 
 from app.api.routes.admin import router as admin_router # Admin-only routes for system monitoring and maintenance tasks
 
+from app.api.routes.reports import router as reports_router # Reports routes - PDF exports and report endpoints
+
 # Module-level logger for main application events
 logger = get_logger(__name__)
 
@@ -80,6 +82,7 @@ app.include_router(screening_result_router) # Screening result routes - returns 
 app.include_router(user_router) # User management routes - admin-only user CRUD operations
 app.include_router(settings_router) # System settings routes - admin-only settings management
 app.include_router(admin_router) # Admin-only routes for system monitoring and maintenance tasks
+app.include_router(reports_router) # Reports routes - PDF exports and report endpoints
 # --- Health Check Endpoint ---
 # This is the first route we register.
 # It confirms the API is running and returns basic app info.

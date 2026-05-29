@@ -23,6 +23,8 @@ from app.db.database import AsyncSessionLocal
 from app.ml_inference.inference import run_inference_pipeline
 from app.core.logger import get_logger
 
+from typing import Optional
+
 logger = get_logger(__name__)
 
 
@@ -129,13 +131,13 @@ async def dashboard_stats(
 @router.get("/analytics", status_code=status.HTTP_200_OK)
 async def get_analytics(
     days: int = 30,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Return analytics data for the Analytics Dashboard.
-    # days parameter controls the time range - default 30 days.
     from app.services.screening_service import get_analytics
-    return await get_analytics(db, days)
+    return await get_analytics(db, days, start_date, end_date)
 
 
 @router.get("/{screening_id}", response_model=ScreeningResponse, status_code=status.HTTP_200_OK)

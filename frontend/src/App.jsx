@@ -2,6 +2,7 @@
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
+import Activate from "./pages/Activate";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PatientList from "./pages/PatientList";
@@ -18,7 +19,8 @@ import UserProfile from "./pages/UserProfile";
 import UserDetail from "./pages/UserDetail";
 import ModelPerformance from "./pages/ModelPerformance";
 import Analytics from "./pages/Analytics";
-
+import Reports from "./pages/Reports";
+import ReportHighRisk from "./pages/ReportHighRisk";
 
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -38,7 +40,7 @@ function AdminRoute() {
 
 const router = createBrowserRouter([
   { path: "/", element: <Login /> },
-
+  { path: "/activate",               element: <Activate  /> },
   {
     element: <ProtectedRouteWrapper />,
     children: [
@@ -52,7 +54,8 @@ const router = createBrowserRouter([
       { path: "/results/:screeningId",   element: <ScreeningResult /> },
       { path: "/analytics",              element: <Analytics /> },
       { path: "/models",                 element: <ModelPerformance /> },
-      { path: "/reports",                element: <div>Reports</div> },
+      { path: "/reports",                element: <Reports /> },
+      { path: "/reports/high-risk",        element: <ReportHighRisk /> },
       { path: "/profile",                element: <UserProfile /> },
     ],
   },

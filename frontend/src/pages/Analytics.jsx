@@ -71,11 +71,31 @@ function RiskBar({ score }) {
   );
 }
 
-const DAYS_OPTIONS = [
-  { label: "Last 7 Days",  value: 7 },
-  { label: "Last 30 Days", value: 30 },
-  { label: "Last 90 Days", value: 90 },
+const RANGE_OPTIONS = [
+  { label: "Last 7 Days", value: "7" },
+  { label: "Last 30 Days", value: "30" },
+  { label: "Last 90 Days", value: "90" },
+  { label: "Custom Date Range", value: "custom" },
 ];
+
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayInputValue() {
+  return toDateInputValue(new Date());
+}
+
+function getDaysAgoInputValue(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+
+  return toDateInputValue(date);
+}
 
 const CHART_COLORS = {
   accent: "#3B9EFF",
@@ -100,28 +120,63 @@ function DonutLabel({ cx, cy, label, sub }) {
 }
 
 function Analytics() {
-  const navigate = useNavigate();
-  const [days, setDays] = useState(30);
-  const [stats, setStats] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const PER_PAGE = 5;
+const navigate = useNavigate();
+const [rangeType, setRangeType] = useState("7");
+const [startDate, setStartDate] = useState(getDaysAgoInputValue(7));
+const [endDate, setEndDate] = useState(getTodayInputValue());
 
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      API.get("/screenings/stats"),
-      API.get(`/screenings/analytics?days=${days}`),
-    ])
-      .then(([statsRes, analyticsRes]) => {
-        setStats(statsRes.data);
-        setAnalytics(analyticsRes.data);
-        setLoading(false);
-        setPage(1);
-      })
-      .catch(() => setLoading(false));
-  }, [days]);
+const [stats, setStats] = useState(null);
+const [analytics, setAnalytics] = useState(null);
+const [loading, setLoading] = useState(true);
+const [page, setPage] = useState(1);
+const PER_PAGE = 5;
+
+const isCustomRange = rangeType === "custom";
+const isInvalidDateRange =
+  isCustomRange &&
+  startDate &&
+  endDate &&
+  startDate > endDate;
+
+useEffect(() => {
+  if (isCustomRange && (!startDate || !endDate || isInvalidDateRange)) {
+    return;
+  }
+
+  const params = new URLSearchParams();
+
+  if (isCustomRange) {
+    params.set("start_date", startDate);
+    params.set("end_date", endDate);
+  } else {
+    params.set("days", rangeType);
+  }
+
+  setLoading(true);
+
+  Promise.all([
+    API.get("/screenings/stats"),
+    API.get(`/screenings/analytics?${params.toString()}`),
+  ])
+    .then(([statsRes, analyticsRes]) => {
+      setStats(statsRes.data);
+      setAnalytics(analyticsRes.data);
+      setLoading(false);
+      setPage(1);
+    })
+    .catch(() => setLoading(false));
+}, [rangeType, startDate, endDate, isCustomRange, isInvalidDateRange]);
+
+function handleRangeTypeChange(value) {
+  setRangeType(value);
+  setPage(1);
+
+  if (value !== "custom") {
+    const selectedDays = Number(value);
+    setStartDate(getDaysAgoInputValue(selectedDays));
+    setEndDate(getTodayInputValue());
+  }
+}
 
   function formatDate(d) {
     if (!d) return "-";
@@ -185,23 +240,53 @@ function Analytics() {
   }));
 
   // Top bar actions
-  const actions = (
+    const actions = (
     <div className="flex items-center gap-2">
-      <select
-        value={days}
-        onChange={e => setDays(Number(e.target.value))}
-        className="bg-surface2 border border-white/12 rounded-lg px-3 py-1.5 text-xs text-text2 outline-none cursor-pointer font-sans"
-      >
-        {DAYS_OPTIONS.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+        <select
+        value={rangeType}
+        onChange={e => handleRangeTypeChange(e.target.value)}
+        className="bg-surface2 border border-border2 rounded-lg px-3 py-1.5 text-xs text-text2 outline-none cursor-pointer font-sans"
+        >
+        {RANGE_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>
+            {o.label}
+            </option>
         ))}
-      </select>
-      <button className="px-3 py-1.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans flex items-center gap-1.5">
-        📤 Export
-      </button>
-    </div>
-  );
+        </select>
 
+        {isCustomRange && (
+        <>
+            <input
+            type="date"
+            value={startDate}
+            max={endDate || undefined}
+            onChange={e => setStartDate(e.target.value)}
+            className="bg-surface2 border border-border2 rounded-lg px-3 py-1.5 text-xs text-text2 outline-none font-sans"
+            />
+
+            <span className="text-xs text-text3">to</span>
+
+            <input
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            onChange={e => setEndDate(e.target.value)}
+            className="bg-surface2 border border-border2 rounded-lg px-3 py-1.5 text-xs text-text2 outline-none font-sans"
+            />
+        </>
+        )}
+
+        {isInvalidDateRange && (
+        <span className="text-xs text-neg">
+            Invalid date range
+        </span>
+        )}
+
+        <button className="px-3 py-1.5 text-xs font-medium text-text2 border border-border2 rounded-lg bg-transparent hover:bg-surface2 transition-colors cursor-pointer font-sans flex items-center gap-1.5">
+        📤 Export
+        </button>
+    </div>
+    );
   if (loading) return (
     <Layout title="Analytics Dashboard" actions={actions}>
       <p className="text-text3 text-sm">Loading analytics...</p>

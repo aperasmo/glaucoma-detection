@@ -69,7 +69,9 @@ function NewUser() {
         password:   form.password,
         role:       form.role,
       });
-      navigate("/users");
+      // Wait 2 seconds for backend to complete before navigating
+      await new Promise(resolve => setTimeout(resolve, 4000));      
+      navigate("/users", { state: { refetch: Date.now() } });
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : detail || "Failed to create user.");

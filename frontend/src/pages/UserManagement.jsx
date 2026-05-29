@@ -4,10 +4,11 @@
 // Connects to GET /users/ and DELETE /users/{user_id}
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation} from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 import { useAuth } from "../context/AuthContext";
+
 
 // Role badge component
 function RoleBadge({ role }) {
@@ -53,12 +54,14 @@ function UserManagement() {
   const [search, setSearch] = useState("");
   const [error, setError] = useState(null);
   const { user } = useAuth();
+  const location = useLocation();
 
-  useEffect(() => {
-    API.get("/users/")
-      .then(res => { setUsers(res.data); setLoading(false); })
-      .catch(() => { setError("Failed to load users."); setLoading(false); });
-  }, []);
+useEffect(() => {
+  setLoading(true);
+  API.get("/users/")
+    .then(res => { setUsers(res.data); setLoading(false); })
+    .catch(() => { setError("Failed to load users."); setLoading(false); });
+}, [location.state?.refetch]);
 
   const filtered = users.filter(u => {
     const name = (u.full_name || `${u.first_name} ${u.last_name}`).toLowerCase();
