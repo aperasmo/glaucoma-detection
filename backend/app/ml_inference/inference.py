@@ -327,6 +327,8 @@ async def run_inference_pipeline(
                 ohts_score=ohts_result["ohts_score"] if ohts_result else None,
                 ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
                 active_llms=active_llms,
+                clinician_name=clinician_name,
+                clinician_title=clinician_title,                
             )
 
             if mode == "clinical":
@@ -361,6 +363,7 @@ async def run_inference_pipeline(
                         confidence_score=ensemble_result["confidence_score"],
                         threshold_used=ensemble_result["threshold_used"],
                         referral_letter=result_data["letter"],
+                        signed_by=f"{clinician_name}, {clinician_title}",
                         llm_used=llm_name,
                         generation_time_ms=result_data["generation_time_ms"],
                         ohts_score=ohts_result["ohts_score"] if ohts_result else None,
@@ -409,6 +412,15 @@ async def run_inference_pipeline(
                     screening_id=str(screening_id),
                     notification_email=notification_email,
                 )
+
+                # Fetch referring clinician name from system settings
+                clinician_name = await get_setting(
+                    db, "REFERRING_CLINICIAN_NAME", default="Dr. [Clinician Name]"
+                )
+                clinician_title = await get_setting(
+                    db, "REFERRING_CLINICIAN_TITLE", default="General Ophthalmologist"
+                )
+
                 logger.info(f"High-risk notification sent to {notification_email}")
 
         # Final - Update status to complete and commit everything in one transaction

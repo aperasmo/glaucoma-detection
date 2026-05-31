@@ -257,6 +257,8 @@ def generate_referral_letters(
     ohts_score: Optional[int] = None,
     ohts_tier: Optional[str] = None,
     active_llms: list[str] = None,
+    clinician_name: str = "Dr. [Clinician Name]",
+    clinician_title: str = "General Ophthalmologist",    
 ) -> dict:
     # Generate referral letters from all active LLMs.
     # Returns dict of {llm_name: {"letter": text, "generation_time_ms": float}}
@@ -287,6 +289,11 @@ def generate_referral_letters(
                 ohts_score=ohts_score,
                 ohts_tier=ohts_tier,
             )
+            letter = generator(...)
+            # Replace common placeholders with actual clinician name
+            letter = letter.replace("[Your Name]", clinician_name)
+            letter = letter.replace("[Your Title]", clinician_title)
+            letter = letter.replace("[Your Name/General Ophthalmologist]", f"{clinician_name}, {clinician_title}")            
 
             generation_time_ms = round((time.time() - start_time) * 1000, 2)
             results[llm_name] = {

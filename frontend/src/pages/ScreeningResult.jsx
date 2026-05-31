@@ -299,7 +299,7 @@ const result = data?.results?.find(r => r.model_used === "ensemble" && r.llm_use
                     <div className="px-3 py-3 bg-warn/10 border border-warn/20 rounded-lg text-xs text-warn leading-relaxed w-full">
                         ℹ AI detected structural changes consistent with glaucoma in this fundus image.
                         The OHTS score reflects future risk based on current IOP and corneal thickness measurements,
-                        which may not capture existing damage. These are two complementary clinical assessments —
+                        which may not capture existing damage. These are two complementary clinical assessments -
                         the AI evaluates current structural appearance while OHTS predicts future progression risk.
                         Both should be considered together when making a referral decision.
                     </div>

@@ -111,7 +111,23 @@ async def seed_system_settings():
             "remark": "OHTS tiers that trigger email notification. Options: critical, possible.",
             "status": "A",
             },            
-        ]
+            {
+                "category": "General",
+                "set_code": "REFERRING_CLINICIAN_NAME",
+                "set_name": "Referring Clinician Name",
+                "set_value": "Dr. [Clinician Name]",
+                "remark": "Name used to sign all AI-generated referral letters. Set this to the designated clinician at your clinic.",
+                "status": "A",
+            },
+            {
+                "category": "General",
+                "set_code": "REFERRING_CLINICIAN_TITLE",
+                "set_name": "Referring Clinician Title",
+                "set_value": "General Ophthalmologist",
+                "remark": "Title of the referring clinician e.g. General Ophthalmologist, Optometrist.",
+                "status": "A",
+            },            
+            ]
 
         for item in defaults:
             result = await db.execute(
