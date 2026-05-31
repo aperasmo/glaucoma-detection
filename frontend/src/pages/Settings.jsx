@@ -91,11 +91,16 @@ function Settings() {
   const { currentTheme, setTheme, themes } = useTheme();
 
   // Form states
-  const [general, setGeneral] = useState({
-    CLINIC_NAME: "",
-    ALERT_EMAIL: "",
-    EMAIL_NOTIFICATIONS: "true",
-  });
+const [general, setGeneral] = useState({
+  CLINIC_NAME:               "",
+  ALERT_EMAIL:               "",
+  EMAIL_NOTIFICATIONS:       "true",
+  REFERRING_CLINICIAN_NAME:  "",
+  REFERRING_CLINICIAN_TITLE: "",
+  CLINIC_ADDRESS:            "",
+  CLINIC_PHONE:              "",
+  CLINIC_EMAIL:              "",
+});
   const [notifications, setNotifications] = useState({
     NOTIFICATION_EMAIL: "",
     NOTIFICATION_THRESHOLD: "critical,possible",
@@ -133,9 +138,14 @@ const [thresholds, setThresholds] = useState({
         res.data.forEach(s => { map[s.set_code] = s.set_value; });
         setSettings(map);
         setGeneral({
-          CLINIC_NAME:          map.CLINIC_NAME || "",
-          ALERT_EMAIL:          map.ALERT_EMAIL || "",
-          EMAIL_NOTIFICATIONS:  map.EMAIL_NOTIFICATIONS || "true",
+          CLINIC_NAME:               map.CLINIC_NAME || "",
+          ALERT_EMAIL:               map.ALERT_EMAIL || "",
+          EMAIL_NOTIFICATIONS:       map.EMAIL_NOTIFICATIONS || "true",
+          REFERRING_CLINICIAN_NAME:  map.REFERRING_CLINICIAN_NAME || "",
+          REFERRING_CLINICIAN_TITLE: map.REFERRING_CLINICIAN_TITLE || "",
+          CLINIC_ADDRESS:            map.CLINIC_ADDRESS || "",
+          CLINIC_PHONE:              map.CLINIC_PHONE || "",
+          CLINIC_EMAIL:              map.CLINIC_EMAIL || "",
         });
         setNotifications({
           NOTIFICATION_EMAIL:     map.NOTIFICATION_EMAIL || "",
@@ -203,6 +213,11 @@ async function saveAll() {
       { set_code: "NOTIFICATION_THRESHOLD", set_value: notifications.NOTIFICATION_THRESHOLD, category: "Email", set_name: "Notification Threshold" },
       { set_code: "HIGH_RISK_THRESHOLD",   set_value: thresholds.HIGH_RISK_THRESHOLD,   category: "ML", set_name: "High Risk Threshold" },
       { set_code: "SENSITIVITY_THRESHOLD", set_value: thresholds.SENSITIVITY_THRESHOLD, category: "ML", set_name: "Sensitivity Threshold" },
+      { set_code: "REFERRING_CLINICIAN_NAME",  set_value: general.REFERRING_CLINICIAN_NAME,  category: "General", set_name: "Referring Clinician Name" },
+      { set_code: "REFERRING_CLINICIAN_TITLE", set_value: general.REFERRING_CLINICIAN_TITLE, category: "General", set_name: "Referring Clinician Title" },
+      { set_code: "CLINIC_ADDRESS",            set_value: general.CLINIC_ADDRESS,            category: "General", set_name: "Clinic Address" },
+      { set_code: "CLINIC_PHONE",              set_value: general.CLINIC_PHONE,              category: "General", set_name: "Clinic Phone" },
+      { set_code: "CLINIC_EMAIL",              set_value: general.CLINIC_EMAIL,              category: "General", set_name: "Clinic Email" },
     ];
 
     try {
@@ -339,17 +354,49 @@ function updateThresholds(key, value) {
             <SectionDivider label="Clinic Information" />
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="Clinic Name">
-                <input
-                  className={inputClass}
+                <input className={inputClass}
                   value={general.CLINIC_NAME}
                   onChange={e => updateGeneral("CLINIC_NAME", e.target.value)}
-                  placeholder="GlaucomaAI Clinical System"
-                />
+                  placeholder="GlaucomaAI Clinical System" />
               </FormField>
-              <FormField label="Default Language">
-                <select className={`${inputClass} cursor-pointer`}>
-                  <option>English</option>
-                </select>
+              <FormField label="Clinic Email">
+                <input type="email" className={inputClass}
+                  value={general.CLINIC_EMAIL}
+                  onChange={e => updateGeneral("CLINIC_EMAIL", e.target.value)}
+                  placeholder="clinic@example.com" />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <FormField label="Clinic Phone">
+                <input className={inputClass}
+                  value={general.CLINIC_PHONE}
+                  onChange={e => updateGeneral("CLINIC_PHONE", e.target.value)}
+                  placeholder="+64 9 555 0000" />
+              </FormField>
+              <FormField label="Clinic Address">
+                <input className={inputClass}
+                  value={general.CLINIC_ADDRESS}
+                  onChange={e => updateGeneral("CLINIC_ADDRESS", e.target.value)}
+                  placeholder="123 Queen Street, Auckland" />
+              </FormField>
+            </div>
+
+            <SectionDivider label="Referring Clinician" />
+            <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg text-xs text-accent2 mb-4 leading-relaxed">
+              ℹ This name and title will be used to sign all AI-generated referral letters. Set this to the designated clinician at your clinic.
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <FormField label="Referring Clinician Name">
+                <input className={inputClass}
+                  value={general.REFERRING_CLINICIAN_NAME}
+                  onChange={e => updateGeneral("REFERRING_CLINICIAN_NAME", e.target.value)}
+                  placeholder="Dr. Smith" />
+              </FormField>
+              <FormField label="Referring Clinician Title">
+                <input className={inputClass}
+                  value={general.REFERRING_CLINICIAN_TITLE}
+                  onChange={e => updateGeneral("REFERRING_CLINICIAN_TITLE", e.target.value)}
+                  placeholder="General Ophthalmologist" />
               </FormField>
             </div>
 
