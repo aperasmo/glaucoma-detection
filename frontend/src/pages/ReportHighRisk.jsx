@@ -189,7 +189,7 @@ function ReportHighRisk() {
     setEndDate(getTodayInputValue());
   }
 
-async function handleExportPdf() {
+async function downloadPdfFromEndpoint(endpoint, filenamePrefix) {
   if (!startDate || !endDate || isInvalidDateRange) {
     return;
   }
@@ -202,12 +202,9 @@ async function handleExportPdf() {
   setErrorMessage("");
 
   try {
-    const response = await API.get(
-      `/reports/high-risk/pdf?${params.toString()}`,
-      {
-        responseType: "blob",
-      }
-    );
+    const response = await API.get(`${endpoint}?${params.toString()}`, {
+      responseType: "blob",
+    });
 
     const pdfBlob = new Blob([response.data], {
       type: "application/pdf",
@@ -217,7 +214,8 @@ async function handleExportPdf() {
     const downloadLink = document.createElement("a");
 
     downloadLink.href = pdfUrl;
-    downloadLink.download = `high_risk_report_${startDate}_to_${endDate}.pdf`;
+    downloadLink.download = `${filenamePrefix}_${startDate}_to_${endDate}.pdf`;
+
     document.body.appendChild(downloadLink);
     downloadLink.click();
 
@@ -230,6 +228,15 @@ async function handleExportPdf() {
     setLoading(false);
   }
 }
+
+function handleExportPdf() {
+  downloadPdfFromEndpoint("/reports/high-risk/pdf", "high_risk_report");
+}
+
+function handleExportPdfGo() {
+  downloadPdfFromEndpoint("/reports/high-risk/pdf-go", "high_risk_report_go");
+}  
+  
 
   useEffect(() => {
     loadReport();
@@ -279,7 +286,16 @@ async function handleExportPdf() {
         className="px-3 py-1.5 text-xs font-medium text-text2 border border-border2 rounded-lg bg-transparent hover:bg-surface2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer font-sans"
        >
         📄 Export PDF
-       </button>      
+       </button>     
+
+      <button
+        type="button"
+        onClick={handleExportPdfGo}
+        disabled={loading || !analytics}
+        className="px-3 py-1.5 text-xs font-medium text-text2 border border-border2 rounded-lg bg-transparent hover:bg-surface2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer font-sans"
+      >
+        Export PDF via Go
+      </button>        
     </div>
   );
 
