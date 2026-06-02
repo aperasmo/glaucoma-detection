@@ -8,14 +8,18 @@ import API from "../api";
 const QUICK_PROMPTS = [
   "Active glaucoma patients",
   "Inactive patients",
-  "Normal patients this month",
+  "Normal patients last month",
   "High-risk report this week",
+  "Screening summary last month",
+  "Referral letters this month",
+  "Active users",
+  "Doctor user list",
 ];
 
 const INITIAL_MESSAGES = [
   {
     role: "assistant",
-    text: "Ask me what report you want to generate. I can prepare reports using filters such as active, inactive, glaucoma, normal, this week, or this month.",
+    text: "Ask me what report you want to generate. I can prepare patient, screening, referral, follow-up, and user reports using filters such as active, inactive, glaucoma, normal, doctor, nurse, this week, or this month.",
   },
 ];
 
@@ -162,9 +166,39 @@ function formatDate(iso) {
   });
 }
 
+
+function formatDateTime(value) {
+  if (!value) return "N/A";
+
+  const valueText = String(value);
+  const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(valueText);
+  const normalisedValue = hasTimezone ? valueText : `${valueText}Z`;
+  const parsedDate = new Date(normalisedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "N/A";
+  }
+
+  return parsedDate.toLocaleString("en-NZ", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatFileName(value) {
+  if (!value) return "N/A";
+  return value;
+}
+
 function formatReportType(type) {
   if (type === "high_risk") return "High Risk Report";
   if (type === "screening_summary") return "Screening Summary Report";
+  if (type === "referral_list") return "Referral List Report";
+  if (type === "follow_up_list") return "Follow-up List Report";
+  if (type === "user_list") return "User List Report";
   return "Patient List Report";
 }
 
@@ -174,8 +208,16 @@ function formatFilterValue(value) {
     inactive: "Inactive",
     glaucoma: "Glaucoma",
     normal: "Normal",
+    left: "Left eye",
+    right: "Right eye",
+    admin: "Admin",
+    doctor: "Doctor",
+    nurse: "Nurse",
+    days_since_last_screening: "Days since last screening",
     this_week: "This week",
     this_month: "This month",
+    last_week: "Last week",
+    last_month: "Last month",
   };
 
   return labels[value] || value;
@@ -185,10 +227,78 @@ function formatFilterLabel(key) {
   const labels = {
     status: "Patient status",
     diagnosis: "Screening result",
+    eye_side: "Eye",
+    role: "Role",
+    days_since_last_screening: "No follow-up within",
     date_range: "Date range",
+    date_label: "Date range",
+    date_phrase: "Date phrase",
+    date_from: "Date from",
+    date_to: "Date to",    
   };
 
   return labels[key] || key;
+}
+
+function extractDatePhrase(rawText) {
+  const text = rawText.toLowerCase().trim();
+
+  const exactPhrases = [
+    "today",
+    "yesterday",
+    "this week",
+    "last week",
+    "this month",
+    "last month",
+    "this quarter",
+    "last quarter",
+    "this year",
+    "last year",
+  ];
+
+  for (const phrase of exactPhrases) {
+    if (text.includes(phrase)) {
+      return phrase;
+    }
+  }
+
+  const lastDaysMatch = text.match(/last\s+\d+\s+days?/);
+  if (lastDaysMatch) {
+    return lastDaysMatch[0];
+  }
+
+  const lastMonthsMatch = text.match(/last\s+\d+\s+months?/);
+  if (lastMonthsMatch) {
+    return lastMonthsMatch[0];
+  }
+
+  const quarterMatch = text.match(/q[1-4]\s+(this\s+year|\d{4})/);
+  if (quarterMatch) {
+    return quarterMatch[0];
+  }
+
+  const nzDateRangeMatch = text.match(
+    /(?:from|between)\s+\d{1,2}\/\d{1,2}\/\d{4}\s+(?:to|and)\s+\d{1,2}\/\d{1,2}\/\d{4}/
+  );
+  if (nzDateRangeMatch) {
+    return nzDateRangeMatch[0];
+  }
+
+  const isoRangeMatch = text.match(
+    /(?:from|between)\s+\d{4}-\d{2}-\d{2}\s+(?:to|and)\s+\d{4}-\d{2}-\d{2}/
+  );
+  if (isoRangeMatch) {
+    return isoRangeMatch[0];
+  }
+
+  const monthNameRangeMatch = text.match(
+    /(?:from|between)\s+[a-z]+\s+\d{1,2}(?:,\s*\d{4})?\s+(?:to|and)\s+[a-z]+\s+\d{1,2}(?:,\s*\d{4})?/
+  );
+  if (monthNameRangeMatch) {
+    return monthNameRangeMatch[0];
+  }
+
+  return "";
 }
 
 function parseReportRequest(rawText) {
@@ -203,15 +313,73 @@ function parseReportRequest(rawText) {
 
   let reportType = "patient_list";
 
+  const mentionsUserReport =
+    text.includes("user") ||
+    text.includes("users") ||
+    text.includes("staff") ||
+    text.includes("doctor list") ||
+    text.includes("doctor report") ||
+    text.includes("nurse list") ||
+    text.includes("nurse report") ||
+    text.includes("admin list") ||
+    text.includes("admin report");
+
+  const mentionsReferralReport =
+    text.includes("referral") ||
+    text.includes("referral letter") ||
+    text.includes("referrals") ||
+    text.includes("letters generated") ||
+    text.includes("generated letters");
+
+  const mentionsFollowUpReport =
+    text.includes("follow-up") ||
+    text.includes("follow up") ||
+    text.includes("followup") ||
+    text.includes("follow-up report") ||
+    text.includes("follow-up list") ||
+    text.includes("due for follow");
+
   if (text.includes("high risk") || text.includes("high-risk")) {
     reportType = "high_risk";
   }
 
-  if (text.includes("summary")) {
+  if (
+    text.includes("screening summary") ||
+    text.includes("screening report") ||
+    text.includes("summary")
+  ) {
     reportType = "screening_summary";
   }
 
+  if (
+  text.includes("follow-up") ||
+  text.includes("follow up") ||
+  text.includes("followup")
+) {
+  reportType = "follow_up_list";
+}
+
+  if (mentionsReferralReport) {
+    reportType = "referral_list";
+  }
+
+  if (mentionsFollowUpReport) {
+    reportType = "follow_up_list";
+  }
+
+  if (mentionsUserReport) {
+    reportType = "user_list";
+  }
+
   const filters = {};
+
+if (reportType === "follow_up_list") {
+  const daysMatch = text.match(/(\d{1,3})\s*[- ]?\s*(day|days|d)\b/);
+
+  filters.days_since_last_screening = daysMatch
+    ? Number(daysMatch[1])
+    : 1;
+}
 
   if (text.includes("inactive")) {
     filters.status = "inactive";
@@ -219,24 +387,52 @@ function parseReportRequest(rawText) {
     filters.status = "active";
   }
 
-  if (
-    text.includes("glaucoma") ||
-    text.includes("positive") ||
-    text.includes("abnormal")
-  ) {
-    filters.diagnosis = "glaucoma";
+  if (reportType === "user_list") {
+    if (text.includes("admin")) {
+      filters.role = "admin";
+    } else if (text.includes("doctor")) {
+      filters.role = "doctor";
+    } else if (text.includes("nurse")) {
+      filters.role = "nurse";
+    }
   }
 
-  if (text.includes("normal") || text.includes("negative")) {
-    filters.diagnosis = "normal";
+  if (reportType === "follow_up_list") {    
+    const daysMatch = text.match(/(\d{1,3})\s*[- ]?\s*(day|days|d)\b/);    
+
+    if (daysMatch) {
+      filters.days_since_last_screening = Number(daysMatch[1]);
+    } else {
+      filters.days_since_last_screening = 7;
+    }
   }
 
-  if (text.includes("this week")) {
-    filters.date_range = "this_week";
+  if (reportType !== "user_list") {
+    if (
+      text.includes("glaucoma") ||
+      text.includes("positive") ||
+      text.includes("abnormal")
+    ) {
+      filters.diagnosis = "glaucoma";
+    }
+
+    if (text.includes("normal") || text.includes("negative")) {
+      filters.diagnosis = "normal";
+    }
+
+    if (text.includes("left eye") || text.includes("left-eye")) {
+      filters.eye_side = "left";
+    }
+
+    if (text.includes("right eye") || text.includes("right-eye")) {
+      filters.eye_side = "right";
+    }
   }
 
-  if (text.includes("this month")) {
-    filters.date_range = "this_month";
+  const datePhrase = extractDatePhrase(text);
+
+  if (datePhrase) {
+    filters.date_phrase = datePhrase;
   }
 
   const hasKnownFilter = Object.keys(filters).length > 0;
@@ -245,7 +441,12 @@ function parseReportRequest(rawText) {
     text.includes("patients") ||
     text.includes("list");
 
-  if (!hasKnownFilter && !mentionsPatient && reportType === "patient_list") {
+  if (
+    !hasKnownFilter &&
+    !mentionsPatient &&
+    !mentionsUserReport &&
+    reportType === "patient_list"
+  ) {
     return {
       ok: false,
       message:
@@ -468,9 +669,13 @@ function EmptyPreview() {
 }
 
 function getNonEmptyFilters(filters) {
-  return Object.entries(filters || {}).filter(([, value]) => {
+  const entries = Object.entries(filters || {}).filter(([, value]) => {
     return value !== null && value !== undefined && value !== "";
   });
+
+  const hiddenKeys = new Set(["date_phrase", "date_from", "date_to"]);
+
+  return entries.filter(([key]) => !hiddenKeys.has(key));
 }
 
 function getHighRiskSummary(rows) {
@@ -525,7 +730,120 @@ function getPatientListSummary(summary) {
   ];
 }
 
+function getScreeningSummary(summary) {
+  return [
+    { label: "Total screenings", value: summary.total || 0 },
+    { label: "Glaucoma", value: summary.glaucoma || 0 },
+    { label: "Normal", value: summary.normal || 0 },
+    { label: "High risk", value: summary.highRisk || 0 },
+    { label: "Average confidence", value: summary.averageConfidence || "N/A" },
+    { label: "Grad-CAM generated", value: summary.gradcamGenerated || 0 },
+  ];
+}
+
+
+
+function getFollowUpListSummary(summary) {
+  return [
+    { label: "Follow-up needed", value: summary.total || 0 },
+    { label: "Glaucoma", value: summary.glaucoma || 0 },
+    { label: "Possible OHTS", value: summary.possibleOhts || 0 },
+    { label: "Critical OHTS", value: summary.criticalOhts || 0 },
+    { label: "With referral", value: summary.withReferral || 0 },
+    { label: "Without referral", value: summary.withoutReferral || 0 },
+    { label: "Average days elapsed", value: summary.averageDaysElapsed || "N/A" },
+  ];
+}
+
+function getReferralListSummary(summary) {
+  return [
+    { label: "Total referrals", value: summary.total || 0 },
+    { label: "Glaucoma", value: summary.glaucoma || 0 },
+    { label: "Normal", value: summary.normal || 0 },
+    { label: "Signed", value: summary.signed || 0 },
+    { label: "Unsigned", value: summary.unsigned || 0 },
+    { label: "GPT-4o", value: summary.gpt4o || 0 },
+    { label: "Gemini", value: summary.gemini || 0 },
+  ];
+}
+
+
+function getUserListSummary(summary) {
+  return [
+    { label: "Total users", value: summary.total || 0 },
+    { label: "Active", value: summary.active || 0 },
+    { label: "Inactive", value: summary.inactive || 0 },
+    { label: "Admin", value: summary.admin || 0 },
+    { label: "Doctor", value: summary.doctor || 0 },
+    { label: "Nurse", value: summary.nurse || 0 },
+  ];
+}
+
 function getPreviewColumns(reportType) {
+  if (reportType === "follow_up_list") {
+    return [
+      { key: "lastScreening", label: "Last Screening" },
+      { key: "patientId", label: "Patient ID" },
+      { key: "name", label: "Patient Name" },
+      { key: "ageGender", label: "Age / Gender" },
+      { key: "eye", label: "Eye" },
+      { key: "diagnosis", label: "Prediction" },
+      { key: "confidence", label: "Confidence" },
+      { key: "ohts", label: "OHTS" },
+      { key: "cdr", label: "CDR" },
+      { key: "daysElapsed", label: "Days" },
+      { key: "referralStatus", label: "Referral" },
+      { key: "clinician", label: "Clinician" },
+      { key: "followUpReason", label: "Follow-up Reason" },
+    ];
+  }
+
+  if (reportType === "referral_list") {
+    return [
+      { key: "referralDate", label: "Referral Date" },
+      { key: "patientId", label: "Patient ID" },
+      { key: "name", label: "Patient Name" },
+      { key: "ageGender", label: "Age / Gender" },
+      { key: "eye", label: "Eye" },
+      { key: "diagnosis", label: "Prediction" },
+      { key: "confidence", label: "Confidence" },
+      { key: "cdr", label: "CDR" },
+      { key: "ohts", label: "OHTS" },
+      { key: "llm", label: "LLM" },
+      { key: "signedBy", label: "Signed By" },
+      { key: "clinician", label: "Clinician" },
+    ];
+  }
+
+  if (reportType === "user_list") {
+    return [
+      { key: "userId", label: "User ID" },
+      { key: "name", label: "Name" },
+      { key: "role", label: "Role" },
+      { key: "email", label: "Email" },
+      { key: "mobile", label: "Mobile" },
+      { key: "status", label: "Status" },
+      { key: "createdAt", label: "Created Date" },
+    ];
+  }
+
+  if (reportType === "screening_summary") {
+    return [
+      { key: "screeningDate", label: "Screening Date" },
+      { key: "patientId", label: "Patient ID" },
+      { key: "name", label: "Patient Name" },
+      { key: "ageGender", label: "Age / Gender" },
+      { key: "eye", label: "Eye" },
+      { key: "diagnosis", label: "Prediction" },
+      { key: "confidence", label: "Confidence" },
+      { key: "cdr", label: "CDR" },
+      { key: "ohts", label: "OHTS" },
+      { key: "risk", label: "Risk" },
+      { key: "gradcam", label: "Grad-CAM" },
+      { key: "clinician", label: "Clinician" },
+    ];
+  }
+
   if (reportType === "high_risk") {
     return [
       { key: "patientId", label: "Patient ID" },
@@ -561,7 +879,7 @@ function getCellValue(row, key) {
     return "N/A";
   }
 
-  if (key === "status" || key === "diagnosis") {
+  if (key === "status" || key === "diagnosis" || key === "role") {
     return String(value).charAt(0).toUpperCase() + String(value).slice(1);
   }
 
@@ -583,11 +901,23 @@ function ReportDocumentPreview({
 
   const reportType = intent.report_type;
   const isHighRisk = reportType === "high_risk";
+  const isScreeningSummary = reportType === "screening_summary";
+  const isReferralList = reportType === "referral_list";
+  const isFollowUpList = reportType === "follow_up_list";
+  const isUserList = reportType === "user_list";
 
   const filterEntries = getNonEmptyFilters(intent.filters);
   const summaryCards = isHighRisk
     ? getHighRiskSummary(rows)
-    : getPatientListSummary(summary);
+    : isScreeningSummary
+      ? getScreeningSummary(summary)
+      : isReferralList
+        ? getReferralListSummary(summary)
+        : isFollowUpList
+          ? getFollowUpListSummary(summary)
+          : isUserList
+          ? getUserListSummary(summary)
+          : getPatientListSummary(summary);
 
   const columns = getPreviewColumns(reportType);
   const totalRows = rows.length;
@@ -614,7 +944,15 @@ function ReportDocumentPreview({
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">
             {isHighRisk
               ? "Generated from high-risk screening records using validated report filters."
-              : "Generated from patient screening data using validated report filters."}
+              : isScreeningSummary
+                ? "Generated from completed screening activity using validated report filters."
+                : isReferralList
+                  ? "Generated from referral letter records using validated report filters."
+                  : isFollowUpList
+                    ? "Generated from high-risk screening records with no recent follow-up screening."
+                    : isUserList
+                    ? "Generated from user account records using validated report filters."
+                    : "Generated from patient screening data using validated report filters."}
           </p>
         </div>
 
@@ -750,8 +1088,170 @@ function ReportDocumentPreview({
       <p className="mt-5 text-xs leading-relaxed text-gray-500">
         {isHighRisk
           ? "Clinical note: This report supports glaucoma screening review only. It is not a standalone diagnostic decision."
-          : "Clinical note: This report supports review and screening follow-up only. The system does not replace professional clinical assessment."}
+          : isScreeningSummary
+            ? "Clinical note: This report summarises glaucoma screening activity and supports review or follow-up planning only."
+            : "Clinical note: This report supports review and screening follow-up only. The system does not replace professional clinical assessment."}
       </p>
+    </div>
+  );
+}
+
+
+function ReportHistoryPanel({ items, isLoading, error, onRefresh }) {
+  function renderFilters(filters) {
+    return getNonEmptyFilters(filters);
+  }
+
+  function statusClassName(status) {
+    if (status === "success") return "bg-green-100 text-green-700";
+    if (status === "failed") return "bg-red-100 text-red-700";
+
+    return "bg-[var(--color-surface2)] text-[var(--color-text3)]";
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+      <div className="mb-5 flex flex-col gap-3 border-b border-[var(--color-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+            Report audit trail
+          </p>
+
+          <h2 className="mt-1 text-2xl font-semibold text-[var(--color-text1)]">
+            Report History
+          </h2>
+
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-text3)]">
+            Shows generated PDF reports, including report type, filters, record count, status, and user.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+            isLoading
+              ? "cursor-not-allowed border-transparent bg-[var(--color-surface2)] text-[var(--color-text3)]"
+              : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text1)] hover:bg-[var(--color-surface2)]"
+          }`}
+        >
+          {isLoading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-[var(--color-border)]">
+        <table className="w-full text-sm">
+          <thead className="bg-[var(--color-surface2)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text3)]">
+            <tr>
+              <th className="px-4 py-3 whitespace-nowrap">Generated</th>
+              <th className="px-4 py-3 whitespace-nowrap">Report</th>
+              <th className="px-4 py-3 whitespace-nowrap">Generated By</th>
+              <th className="px-4 py-3 whitespace-nowrap">Filters</th>
+              <th className="px-4 py-3 whitespace-nowrap">Records</th>
+              <th className="px-4 py-3 whitespace-nowrap">Status</th>
+              <th className="px-4 py-3 whitespace-nowrap">File</th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-[var(--color-border)]">
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text3)]">
+                  Loading report history...
+                </td>
+              </tr>
+            ) : items.length > 0 ? (
+              items.map(item => {
+                const filterEntries = renderFilters(item.filters || {});
+                const visibleFilters = filterEntries.slice(0, 3);
+                const hiddenFilterCount = Math.max(filterEntries.length - visibleFilters.length, 0);
+
+                return (
+                  <tr key={item.reportHistoryId}>
+                    <td className="px-4 py-3 text-[var(--color-text2)] whitespace-nowrap">
+                      {formatDateTime(item.createdAt)}
+                    </td>
+
+                    <td className="px-4 py-3 text-[var(--color-text2)] whitespace-nowrap">
+                      <div className="font-medium text-[var(--color-text1)]">
+                        {item.reportTitle || formatReportType(item.reportType)}
+                      </div>
+                      <div className="text-xs text-[var(--color-text3)]">
+                        {formatReportType(item.reportType)}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 text-[var(--color-text2)] whitespace-nowrap">
+                      {item.generatedByName || "N/A"}
+                    </td>
+
+                    <td className="px-4 py-3 text-[var(--color-text2)]">
+                      <div className="flex max-w-md flex-wrap gap-1.5">
+                        {filterEntries.length > 0 ? (
+                          <>
+                            {visibleFilters.map(([key, value]) => (
+                              <span
+                                key={`${item.reportHistoryId}-${key}`}
+                                className="rounded-full bg-[var(--color-surface2)] px-2 py-1 text-[11px] text-[var(--color-text2)] ring-1 ring-[var(--color-border)]"
+                              >
+                                {formatFilterLabel(key)}: {formatFilterValue(value)}
+                              </span>
+                            ))}
+
+                            {hiddenFilterCount > 0 && (
+                              <span className="rounded-full bg-[var(--color-surface2)] px-2 py-1 text-[11px] text-[var(--color-text3)] ring-1 ring-[var(--color-border)]">
+                                +{hiddenFilterCount} more
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-[var(--color-text3)]">
+                            No filters
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 text-[var(--color-text2)] whitespace-nowrap">
+                      {item.recordCount ?? 0}
+                    </td>
+
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusClassName(item.status)}`}
+                      >
+                        {String(item.status || "unknown").toUpperCase()}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-[var(--color-text3)]">
+                      <div
+                        className="max-w-[260px] truncate"
+                        title={formatFileName(item.fileName)}
+                      >
+                        {formatFileName(item.fileName)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text3)]">
+                  No report history yet. Generate and download a PDF report first.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -762,6 +1262,7 @@ function Reports() {
   const [currentIntent, setCurrentIntent] = useState(null);
   const [generatedIntent, setGeneratedIntent] = useState(null);
   const [reportRows, setReportRows] = useState([]);
+  const [reportSummary, setReportSummary] = useState(null);
   const [reportTitle, setReportTitle] = useState("AI Report Assistant");
 
   const hasReport = Boolean(generatedIntent);
@@ -770,11 +1271,27 @@ function Reports() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportError, setReportError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const [previewPage, setPreviewPage] = useState(1);
   const rowsPerPage = 10;
 
-  const summary = useMemo(() => {
+  const [activeView, setActiveView] = useState("current");
+  const [reportHistory, setReportHistory] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const previewSummary = useMemo(() => {
+    if (
+      (generatedIntent?.report_type === "screening_summary" ||
+        generatedIntent?.report_type === "referral_list" ||
+        generatedIntent?.report_type === "follow_up_list" ||
+        generatedIntent?.report_type === "user_list") &&
+      reportSummary
+    ) {
+      return reportSummary;
+    }
+
     return {
       total: reportRows.length,
       active: reportRows.filter(row => row.status === "active").length,
@@ -782,15 +1299,46 @@ function Reports() {
       glaucoma: reportRows.filter(row => row.diagnosis === "glaucoma").length,
       normal: reportRows.filter(row => row.diagnosis === "normal").length,
     };
-  }, [reportRows]);
+  }, [generatedIntent, reportRows, reportSummary]);
+
+  async function fetchReportHistory({ silent = false } = {}) {
+    if (!silent) {
+      setIsHistoryLoading(true);
+    }
+
+    setHistoryError("");
+
+    try {
+      const response = await API.get("/reports/history?limit=20&offset=0");
+      setReportHistory(response.data?.items || []);
+    } catch (error) {
+      const message =
+        error.response?.data?.detail ||
+        error.message ||
+        "Unable to load report history.";
+
+      setHistoryError(message);
+    } finally {
+      if (!silent) {
+        setIsHistoryLoading(false);
+      }
+    }
+  }
+
+  function handleOpenHistory() {
+    setActiveView("history");
+    fetchReportHistory();
+  }
 
   function submitPrompt(text) {
     const trimmedText = text.trim();
 
     if (!trimmedText) return;
 
-    const result = parseReportRequest(trimmedText);
+    setActiveView("current");
 
+    const result = parseReportRequest(trimmedText);
+    //console.log("Parsed report request:", result); 
     setMessages(prev => [
       ...prev,
       {
@@ -814,6 +1362,7 @@ function Reports() {
     setCurrentIntent(result.intent);
     setGeneratedIntent(null);
     setReportRows([]);
+    setReportSummary(null);
     setReportTitle("AI Report Assistant");
 
     setMessages(prev => [
@@ -843,6 +1392,7 @@ function Reports() {
     const data = response.data;
 
     setReportRows(data.rows || []);
+    setReportSummary(data.summary || null);
     setPreviewPage(1);
     setGeneratedIntent({
       report_type: data.report_type,
@@ -851,6 +1401,7 @@ function Reports() {
     });
     setReportTitle(data.title || formatReportType(currentIntent.report_type));
     setCurrentIntent(null);
+    setActiveView("current");
 
     setMessages(prev => [
       ...prev,
@@ -885,8 +1436,11 @@ function Reports() {
     setCurrentIntent(null);
     setGeneratedIntent(null);
     setReportRows([]);
+    setReportSummary(null);
     setReportTitle("AI Report Assistant");
     setPreviewPage(1);
+    setActiveView("current");
+    setHistoryError("");
   }
 
 async function handleDownload() {
@@ -918,6 +1472,8 @@ async function handleDownload() {
 
     link.remove();
     window.URL.revokeObjectURL(url);
+
+    fetchReportHistory({ silent: true });
   } catch (error) {
     const message =
       error.response?.data?.detail ||
@@ -938,9 +1494,56 @@ async function handleDownload() {
   }
 }
 
-  function handlePrint() {
-    if (!hasReport) return;
-    window.print();
+  async function handlePrint() {
+    if (!hasReport || !generatedIntent || isPrinting) return;
+
+    setIsPrinting(true);
+    setReportError("");
+
+    try {
+      const response = await API.post(
+        "/reports/assistant/pdf-go",
+        generatedIntent,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blob = new Blob([response.data], {
+        type: "application/pdf",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+
+      if (!printWindow) {
+        throw new Error("Popup blocked. Please allow popups to print the report.");
+      }
+
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+
+      fetchReportHistory({ silent: true });
+    } catch (error) {
+      const message =
+        error.response?.data?.detail ||
+        error.message ||
+        "Unable to print the PDF report.";
+
+      setReportError(message);
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          text: message,
+        },
+      ]);
+    } finally {
+      setIsPrinting(false);
+    }
   }
 
   return (
@@ -949,16 +1552,41 @@ async function handleDownload() {
         <div className="flex flex-col gap-4 border-b border-[var(--color-border)] pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-[var(--color-text1)]">
-              {reportTitle}
+              {activeView === "history" ? "Report History" : reportTitle}
             </h1>
 
             <p className="mt-1 text-sm text-[var(--color-text3)]">
-              Generate clinical, administrative, and research reports using
-              natural language.
+              {activeView === "history"
+                ? "Review generated PDF reports, filters, status, record count, and user audit details."
+                : "Generate clinical, administrative, and research reports using natural language."}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveView("current")}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeView === "current"
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text1)] hover:bg-[var(--color-surface2)]"
+              }`}
+            >
+              Current Report
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenHistory}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeView === "history"
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text1)] hover:bg-[var(--color-surface2)]"
+              }`}
+            >
+              Report History
+            </button>
+
             <button
               type="button"
               onClick={handleDownload}
@@ -975,14 +1603,14 @@ async function handleDownload() {
             <button
               type="button"
               onClick={handlePrint}
-              disabled={!hasReport}
+              disabled={!hasReport || isPrinting}
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                 hasReport
                   ? "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text1)] hover:bg-[var(--color-surface2)]"
                   : "border-transparent bg-[var(--color-surface2)] text-[var(--color-text3)] cursor-not-allowed"
               }`}
             >
-              Print
+              {isPrinting ? "Preparing..." : "Print"}
             </button>
 
             <button
@@ -1016,15 +1644,24 @@ async function handleDownload() {
               minWidth: 0,
             }}
           >
-            <ReportDocumentPreview
-              title={reportTitle}
-              rows={reportRows}
-              intent={generatedIntent}
-              summary={summary}
-              previewPage={previewPage}
-              rowsPerPage={rowsPerPage}
-              onPageChange={setPreviewPage}
-            />
+            {activeView === "history" ? (
+              <ReportHistoryPanel
+                items={reportHistory}
+                isLoading={isHistoryLoading}
+                error={historyError}
+                onRefresh={() => fetchReportHistory()}
+              />
+            ) : (
+              <ReportDocumentPreview
+                title={reportTitle}
+                rows={reportRows}
+                intent={generatedIntent}
+                summary={previewSummary}
+                previewPage={previewPage}
+                rowsPerPage={rowsPerPage}
+                onPageChange={setPreviewPage}
+              />
+            )}
           </main>
 
           <aside
@@ -1076,7 +1713,7 @@ async function handleDownload() {
 
                   <p className="mt-5 text-[11px] leading-relaxed text-[var(--color-text3)]">
                     You can also type a custom request below, such as active
-                    glaucoma patients.
+                    glaucoma patients or screening summary last month.
                   </p>
                 </div>
               ) : (

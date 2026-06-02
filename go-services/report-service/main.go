@@ -29,8 +29,8 @@ type Summary struct {
 
 type HighRiskRow struct {
 	Code          string `json:"code"`
-	Patient      string `json:"patient"`
-	AgeGender    string `json:"age_gender"`
+	Patient       string `json:"patient"`
+	AgeGender     string `json:"age_gender"`
 	Eye           string `json:"eye"`
 	Prediction    string `json:"prediction"`
 	Confidence    string `json:"confidence"`
@@ -45,8 +45,8 @@ type HighRiskReportRequest struct {
 	ReportPeriod  string        `json:"report_period"`
 	GeneratedDate string        `json:"generated_date"`
 	GeneratedBy   string        `json:"generated_by"`
-	Summary        Summary       `json:"summary"`
-	Rows           []HighRiskRow `json:"rows"`
+	Summary       Summary       `json:"summary"`
+	Rows          []HighRiskRow `json:"rows"`
 }
 
 type ReportSummaryItem struct {
@@ -68,7 +68,7 @@ type TabularReportRequest struct {
 	ReportPeriod  string              `json:"report_period"`
 	GeneratedDate string              `json:"generated_date"`
 	GeneratedBy   string              `json:"generated_by"`
-	Summary       []ReportSummaryItem  `json:"summary"`
+	Summary       []ReportSummaryItem `json:"summary"`
 	Filters       []string            `json:"filters"`
 	Columns       []ReportColumn      `json:"columns"`
 	Rows          []map[string]string `json:"rows"`
@@ -212,7 +212,7 @@ func convertHighRiskToTabular(request HighRiskReportRequest) TabularReportReques
 			{Key: "screening_date", Label: "Screening Date", Width: 0.12},
 			{Key: "grad_cam", Label: "Grad-CAM", Width: 0.07},
 		},
-		Rows: rows,
+		Rows:        rows,
 		FooterNote:  "Clinical note: This report supports glaucoma screening review only. It is not a standalone diagnostic decision.",
 		Orientation: "L",
 	}
@@ -431,7 +431,11 @@ func drawGenericTable(
 	_, pageHeight := pdf.GetPageSize()
 
 	widths := calculateColumnWidths(contentWidth, columns)
-	rowHeight := 8.0
+	headerHeight := 8.0
+	minRowHeight := 8.0
+	lineHeight := 4.2
+	cellPaddingX := 1.2
+	cellPaddingY := 1.5
 
 	drawHeader := func() {
 		pdf.SetLineWidth(0.2)
@@ -440,14 +444,14 @@ func drawGenericTable(
 
 		for index, column := range columns {
 			label := truncateForCell(pdf, safeText(column.Label, column.Key), widths[index]-2)
-			pdf.CellFormat(widths[index], rowHeight, label, "1", 0, "L", true, 0, "")
+			pdf.CellFormat(widths[index], headerHeight, label, "1", 0, "L", true, 0, "")
 		}
 
-		pdf.Ln(rowHeight)
+		pdf.Ln(headerHeight)
 		pdf.SetFont("Arial", "", 8)
 	}
 
-	ensureSpaceForRow := func() {
+	ensureSpaceForRow := func(rowHeight float64) {
 		if pdf.GetY()+rowHeight > pageHeight-bottomMargin {
 			pdf.AddPage()
 			pdf.SetXY(leftMargin, topMargin)
@@ -455,13 +459,26 @@ func drawGenericTable(
 		}
 	}
 
-	pdf.SetXY(leftMargin, startY)
-	drawHeader()
+	drawWrappedRow := func(values []string, fill bool) {
+		cellLines := make([][]string, len(values))
+		maxLines := 1
 
-	for rowIndex, row := range rows {
-		ensureSpaceForRow()
+		for index, value := range values {
+			lines := splitTextForCell(pdf, safeText(value, "N/A"), widths[index]-(cellPaddingX*2))
+			cellLines[index] = lines
 
-		fill := rowIndex%2 == 1
+			if len(lines) > maxLines {
+				maxLines = len(lines)
+			}
+		}
+
+		rowHeight := float64(maxLines)*lineHeight + (cellPaddingY * 2)
+
+		if rowHeight < minRowHeight {
+			rowHeight = minRowHeight
+		}
+
+		ensureSpaceForRow(rowHeight)
 
 		if fill {
 			pdf.SetFillColor(248, 248, 248)
@@ -469,26 +486,80 @@ func drawGenericTable(
 			pdf.SetFillColor(255, 255, 255)
 		}
 
-		for index, column := range columns {
-			value := safeText(row[column.Key], "N/A")
-			value = truncateForCell(pdf, value, widths[index]-2)
-			pdf.CellFormat(widths[index], rowHeight, value, "1", 0, "L", fill, 0, "")
+		startX := pdf.GetX()
+		startY := pdf.GetY()
+		currentX := startX
+
+		for index, lines := range cellLines {
+			cellWidth := widths[index]
+			pdf.Rect(currentX, startY, cellWidth, rowHeight, "FD")
+
+			pdf.SetXY(currentX+cellPaddingX, startY+cellPaddingY)
+
+			for _, line := range lines {
+				pdf.CellFormat(cellWidth-(cellPaddingX*2), lineHeight, line, "", 2, "L", false, 0, "")
+			}
+
+			currentX += cellWidth
+			pdf.SetXY(currentX, startY)
 		}
 
-		pdf.Ln(rowHeight)
+		pdf.SetXY(startX, startY+rowHeight)
+	}
+
+	pdf.SetXY(leftMargin, startY)
+	drawHeader()
+
+	for rowIndex, row := range rows {
+		values := make([]string, 0, len(columns))
+
+		for _, column := range columns {
+			values = append(values, safeText(row[column.Key], "N/A"))
+		}
+
+		drawWrappedRow(values, rowIndex%2 == 1)
 	}
 
 	minimumRows := 8
 
 	for index := len(rows); index < minimumRows; index++ {
-		ensureSpaceForRow()
+		ensureSpaceForRow(minRowHeight)
 
 		for _, width := range widths {
-			pdf.CellFormat(width, rowHeight, "", "1", 0, "L", false, 0, "")
+			pdf.CellFormat(width, minRowHeight, "", "1", 0, "L", false, 0, "")
 		}
 
-		pdf.Ln(rowHeight)
+		pdf.Ln(minRowHeight)
 	}
+}
+
+func splitTextForCell(pdf *gofpdf.Fpdf, value string, maxWidth float64) []string {
+	text := strings.TrimSpace(value)
+
+	if text == "" {
+		return []string{""}
+	}
+
+	if maxWidth <= 0 {
+		return []string{text}
+	}
+
+	lineBytes := pdf.SplitLines([]byte(text), maxWidth)
+	lines := make([]string, 0, len(lineBytes))
+
+	for _, line := range lineBytes {
+		lineText := strings.TrimSpace(string(line))
+
+		if lineText != "" {
+			lines = append(lines, lineText)
+		}
+	}
+
+	if len(lines) == 0 {
+		return []string{text}
+	}
+
+	return lines
 }
 
 func calculateColumnWidths(contentWidth float64, columns []ReportColumn) []float64 {

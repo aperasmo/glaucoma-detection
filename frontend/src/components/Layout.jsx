@@ -80,7 +80,7 @@ function Layout({ title, actions, children }) {
           />
 
           <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
-            Clinical System
+            Screening System
           </div>
         </div>
       </div>
