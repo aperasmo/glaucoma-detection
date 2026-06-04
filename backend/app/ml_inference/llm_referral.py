@@ -14,6 +14,7 @@ from openai import OpenAI
 
 from app.core.config import settings
 from app.core.logger import get_logger
+import re
 
 logger = get_logger(__name__)
 
@@ -54,7 +55,7 @@ Eye screened: {eye_side.capitalize()} eye
 AI confidence score: {confidence_score:.1%}
 {ohts_info}
 
-Write a concise, professional referral letter (maximum 150 words) from a general 
+Write a concise, professional referral letter (maximum 150 words), do not hallucinate we only base it on the provided information from a general 
 ophthalmologist to a glaucoma specialist. The letter should:
 1. State that the patient was flagged by an AI screening system
 2. Mention the confidence score and eye side
@@ -63,9 +64,31 @@ ophthalmologist to a glaucoma specialist. The letter should:
 5. Use standard clinical terminology
 6. NOT make a definitive diagnosis - this is a screening referral only
 
-Do not include patient contact details or clinic addresses.
 Write only the body of the letter starting with "Dear Colleague,".
+Do not include any closing phrase, signature, clinician name, title, contact information, or placeholders such as [Your Name].
 """
+
+def clean_referral_letter_body(letter: str) -> str:
+    if not letter:
+        return ""
+
+    cleaned = letter.strip()
+
+    # Remove common LLM-generated closing/signature blocks.
+    cleaned = re.sub(
+        r"(?is)\n\s*(sincerely|kind regards|regards|yours sincerely|yours faithfully),?\s*\n.*$",
+        "",
+        cleaned,
+    )
+
+    # Extra safety for placeholder-only signatures.
+    cleaned = re.sub(
+        r"(?is)\n\s*\[your name\].*$",
+        "",
+        cleaned,
+    )
+
+    return cleaned.strip()
 
 
 def generate_gpt4o_vision(
@@ -289,11 +312,15 @@ def generate_referral_letters(
                 ohts_score=ohts_score,
                 ohts_tier=ohts_tier,
             )
-            letter = generator(...)
-            # Replace common placeholders with actual clinician name
+            letter = clean_referral_letter_body(letter) # Ensure only the letter body is kept, remove any LLM-generated signatures or closings.
+            # Keep the LLM output as letter body only.
+            # Final signatory is handled by ScreeningResult.signed_by and PDF rendering.
             letter = letter.replace("[Your Name]", clinician_name)
             letter = letter.replace("[Your Title]", clinician_title)
-            letter = letter.replace("[Your Name/General Ophthalmologist]", f"{clinician_name}, {clinician_title}")            
+            letter = letter.replace(
+                "[Your Name/General Ophthalmologist]",
+                f"{clinician_name}\n{clinician_title}",
+            )
 
             generation_time_ms = round((time.time() - start_time) * 1000, 2)
             results[llm_name] = {

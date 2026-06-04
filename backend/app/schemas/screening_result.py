@@ -41,6 +41,10 @@ class ScreeningWithResults(BaseModel):
     status: str
     image_path: str
     created_at: datetime
+    patient_name: Optional[str] = None
+    patient_code: Optional[str] = None
+    patient_dob: Optional[str] = None
+    patient_gender: Optional[str] = None    
     results: list[ScreeningResultResponse] = []
 
     model_config = {"from_attributes": True}

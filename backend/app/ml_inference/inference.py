@@ -313,9 +313,21 @@ async def run_inference_pipeline(
                 )
 
 
-        # Step 6 - Generate referral letter if prediction is glaucoma
+        # Step 6 - Generate referral letter if prediction is glaucoma        
         if ensemble_result["prediction"] == "glaucoma":
             patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
+
+            clinician_name = await get_setting(
+                db,
+                "REFERRING_CLINICIAN_NAME",
+                default="Dr. [Clinician Name]",
+            )
+            clinician_title = await get_setting(
+                db,
+                "REFERRING_CLINICIAN_TITLE",
+                default="General Ophthalmologist",
+            )
+            signed_by = f"{clinician_name}\n{clinician_title}"
 
             active_llms = ["gpt4o"] if mode == "clinical" else ["gpt4o", "gpt4o_mini", "llama", "gemini"]
 
@@ -343,6 +355,7 @@ async def run_inference_pipeline(
                         confidence_score=ensemble_result["confidence_score"],
                         threshold_used=ensemble_result["threshold_used"],
                         referral_letter=letters["gpt4o"]["letter"],
+                        signed_by=signed_by,
                         llm_used="gpt4o",
                         generation_time_ms=letters["gpt4o"]["generation_time_ms"],
                         ohts_score=ohts_result["ohts_score"] if ohts_result else None,
@@ -363,7 +376,7 @@ async def run_inference_pipeline(
                         confidence_score=ensemble_result["confidence_score"],
                         threshold_used=ensemble_result["threshold_used"],
                         referral_letter=result_data["letter"],
-                        signed_by=f"{clinician_name}, {clinician_title}",
+                        signed_by=signed_by,
                         llm_used=llm_name,
                         generation_time_ms=result_data["generation_time_ms"],
                         ohts_score=ohts_result["ohts_score"] if ohts_result else None,
@@ -411,14 +424,6 @@ async def run_inference_pipeline(
                     ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
                     screening_id=str(screening_id),
                     notification_email=notification_email,
-                )
-
-                # Fetch referring clinician name from system settings
-                clinician_name = await get_setting(
-                    db, "REFERRING_CLINICIAN_NAME", default="Dr. [Clinician Name]"
-                )
-                clinician_title = await get_setting(
-                    db, "REFERRING_CLINICIAN_TITLE", default="General Ophthalmologist"
                 )
 
                 logger.info(f"High-risk notification sent to {notification_email}")

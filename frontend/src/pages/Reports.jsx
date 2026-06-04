@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import Layout from "../components/Layout";
 import API from "../api";
 
+import { useTheme } from "../theme/ThemeProvider";
+
 const QUICK_PROMPTS = [
   "Active glaucoma patients",
   "Inactive patients",
@@ -1281,6 +1283,11 @@ function Reports() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
+  {/* THEME */}
+  const { currentTheme, themes } = useTheme();
+  const isDarkTheme = themes[currentTheme]?.mode === "dark";
+  const logoSrc = "/assets/ai-report-logo.png";
+
   const previewSummary = useMemo(() => {
     if (
       (generatedIntent?.report_type === "screening_summary" ||
@@ -1678,7 +1685,11 @@ async function handleDownload() {
           >
             <div className="flex shrink-0 items-center gap-2.5 border-b border-[var(--color-border)] px-4 py-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/15 text-base">
-                🤖
+                <img
+                  src={logoSrc}
+                  alt="Glaucoma AI"
+                  className="h-8 w-auto max-w-[190px] object-contain"
+                />                
               </div>
 
               <div className="min-w-0 flex-1">

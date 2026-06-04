@@ -46,22 +46,32 @@ async def get_screening_with_results(
     db: AsyncSession,
     screening_id: uuid.UUID,
 ) -> dict:
-    # Fetch a screening record together with all its results.
-    # Used for the full clinical results page.
+    # Fetch a screening record together with all its results and patient details.
+    # Used for the full clinical results page and referral letter print header.
+
+    from app.models.patient import Patient
 
     screening_result = await db.execute(
-        select(Screening).where(Screening.screening_id == screening_id)
+        select(Screening, Patient)
+        .join(Patient, Screening.patient_id == Patient.patient_id)
+        .where(Screening.screening_id == screening_id)
     )
-    screening = screening_result.scalar_one_or_none()
+    row = screening_result.first()
 
-    if not screening:
+    if not row:
         return None
+
+    screening, patient = row
 
     results = await get_results_by_screening(db, screening_id)
 
     return {
         "screening_id": screening.screening_id,
         "patient_id": screening.patient_id,
+        "patient_name": f"{patient.first_name} {patient.last_name}",
+        "patient_code": patient.patient_code,
+        "patient_dob": str(patient.dob) if patient.dob else None,
+        "patient_gender": patient.gender,
         "eye_side": screening.eye_side,
         "status": screening.status,
         "image_path": screening.image_path,
