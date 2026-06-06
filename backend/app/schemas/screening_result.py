@@ -39,6 +39,7 @@ class ScreeningWithResults(BaseModel):
     patient_id: UUID
     eye_side: str
     status: str
+    inference_mode: str | None = None  # Backwards compatibility for old screenings without this field
     image_path: str
     created_at: datetime
     patient_name: Optional[str] = None

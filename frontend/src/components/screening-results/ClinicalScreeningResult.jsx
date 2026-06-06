@@ -142,7 +142,7 @@ function ClinicalScreeningResult(props) {
               </div>
             ) : (
               <>
-                <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap mb-4 max-h-96 overflow-y-auto pr-1">
+                <div className="text-xs text-text1 leading-relaxed whitespace-pre-wrap mb-4 max-h-96 overflow-y-auto pr-1">
                   {primaryReferral.referral_letter}
                 </div>
 

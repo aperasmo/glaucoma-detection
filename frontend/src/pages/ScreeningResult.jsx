@@ -43,11 +43,17 @@ function ScreeningResult() {
           API.get("/settings/INFERENCE_MODE"),
         ]);
 
-        const resultData = resultRes.data;
-        const mode = modeRes.data?.set_value || "clinical";
+          const resultData = resultRes.data;
 
-        setData(resultData);
-        setInferenceMode(mode);
+          // Use the mode saved on the screening record.
+          // The global setting is only a fallback for older records.
+          const mode =
+            resultData?.inference_mode ||
+            modeRes.data?.set_value ||
+            "clinical";
+
+          setData(resultData);
+          setInferenceMode(mode);
 
         const gpt4oReferral =
           resultData?.results?.find(

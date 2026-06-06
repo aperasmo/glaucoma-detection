@@ -3,14 +3,19 @@
 # Business logic for retrieving screening results.
 # Results are written by the inference pipeline - this service reads them.
 
+
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select,text
 from sqlalchemy.orm import selectinload
 
 from app.models.screening import Screening
 from app.models.screening_result import ScreeningResult
 
+
+
+from app.core.logger import get_logger
+logger = get_logger(__name__)
 
 async def get_results_by_screening(
     db: AsyncSession,
@@ -63,7 +68,30 @@ async def get_screening_with_results(
 
     screening, patient = row
 
-    results = await get_results_by_screening(db, screening_id)
+    results = await get_results_by_screening(db, screening_id) # Get/Load all results for this screening, including which model produced each result. Frontend can filter by mode (clinical/research) as needed.
+
+    # # DEBUG: Compare ORM value vs direct database value.
+    # # Keep this while debugging /results/{screening_id}/full.
+    # orm_inference_mode = getattr(screening, "inference_mode", None)
+
+    # db_mode_result = await db.execute(
+    #     text("""
+    #         SELECT inference_mode::text
+    #         FROM screenings
+    #         WHERE screening_id = :screening_id
+    #     """),
+    #     {"screening_id": str(screening_id)},
+    # )
+
+    # db_inference_mode = db_mode_result.scalar_one_or_none()
+
+    # logger.info(
+    #     "DEBUG /full inference_mode | screening_id=%s | orm=%s | db=%s",
+    #     screening_id,
+    #     orm_inference_mode,
+    #     db_inference_mode,
+    # )
+
 
     return {
         "screening_id": screening.screening_id,
@@ -74,6 +102,8 @@ async def get_screening_with_results(
         "patient_gender": patient.gender,
         "eye_side": screening.eye_side,
         "status": screening.status,
+        "inference_mode": getattr(screening, "inference_mode", None) or "clinical", # Backwards compatibility for old screenings without this field
+        #"inference_mode": db_inference_mode or orm_inference_mode or "clinical",
         "image_path": screening.image_path,
         "created_at": screening.created_at,
         "results": results,

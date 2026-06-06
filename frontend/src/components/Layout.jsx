@@ -2,8 +2,10 @@
 // Main layout wrapper - Tailwind CSS implementation.
 // Sidebar with grouped nav, top bar, page content area.
 
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import API from "../api/index";
 
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -59,11 +61,42 @@ function Layout({ title, actions, children }) {
     ? "/assets/glaucoma-ai-logo-dark.png"
     : "/assets/glaucoma-ai-logo-light.png";
 
+  // Active screening mode shown globally in the top bar.
+  // This reads the current system setting, not the saved mode of a past screening.
+  const [activeMode, setActiveMode] = useState("clinical");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchActiveMode() {
+      try {
+        const response = await API.get("/settings/INFERENCE_MODE");
+        const mode = response.data?.set_value || "clinical";
+
+        if (isMounted) {
+          setActiveMode(mode);
+        }
+      } catch {
+        if (isMounted) {
+          setActiveMode("clinical");
+        }
+      }
+    }
+
+    fetchActiveMode();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [location.pathname]);
+
+
   function handleLogout() {
     logout();
     navigate("/");
   }
 
+  
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-text1 font-sans">
 
@@ -82,6 +115,7 @@ function Layout({ title, actions, children }) {
           <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
             Screening System
           </div>
+        
         </div>
       </div>
 
@@ -174,6 +208,12 @@ function Layout({ title, actions, children }) {
           <span className="text-sm font-semibold text-text1 flex-1">
             {title || location.pathname.replace("/", "").replace(/^\w/, c => c.toUpperCase())}
           </span>
+
+          {/* Global active mode indicator.
+            Theme-aware colours: uses app theme tokens instead of fixed colours. */}
+          <div className="px-3 py-1 rounded-full text-xs font-semibold border border-border2 bg-surface2 text-text1 whitespace-nowrap">
+            Mode: {activeMode === "research" ? "Research" : "Clinical"}
+          </div>
 
           {actions && (
             <div className="flex items-center gap-2">

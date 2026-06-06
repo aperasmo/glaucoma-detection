@@ -35,7 +35,17 @@ export function normaliseSignatoryText(value) {
 export function formatDate(value) {
   if (!value) return "-";
 
-  return new Date(value).toLocaleDateString("en-NZ", {
+  // Backend datetime values are stored as UTC but may arrive without "Z".
+  // If no timezone is included, append "Z" so JavaScript treats it as UTC,
+  // then convert to New Zealand time for display.
+  const valueText = String(value);
+  const hasTimezone =
+    valueText.endsWith("Z") ||
+    /[+-]\d{2}:\d{2}$/.test(valueText);
+
+  const normalizedValue = hasTimezone ? valueText : `${valueText}Z`;
+
+  return new Date(normalizedValue).toLocaleDateString("en-NZ", {
     day: "2-digit",
     month: "short",
     year: "numeric",

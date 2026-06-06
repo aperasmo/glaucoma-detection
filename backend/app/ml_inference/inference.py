@@ -149,10 +149,30 @@ async def run_inference_pipeline(
         return
 
     try:
-        # Step 1 - Update status to processing
+        # Step 1 - Read and save the inference mode used for this screening.# Step 1 - Read and save the inference mode used for this screening.
+        # This value becomes the permanent display mode for this screening record.
+        # If the global setting changes later, this old screening will still open
+        # in the correct Clinical or Research view.
+        mode = await get_inference_mode(db)
+
+        if mode not in {"clinical", "research"}:
+            logger.warning(
+                "Invalid INFERENCE_MODE value '%s'. Falling back to clinical.",
+                mode,
+            )
+            mode = "clinical"
+
+        screening.inference_mode = mode
         screening.status = "processing"
         screening.updated_at = datetime.utcnow()
+
         await db.commit()
+
+        logger.info(
+            "Running inference | screening_id=%s | inference_mode=%s",
+            screening_id,
+            mode,
+        )
 
         # Fetch patient data for OHTS scoring
         patient_result = await db.execute(
@@ -162,8 +182,9 @@ async def run_inference_pipeline(
 
 
         # Step 2 - Read inference mode
-        mode = await get_inference_mode(db)
-        logger.info(f"Running in {mode} mode for screening {screening_id}")
+        #Remove these two lines, because mode is already read and saved above.
+        #mode = await get_inference_mode(db)
+        #logger.info(f"Running in {mode} mode for screening {screening_id}")
 
         # Step 3 - Run models based on mode
         individual_results = []
