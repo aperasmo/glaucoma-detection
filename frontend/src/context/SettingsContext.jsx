@@ -3,12 +3,15 @@
 // Loads system settings once when the app starts.
 // Any page/component can call useSettings() to read settings without repeated API calls.
 
+import { useAuth } from "./AuthContext";
 import { createContext, useContext, useEffect, useState } from "react";
 import API from "../api/index";
 
 const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
+  const { user } = useAuth();
+
   const [settings, setSettings] = useState({});
   const [loaded, setLoaded] = useState(false);
 
@@ -31,8 +34,14 @@ export function SettingsProvider({ children }) {
   }
 
   useEffect(() => {
+    if (!user) {
+      setSettings({});
+      setLoaded(true);
+      return;
+    }
+
     loadSettings();
-  }, []);
+  }, [user]);
 
   function getSetting(key, defaultValue = null) {
     return settings[key] ?? defaultValue;

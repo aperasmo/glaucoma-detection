@@ -212,12 +212,55 @@ async def run_seed_screenings(
     success_count = 0
     failed_count = 0
 
+    # Seed inference mode alternation:
+    # - We check the most recent screening mode in the database.
+    # - The first seeded record becomes the opposite of the last saved mode.
+    # - This keeps alternation continuous across multiple seed runs.
+    #
+    # Example:
+    #   Last DB mode = clinical
+    #   New seed batch = research, clinical, research, clinical...
+    #
+    # If there are no previous screenings, default last_mode to "research"
+    # so the first seeded record becomes "clinical".
+    last_mode = "research"  # Default if no previous mode found or on error
+
+    # try:
+    #     async with AsyncSessionLocal() as db:
+    #         last_mode_result = await db.execute(
+    #             text("""
+    #                 SELECT inference_mode::text
+    #                 FROM screenings
+    #                 WHERE inference_mode IS NOT NULL
+    #                 ORDER BY created_at DESC
+    #                 LIMIT 1
+    #             """)
+    #         )
+
+    #         db_last_mode = last_mode_result.scalar_one_or_none()
+
+    #         if db_last_mode in {"clinical", "research"}:
+    #             last_mode = db_last_mode
+
+    #     logger.info("[seed] Last saved inference mode: %s", last_mode)
+
+    # except Exception as e:
+    #     # Do not stop seeding if this lookup fails.
+    #     # We fall back to last_mode = "research", making the first seed clinical.
+    #     logger.warning(
+    #         "[seed] Could not read last inference mode. Falling back to first seed as clinical. Error: %s",
+    #         str(e),
+    #     )
+
     for index, filename in enumerate(selected_images):
         image_path = os.path.join(test_dir, filename)
 
-        # Alternate inference mode per screening
-        # Even index = clinical, Odd index = research
-        current_mode = "clinical" if index % 2 == 0 else "research"
+        # Example if last_mode starts as "research":
+        #   1st = clinical
+        #   2nd = research
+        #   3rd = clinical
+        current_mode = "clinical" if last_mode == "research" else "research"
+        last_mode = current_mode
 
         try:
             async with AsyncSessionLocal() as db:

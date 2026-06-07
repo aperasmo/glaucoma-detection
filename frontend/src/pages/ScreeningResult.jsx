@@ -71,11 +71,17 @@ function ScreeningResult() {
           }
         }
 
+      const status = String(resultData?.status || "").toLowerCase();
+
+      // Keep the spinner page while inference is still running.
+      // Only show the result UI once the screening is complete or failed.
+      if (status === "complete" || status === "failed") {
         setLoading(false);
 
-        if (resultData?.status === "complete" || resultData?.status === "failed") {
-          if (intervalId) clearInterval(intervalId);
-        }
+        if (intervalId) clearInterval(intervalId);
+      } else {
+        setLoading(true);
+      }
       } catch (err) {
     console.error("Failed to load screening result:", {
       status: err?.response?.status,
@@ -239,7 +245,7 @@ function ScreeningResult() {
         <div className="loading-overlay">
           <div className="loading-content">
             <div className="spinner" />
-            <h3 className="text-text1 text-lg font-semibold mb-2">Analysing Image...</h3>
+            <h3 className="text-text1 text-lg font-semibold mb-2">Analysing Fundus Image...</h3>
             <p className="text-text2 text-sm mb-1">AI model is processing your fundus image</p>
             <p className="text-text3 text-xs">Inference → Grad-CAM++ → Referral Letter</p>
           </div>

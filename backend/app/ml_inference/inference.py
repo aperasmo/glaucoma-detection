@@ -46,6 +46,7 @@ from app.utils.settings_helper import get_setting
 
 from app.services.segmentation_service import extract_cdr_classical
 
+
 # Sensitivity-first thresholds per model - confirmed from evaluation_results.json
 # These match the thresholds used during evaluation reporting.
 SENSITIVITY_THRESHOLDS = {
@@ -128,6 +129,7 @@ async def run_inference_pipeline(
     image_path: str,
     db: AsyncSession,
     created_by: uuid.UUID,
+    mode: str | None = None, # Optional mode parameter to override global setting, used for testing. If None, will read from settings.
 ) -> None:
     # Main inference pipeline - called as a background task after image upload.
     # Steps:
@@ -149,20 +151,18 @@ async def run_inference_pipeline(
         return
 
     try:
-        # Step 1 - Read and save the inference mode used for this screening.# Step 1 - Read and save the inference mode used for this screening.
-        # This value becomes the permanent display mode for this screening record.
-        # If the global setting changes later, this old screening will still open
-        # in the correct Clinical or Research view.
-        mode = await get_inference_mode(db)
+        # Use explicit mode when admin seeding passes one.
+        # Otherwise use the current system setting for normal screening flow.
+        active_mode = mode or await get_inference_mode(db)
 
-        if mode not in {"clinical", "research"}:
+        if active_mode not in {"clinical", "research"}:
             logger.warning(
-                "Invalid INFERENCE_MODE value '%s'. Falling back to clinical.",
-                mode,
+                "Invalid inference mode '%s'. Falling back to clinical.",
+                active_mode,
             )
-            mode = "clinical"
+            active_mode = "clinical"
 
-        screening.inference_mode = mode
+        screening.inference_mode = active_mode
         screening.status = "processing"
         screening.updated_at = datetime.utcnow()
 
@@ -171,7 +171,7 @@ async def run_inference_pipeline(
         logger.info(
             "Running inference | screening_id=%s | inference_mode=%s",
             screening_id,
-            mode,
+            active_mode,
         )
 
         # Fetch patient data for OHTS scoring
@@ -189,7 +189,7 @@ async def run_inference_pipeline(
         # Step 3 - Run models based on mode
         individual_results = []
 
-        if mode == "research":
+        if active_mode == "research":
             # Research Mode - run all three models
             for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
                 logger.info(f"Running {model_name}...")
@@ -350,7 +350,7 @@ async def run_inference_pipeline(
             )
             signed_by = f"{clinician_name}\n{clinician_title}"
 
-            active_llms = ["gpt4o"] if mode == "clinical" else ["gpt4o", "gpt4o_mini", "llama", "gemini"]
+            active_llms = ["gpt4o"] if active_mode == "clinical" else ["gpt4o", "gpt4o_mini", "llama", "gemini"]
 
             letters = generate_referral_letters(
                 image_path=image_path,
@@ -364,7 +364,7 @@ async def run_inference_pipeline(
                 clinician_title=clinician_title,                
             )
 
-            if mode == "clinical":
+            if active_mode == "clinical":
                 # Clinical Mode - create a separate record for GPT-4o letter.
                 # Ensemble record stays clean with llm_used = NULL.
                 # This ensures llm_used IS NULL filter always finds the clinical result.

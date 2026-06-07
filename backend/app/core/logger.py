@@ -15,8 +15,8 @@ from logging.handlers import TimedRotatingFileHandler
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# Daily log filename format: glaucoma_backend_DDMMYYYY.log
-today = datetime.now().strftime("%d%m%Y")
+# Daily log filename format: glaucoma_backend_YYYYMMDD.log 
+today = datetime.now().strftime("%Y%m%d")
 LOG_FILE = os.path.join(LOG_DIR, f"glaucoma_backend_{today}.log")
 
 # Log format: timestamp | level | module | message
