@@ -8,6 +8,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
+import { useSettings } from "../context/SettingsContext";
+
 const GRADIENTS = [
   "from-accent to-accent2",
   "from-pos to-emerald-700",
@@ -46,10 +48,13 @@ function NewScreening() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [eyeSide, setEyeSide] = useState("left");
-  const [inferenceMode, setInferenceMode] = useState("clinical");
+
   const [selectedModel, setSelectedModel] = useState("ensemble");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const { getSetting } = useSettings();
+  const activeMode = getSetting("INFERENCE_MODE", "clinical");    
 
   useEffect(() => {
     API.get("/patients/").then(res => {
@@ -60,9 +65,7 @@ function NewScreening() {
         if (found) setSelectedPatient(found);
       }
     });
-    API.get("/settings/INFERENCE_MODE")
-      .then(res => setInferenceMode(res.data.set_value))
-      .catch(() => setInferenceMode("clinical"));
+
   }, []);
 
   function handleFileChange(e) {
@@ -256,7 +259,7 @@ function NewScreening() {
           </div>
 
           {/* Step 4 - Model Selection (Research Mode only) */}
-          {inferenceMode === "research" && (
+          {activeMode === "research" && (
             <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-white/7 flex items-center gap-3">
                 <span className="text-sm font-semibold text-text1">Step 4 — Select Model</span>
@@ -328,7 +331,7 @@ function NewScreening() {
                 value={file ? "✓ Ready" : "Not uploaded"}
                 valueClass={file ? "text-pos" : "text-text3"} />
               <SummaryRow label="Model"
-                value={inferenceMode === "research"
+                value={activeMode === "research"
                   ? selectedModel === "ensemble" ? "All Models (Consensus)" : selectedModel
                   : "Ensemble (Auto)"} />
 

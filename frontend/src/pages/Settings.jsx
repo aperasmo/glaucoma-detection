@@ -11,6 +11,8 @@ import API from "../api/index";
 import { useTheme } from "../theme/ThemeProvider";
 import { THEME_GROUPS } from "../theme/themes";
 
+import { useSettings } from "../context/SettingsContext";
+
 const inputClass = "w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans";
 
 function SectionDivider({ label }) {
@@ -89,7 +91,7 @@ function Settings() {
   const [showBlockModal, setShowBlockModal] = useState(false);
 
   const { currentTheme, setTheme, themes } = useTheme();
-
+  const { refreshSettings } = useSettings();
   // Form states
 const [general, setGeneral] = useState({
   CLINIC_NAME:               "",
@@ -179,6 +181,7 @@ const [thresholds, setThresholds] = useState({
   async function saveSetting(key, value) {
     try {
       await API.put(`/settings/${key}`, { set_value: value, status: "A" });
+      await refreshSettings();
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch {
       setError("Failed to save inference mode.");

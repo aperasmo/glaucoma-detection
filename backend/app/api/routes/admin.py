@@ -212,8 +212,12 @@ async def run_seed_screenings(
     success_count = 0
     failed_count = 0
 
-    for filename in selected_images:
+    for index, filename in enumerate(selected_images):
         image_path = os.path.join(test_dir, filename)
+
+        # Alternate inference mode per screening
+        # Even index = clinical, Odd index = research
+        current_mode = "clinical" if index % 2 == 0 else "research"
 
         try:
             async with AsyncSessionLocal() as db:
@@ -257,6 +261,7 @@ async def run_seed_screenings(
                     image_path=upload_path,
                     eye_side=eye_side,
                     status="pending",
+                    inference_mode=current_mode,
                     created_by=created_by,
                     updated_by=created_by,
                 )
@@ -265,16 +270,18 @@ async def run_seed_screenings(
 
                 logger.info(
                     f"[seed] Patient {patient_code} created. "
-                    f"Screening {screening_id} created. Running inference..."
+                    f"Screening {screening_id} created. "
+                    f"Mode: {current_mode}. Running inference..."
                 )
 
-            # Step 3 - Run full inference pipeline
+            # Step 3 - Run full inference pipeline with current mode
             async with AsyncSessionLocal() as db:
                 await run_inference_pipeline(
                     screening_id=screening_id,
                     image_path=upload_path,
                     db=db,
                     created_by=created_by,
+                    mode=current_mode,
                 )
 
             # Step 4 - Move image to done folder

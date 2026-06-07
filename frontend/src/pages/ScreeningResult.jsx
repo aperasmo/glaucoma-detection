@@ -14,12 +14,14 @@ import {
   normaliseSignatoryText,
 } from "../components/screening-results/ResultShared";
 
+import { useSettings } from "../context/SettingsContext";
+
 function ScreeningResult() {
   const { screeningId } = useParams();
   const navigate = useNavigate();
 
   const [data, setData] = useState(null);
-  const [inferenceMode, setInferenceMode] = useState("clinical");
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -33,27 +35,20 @@ function ScreeningResult() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [actionError, setActionError] = useState("");
 
+  const { getSetting } = useSettings();
+
   useEffect(() => {
     let intervalId = null;
 
     async function fetchResult() {
       try {
-        const [resultRes, modeRes] = await Promise.all([
-          API.get(`/results/${screeningId}/full`),
-          API.get("/settings/INFERENCE_MODE"),
-        ]);
-
+          const resultRes = await API.get(`/results/${screeningId}/full`);
           const resultData = resultRes.data;
 
           // Use the mode saved on the screening record.
           // The global setting is only a fallback for older records.
-          const mode =
-            resultData?.inference_mode ||
-            modeRes.data?.set_value ||
-            "clinical";
-
           setData(resultData);
-          setInferenceMode(mode);
+          
 
         const gpt4oReferral =
           resultData?.results?.find(
@@ -67,13 +62,8 @@ function ScreeningResult() {
           setSignedBy(normaliseSignatoryText(gpt4oReferral.signed_by));
         } else if (!signedBy) {
           try {
-            const [nameRes, titleRes] = await Promise.all([
-              API.get("/settings/REFERRING_CLINICIAN_NAME"),
-              API.get("/settings/REFERRING_CLINICIAN_TITLE"),
-            ]);
-
-            const name = nameRes.data?.set_value || "";
-            const title = titleRes.data?.set_value || "";
+            const name = getSetting("REFERRING_CLINICIAN_NAME", "");
+            const title = getSetting("REFERRING_CLINICIAN_TITLE", "");
 
             setSignedBy(title ? `${name}\n${title}` : name);
           } catch {
@@ -86,12 +76,18 @@ function ScreeningResult() {
         if (resultData?.status === "complete" || resultData?.status === "failed") {
           if (intervalId) clearInterval(intervalId);
         }
-      } catch {
-        setError("Failed to load screening result.");
-        setLoading(false);
+      } catch (err) {
+    console.error("Failed to load screening result:", {
+      status: err?.response?.status,
+      data: err?.response?.data,
+      message: err?.message,
+    });
 
-        if (intervalId) clearInterval(intervalId);
-      }
+    setError("Failed to load screening result.");
+    setLoading(false);
+
+    if (intervalId) clearInterval(intervalId);
+  }
     }
 
     fetchResult();
@@ -103,6 +99,9 @@ function ScreeningResult() {
   }, [screeningId]);
 
   const results = data?.results || [];
+  // Screening Result page uses the saved mode of this screening.
+  // It does not use the current global INFERENCE_MODE setting.
+  const inferenceMode = data?.inference_mode || "clinical";
 
   const primaryReferral =
     getReferralResult(results, "gpt4o") ||

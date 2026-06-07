@@ -23,6 +23,7 @@ import Reports from "./pages/Reports";
 import ReportHighRisk from "./pages/ReportHighRisk";
 
 import { ThemeProvider } from "./theme/ThemeProvider";
+import { SettingsProvider } from "./context/SettingsContext";
 
 function ProtectedRoute() {
   const { token } = useAuth();
@@ -88,7 +89,9 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <RouterProvider router={router} />
+        <SettingsProvider>
+          <RouterProvider router={router} />
+        </SettingsProvider>
       </ThemeProvider>
     </AuthProvider>
   );

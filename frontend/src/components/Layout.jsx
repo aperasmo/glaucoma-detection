@@ -8,7 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import API from "../api/index";
 
 import { useTheme } from "../theme/ThemeProvider";
-
+import { useSettings } from "../context/SettingsContext";
 const NAV_GROUPS = [
   {
     label: "Main",
@@ -63,32 +63,8 @@ function Layout({ title, actions, children }) {
 
   // Active screening mode shown globally in the top bar.
   // This reads the current system setting, not the saved mode of a past screening.
-  const [activeMode, setActiveMode] = useState("clinical");
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function fetchActiveMode() {
-      try {
-        const response = await API.get("/settings/INFERENCE_MODE");
-        const mode = response.data?.set_value || "clinical";
-
-        if (isMounted) {
-          setActiveMode(mode);
-        }
-      } catch {
-        if (isMounted) {
-          setActiveMode("clinical");
-        }
-      }
-    }
-
-    fetchActiveMode();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [location.pathname]);
+  const { getSetting } = useSettings();
+  const activeMode = getSetting("INFERENCE_MODE", "clinical");
 
 
   function handleLogout() {
