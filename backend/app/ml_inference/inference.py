@@ -7,7 +7,6 @@
 # Saves results to screening_results table.
 # Updates screening status on completion or failure.
 
-from turtle import mode
 import uuid
 import numpy as np
 import cv2
