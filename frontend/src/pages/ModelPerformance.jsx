@@ -320,10 +320,10 @@ function ModelPerformance() {
             color={isEns ? "text-pos" : "text-accent2"} highlight={isEns} />
         </div>
 
-        {/* Test Results Breakdown */}
+        {/* Test Set Confusion Matrix */}
         <div className={`bg-surface border rounded-xl overflow-hidden ${isEns ? "border-pos/25" : "border-white/7"}`}>
           <div className="px-5 py-3.5 border-b border-white/7 flex items-center gap-3">
-            <span className="text-sm font-semibold text-text1 flex-1">Test Results Breakdown</span>
+            <span className="text-sm font-semibold text-text1 flex-1">Test Set Confusion Matrix</span>
             <span className="text-xs text-text3">415 images · 123 glaucoma-sign · 292 no-glaucoma-sign</span>
           </div>
           <div className="p-5">

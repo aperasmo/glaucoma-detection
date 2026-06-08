@@ -13,6 +13,8 @@ import {
   titleCase,
 } from "./ResultShared";
 
+import ModelPerformanceReference from "./ModelPerformanceReference";
+import BiomarkerVisualisation from "./BiomarkerVisualisation";
 function ClinicalScreeningResult(props) {
   const {
     data,
@@ -48,7 +50,9 @@ function ClinicalScreeningResult(props) {
             label="Ensemble"
           />
         )}
-
+        {clinicalResult && (
+          <ModelPerformanceReference modelKey="ensemble" />
+        )}
         <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-white/7 flex items-center gap-3">
             <span className="text-sm font-semibold text-text1 flex-1">OHTS Risk Score</span>
@@ -98,6 +102,9 @@ function ClinicalScreeningResult(props) {
             )}
           </div>
         </div>
+          {clinicalResult && (
+            <BiomarkerVisualisation result={clinicalResult} />
+          )}        
       </div>
 
       <div className="flex flex-col gap-4">

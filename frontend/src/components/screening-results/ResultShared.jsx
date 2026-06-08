@@ -319,7 +319,7 @@ export function SelectedModelDetail({ data, result, label }) {
           </div>
 
           <div className="bg-surface2 rounded-lg p-3 border border-white/7">
-            <div className="text-xs text-text3 mb-1">CDR</div>
+            <div className="text-xs text-text3 mb-1">Approximate CDR</div>
             <div className="text-sm font-semibold text-text1">
               {result?.cdr != null ? Number(result.cdr).toFixed(2) : "N/A"}
             </div>

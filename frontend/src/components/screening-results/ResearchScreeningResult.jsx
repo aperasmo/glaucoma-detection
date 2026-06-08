@@ -16,6 +16,9 @@ import {
   formatPercent,
 } from "./ResultShared";
 
+import ModelPerformanceReference from "./ModelPerformanceReference";
+import BiomarkerVisualisation from "./BiomarkerVisualisation";
+
 function ModelCard({ option, result, selected, onClick }) {
   const isAvailable = Boolean(result);
   const isGlaucoma = result?.prediction?.toLowerCase() === "glaucoma";
@@ -248,7 +251,12 @@ function ResearchScreeningResult(props) {
           label={selectedModelLabel}
         />
       )}
-
+      {selectedResult && (
+        <BiomarkerVisualisation result={selectedResult} />
+      )}
+      {selectedResult && (
+        <ModelPerformanceReference modelKey={selectedModelKey} />
+      )}
       <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mt-4">
         <div className="px-5 py-3.5 border-b border-white/7">
           <span className="text-sm font-semibold text-text1">LLM Referral Comparison</span>
