@@ -69,5 +69,6 @@ class Settings(BaseSettings):
     TEST_IMAGES_DIR: str = "test_images"
     TEST_IMAGES_DONE_DIR: str = "test_images/done"
 
-
+    # --- Reports Services ---
+    REPORT_SERVICE_BASE_URL: str = "http://localhost:8001"    
 settings = Settings()

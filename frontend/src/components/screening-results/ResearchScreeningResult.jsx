@@ -299,7 +299,7 @@ function ResearchScreeningResult(props) {
                       <div className="text-xs text-pos mb-2">Generated</div>
                       <div className="text-xs text-text3">
                         {item.result.generation_time_ms
-                          ? `${Number(item.result.generation_time_ms).toFixed(0)} ms`
+                          ? `${Number(item.result.generation_time_ms).toFixed(0)/1000} secs.`
                           : "Generation time not recorded"}
                       </div>
                     </>

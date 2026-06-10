@@ -38,10 +38,24 @@ from app.core.dependencies import get_current_user
 from app.core.logger import get_logger
 from app.models.user import User
 from app.models.report_history import ReportHistory
-
+from app.core.config import settings
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 logger = get_logger(__name__)
+
+REPORT_SERVICE_BASE_URL_ENV = "REPORT_SERVICE_BASE_URL"
+ENSEMBLE_MODEL_USED = "ensemble"
+
+def _get_report_service_url(path: str) -> str:
+    base_url = settings.REPORT_SERVICE_BASE_URL.strip().rstrip("/")
+
+    if not base_url:
+        raise HTTPException(
+            status_code=500,
+            detail="REPORT_SERVICE_BASE_URL is not configured.",
+        )
+
+    return f"{base_url}/{path.lstrip('/')}"
 
 
 class ReportAssistantFilters(BaseModel):
@@ -50,6 +64,10 @@ class ReportAssistantFilters(BaseModel):
     eye_side: Literal["left", "right"] | None = None
     role: Literal["admin", "doctor", "nurse"] | None = None
     days_since_last_screening: int | None = Field(default=None, ge=1, le=365)
+    patient_id: str | None = None
+    patient_code: str | None = None
+    patient_name: str | None = None
+    patient_query: str | None = None
 
     # Legacy support
     date_range: str | None = None
@@ -62,7 +80,15 @@ class ReportAssistantFilters(BaseModel):
 
 
 class ReportAssistantPreviewRequest(BaseModel):
-    report_type: Literal["patient_list", "high_risk", "screening_summary", "user_list", "referral_list", "follow_up_list"]
+    report_type: Literal[
+        "patient_list",
+        "high_risk",
+        "screening_summary",
+        "user_list",
+        "referral_list",
+        "follow_up_list",
+        "patient_clinical_summary",
+    ]
     filters: ReportAssistantFilters = Field(default_factory=ReportAssistantFilters)
     format: Literal["pdf"] = "pdf"
 
@@ -778,7 +804,7 @@ async def _preview_follow_up_list_report(
     days_threshold = payload.filters.days_since_last_screening or 30
 
     params = {
-        "model_used": "ensemble",
+        "model_used": ENSEMBLE_MODEL_USED,
         "days_threshold": days_threshold,
     }
 
@@ -1142,7 +1168,7 @@ async def _preview_screening_summary_report(
     date_label: str | None,
 ) -> dict:
     params = {
-        "model_used": "ensemble",
+        "model_used": ENSEMBLE_MODEL_USED,
     }
 
     where_clauses = [
@@ -1293,6 +1319,162 @@ async def _preview_screening_summary_report(
     }
 
 
+
+async def _resolve_patient_for_report(
+    filters: ReportAssistantFilters,
+    db: Session,
+) -> dict:
+    patient_id = (filters.patient_id or "").strip()
+    patient_query = (
+        filters.patient_query
+        or filters.patient_code
+        or filters.patient_name
+        or ""
+    ).strip()
+
+    if not patient_id and not patient_query:
+        raise HTTPException(
+            status_code=400,
+            detail="Please include a patient name or patient ID for the patient clinical summary report.",
+        )
+
+    if patient_id:
+        query = text("""
+            SELECT
+                p.patient_id,
+                p.patient_code,
+                p.first_name,
+                p.last_name
+            FROM patients p
+            WHERE p.patient_id = :patient_id
+            LIMIT 1
+        """)
+        params = {"patient_id": patient_id}
+    else:
+        query = text("""
+            SELECT
+                p.patient_id,
+                p.patient_code,
+                p.first_name,
+                p.last_name
+            FROM patients p
+            WHERE p.patient_code ILIKE :patient_like
+               OR CONCAT(p.first_name, ' ', p.last_name) ILIKE :patient_like
+               OR p.first_name ILIKE :patient_like
+               OR p.last_name ILIKE :patient_like
+            ORDER BY
+                CASE
+                    WHEN LOWER(p.patient_code) = LOWER(:patient_exact) THEN 0
+                    WHEN LOWER(CONCAT(p.first_name, ' ', p.last_name)) = LOWER(:patient_exact) THEN 1
+                    ELSE 2
+                END,
+                p.last_name ASC,
+                p.first_name ASC
+            LIMIT 5
+        """)
+        params = {
+            "patient_like": f"%{patient_query}%",
+            "patient_exact": patient_query,
+        }
+
+    result = db.execute(query, params)
+
+    if isawaitable(result):
+        result = await result
+
+    rows = list(result.mappings().all())
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="No patient matched that name or patient ID.",
+        )
+
+    if patient_id or len(rows) == 1:
+        return dict(rows[0])
+
+    exact_matches = [
+        row
+        for row in rows
+        if _safe_text(row.get("patient_code"), "").lower() == patient_query.lower()
+        or _patient_name(row.get("first_name"), row.get("last_name")).lower()
+        == patient_query.lower()
+    ]
+
+    if len(exact_matches) == 1:
+        return dict(exact_matches[0])
+
+    matches = ", ".join(
+        f"{_patient_name(row.get('first_name'), row.get('last_name'))} ({_safe_text(row.get('patient_code'))})"
+        for row in rows
+    )
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Multiple patients matched. Please use the patient ID/code. Matches: {matches}",
+    )
+
+
+def _patient_clinical_summary_dict(summary_items: list[dict]) -> dict:
+    summary_by_label = {
+        _safe_text(item.get("label"), "").lower(): _safe_text(item.get("value"))
+        for item in summary_items
+    }
+
+    return {
+        "total": summary_by_label.get("total screenings", "0"),
+        "latestResult": summary_by_label.get("latest result", "N/A"),
+        "latestConfidence": summary_by_label.get("latest confidence", "N/A"),
+        "highestConfidence": summary_by_label.get("highest confidence", "N/A"),
+        "latestScreening": summary_by_label.get("latest screening", "N/A"),
+        "eyesScreened": summary_by_label.get("eyes screened", "N/A"),
+    }
+
+
+async def _preview_patient_clinical_summary_report(
+    payload: ReportAssistantPreviewRequest,
+    db: Session,
+    current_user: User,
+) -> dict:
+    patient_row = await _resolve_patient_for_report(payload.filters, db)
+    patient_id = str(patient_row.get("patient_id"))
+
+    generated_by = _get_user_display_name(current_user)
+    clinic_name = await _get_system_setting(
+        db=db,
+        set_code="CLINIC_NAME",
+        fallback="Clinic Name",
+    )
+
+    report_payload, _, record_count = await _build_patient_clinical_report_payload(
+        patient_id=patient_id,
+        db=db,
+        current_user=current_user,
+        clinic_name=clinic_name,
+        generated_by=generated_by,
+    )
+
+    patient_name = _patient_name(patient_row.get("first_name"), patient_row.get("last_name"))
+    patient_code = _safe_text(patient_row.get("patient_code"))
+
+    return {
+        "report_type": "patient_clinical_summary",
+        "title": "Patient Clinical Summary Report",
+        "filters": {
+            "patient_id": patient_id,
+            "patient_code": patient_code,
+            "patient_name": patient_name,
+        },
+        "summary": _patient_clinical_summary_dict(report_payload.get("summary", [])),
+        "rows": report_payload.get("history_rows", []),
+        "patient": report_payload.get("patient", {}),
+        "chart_points": report_payload.get("chart_points", []),
+        "record_count": record_count,
+        "generated_by": generated_by,
+        "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
 @router.post("/assistant/preview")
 async def preview_assistant_report(
     payload: ReportAssistantPreviewRequest,
@@ -1307,6 +1489,13 @@ async def preview_assistant_report(
     )
 
     date_start, date_end, date_label = _resolve_date_filter(payload.filters)
+
+    if payload.report_type == "patient_clinical_summary":
+        return await _preview_patient_clinical_summary_report(
+            payload=payload,
+            db=db,
+            current_user=current_user,
+        )
 
     if payload.report_type == "follow_up_list":
         return await _preview_follow_up_list_report(
@@ -1349,7 +1538,7 @@ async def preview_assistant_report(
         )
 
     params = {
-        "model_used": "ensemble",
+        "model_used": ENSEMBLE_MODEL_USED,
     }
 
     where_clauses = ["rn = 1"]
@@ -1525,10 +1714,19 @@ def _assistant_filter_labels(filters: dict) -> list[str]:
     diagnosis = filters.get("diagnosis")
     eye_side = filters.get("eye_side")
     role = filters.get("role")
+    patient_name = filters.get("patient_name")
+    patient_code = filters.get("patient_code")
+    patient_query = filters.get("patient_query")
     date_label = filters.get("date_label")
     date_from = filters.get("date_from")
     date_to = filters.get("date_to")
     days_since_last_screening = filters.get("days_since_last_screening")
+
+    if patient_name:
+        patient_label = f"{patient_name} ({patient_code})" if patient_code else patient_name
+        labels.append(f"Patient: {patient_label}")
+    elif patient_query:
+        labels.append(f"Patient: {patient_query}")
 
     if status:
         labels.append(f"Status: {status.title()}")
@@ -1999,6 +2197,14 @@ async def export_assistant_report_pdf_go(
         _filters_to_dict(payload.filters),
     )
 
+    if payload.report_type == "patient_clinical_summary":
+        patient_row = await _resolve_patient_for_report(payload.filters, db)
+        return await export_patient_clinical_pdf_go(
+            patient_id=str(patient_row.get("patient_id")),
+            db=db,
+            current_user=current_user,
+        )
+
     preview_data = await preview_assistant_report(
         payload=payload,
         db=db,
@@ -2035,7 +2241,7 @@ async def export_assistant_report_pdf_go(
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                "http://localhost:8081/reports/tabular/pdf",
+                _get_report_service_url("/reports/tabular/pdf"),
                 json=go_payload,
             )
             response.raise_for_status()
@@ -2098,6 +2304,376 @@ async def export_assistant_report_pdf_go(
         },
     )
 
+
+
+
+def _format_datetime_display(value: Any) -> str:
+    if value is None:
+        return "N/A"
+
+    if isinstance(value, datetime):
+        value_datetime = value
+    else:
+        try:
+            value_datetime = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return _safe_text(value)
+
+    return value_datetime.strftime("%d %b %Y, %I:%M %p").replace("AM", "am").replace("PM", "pm")
+
+
+def _format_axis_label(value: Any, same_day_only: bool) -> str:
+    if value is None:
+        return "N/A"
+
+    if isinstance(value, datetime):
+        value_datetime = value
+    else:
+        try:
+            value_datetime = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return _format_date_display(value)
+
+    if same_day_only:
+        return value_datetime.strftime("%I:%M %p").lstrip("0").replace("AM", "am").replace("PM", "pm")
+
+    return value_datetime.strftime("%d %b %Y")
+
+
+def _result_label(prediction: Any) -> str:
+    prediction_text = _safe_text(prediction, "").lower()
+
+    if prediction_text == "glaucoma":
+        return "Possible glaucoma signs"
+
+    if prediction_text == "normal":
+        return "No glaucoma signs"
+
+    return "Result pending"
+
+
+def _format_clinical_measurement(value: Any, unit: str) -> str:
+    if value is None:
+        return "N/A"
+
+    number_text = _format_number(value, 1)
+
+    if number_text == "N/A":
+        return "N/A"
+
+    return f"{number_text} {unit}"
+
+
+def _safe_filename(value: str, fallback: str = "report") -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value or fallback).strip("_")
+    return cleaned or fallback
+
+
+async def _build_patient_clinical_report_payload(
+    patient_id: str,
+    db: Session,
+    current_user: User,
+    clinic_name: str,
+    generated_by: str,
+) -> tuple[dict, str, int]:
+    patient_result = db.execute(
+        text("""
+            SELECT
+                p.patient_id,
+                p.patient_code,
+                p.first_name,
+                p.last_name,
+                p.dob,
+                p.gender,
+                p.mobile_number,
+                p.email,
+                p.iop,
+                p.cct,
+                p.is_active
+            FROM patients p
+            WHERE p.patient_id = :patient_id
+            LIMIT 1
+        """),
+        {"patient_id": patient_id},
+    )
+
+    if isawaitable(patient_result):
+        patient_result = await patient_result
+
+    patient_row = patient_result.mappings().first()
+
+    if not patient_row:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+
+    screenings_result = db.execute(
+        text("""
+            SELECT
+                s.screening_id,
+                s.created_at AS screening_date,
+                s.eye_side,
+                s.status,
+                sr.prediction,
+                sr.confidence_score,
+                sr.ohts_score,
+                sr.ohts_tier,
+                sr.cdr,
+                sr.model_used,
+                COALESCE(
+                    NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''),
+                    'N/A'
+                ) AS clinician
+            FROM screenings s
+            LEFT JOIN screening_results sr
+                ON sr.screening_id = s.screening_id
+               AND sr.model_used = :model_used
+               AND sr.llm_used IS NULL
+            LEFT JOIN users u
+                ON u.user_id = s.screened_by
+            WHERE s.patient_id = :patient_id
+              AND s.status = 'complete'
+            ORDER BY s.created_at ASC, s.eye_side ASC
+        """),
+        {"patient_id": patient_id, "model_used": ENSEMBLE_MODEL_USED},
+    )
+
+    if isawaitable(screenings_result):
+        screenings_result = await screenings_result
+
+    screening_rows = list(screenings_result.mappings().all())
+
+    patient_name = _patient_name(patient_row.get("first_name"), patient_row.get("last_name"))
+    patient_code = _safe_text(patient_row.get("patient_code"))
+
+    confidence_values: list[float] = []
+
+    for row in screening_rows:
+        confidence_score = row.get("confidence_score")
+
+        if confidence_score is None:
+            continue
+
+        try:
+            confidence = float(confidence_score)
+        except (TypeError, ValueError):
+            continue
+
+        if confidence <= 1:
+            confidence = confidence * 100
+
+        confidence_values.append(confidence)
+
+    latest_row = screening_rows[-1] if screening_rows else None
+    latest_confidence = None
+    highest_confidence = max(confidence_values) if confidence_values else None
+
+    if latest_row and latest_row.get("confidence_score") is not None:
+        try:
+            latest_confidence = float(latest_row.get("confidence_score"))
+            if latest_confidence <= 1:
+                latest_confidence = latest_confidence * 100
+        except (TypeError, ValueError):
+            latest_confidence = None
+
+    same_day_only = False
+
+    if screening_rows:
+        date_keys = {
+            row.get("screening_date").date().isoformat()
+            if isinstance(row.get("screening_date"), datetime)
+            else str(row.get("screening_date")).split("T")[0].split(" ")[0]
+            for row in screening_rows
+            if row.get("screening_date") is not None
+        }
+        same_day_only = len(date_keys) == 1
+
+    chart_points = []
+    history_rows = []
+
+    for row in screening_rows:
+        confidence_score = row.get("confidence_score")
+        confidence_percent = None
+
+        if confidence_score is not None:
+            try:
+                confidence_percent = float(confidence_score)
+                if confidence_percent <= 1:
+                    confidence_percent = confidence_percent * 100
+            except (TypeError, ValueError):
+                confidence_percent = None
+
+        if confidence_percent is not None:
+            chart_points.append({
+                "date_time": row.get("screening_date").isoformat() if row.get("screening_date") else None,
+                "axis_label": _format_axis_label(row.get("screening_date"), same_day_only),
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "result": _safe_text(row.get("prediction"), "pending"),
+                "confidence": round(confidence_percent, 1),
+            })
+
+        history_rows.append({
+            "screening_date": _format_datetime_display(row.get("screening_date")),
+            "eye": _safe_text(row.get("eye_side")).title(),
+            "result": _result_label(row.get("prediction")),
+            "confidence": _format_percent(row.get("confidence_score"), 1),
+            "ohts": _ohts_display({
+                "ohts_tier": row.get("ohts_tier"),
+                "ohts_score": row.get("ohts_score"),
+            }),
+            "cdr": _format_number(row.get("cdr"), 3),
+            "clinician": _safe_text(row.get("clinician")),
+        })
+
+    summary_items = [
+        {"label": "Total screenings", "value": str(len(screening_rows))},
+        {
+            "label": "Latest result",
+            "value": _result_label(latest_row.get("prediction")) if latest_row else "N/A",
+        },
+        {
+            "label": "Latest confidence",
+            "value": f"{latest_confidence:.1f}%" if latest_confidence is not None else "N/A",
+        },
+        {
+            "label": "Highest confidence",
+            "value": f"{highest_confidence:.1f}%" if highest_confidence is not None else "N/A",
+        },
+        {
+            "label": "Latest screening",
+            "value": _format_datetime_display(latest_row.get("screening_date")) if latest_row else "N/A",
+        },
+        {
+            "label": "Eyes screened",
+            "value": ", ".join(sorted({
+                _safe_text(row.get("eye_side")).title()
+                for row in screening_rows
+                if row.get("eye_side")
+            })) or "N/A",
+        },
+    ]
+
+    payload = {
+        "report_code": "patient_clinical_summary",
+        "title": "Patient Clinical Summary Report",
+        "caption": "Patient-level screening summary with longitudinal risk tracking. This is a clinical support report, not a standalone diagnosis.",
+        "clinic_name": _safe_text(clinic_name, "Clinic Name"),
+        "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generated_by": generated_by,
+        "patient": {
+            "patient_id": patient_code,
+            "patient_name": patient_name,
+            "dob": _format_date_display(patient_row.get("dob")),
+            "age": f"{_calculate_age(patient_row.get('dob'))} years",
+            "gender": _safe_text(patient_row.get("gender")).title(),
+            "contact": _safe_text(patient_row.get("mobile_number")),
+            "email": _safe_text(patient_row.get("email")),
+            "iop": _format_clinical_measurement(patient_row.get("iop"), "mmHg"),
+            "cct": _format_clinical_measurement(patient_row.get("cct"), "um"),
+            "status": _patient_status_label(patient_row.get("is_active")).title(),
+        },
+        "summary": summary_items,
+        "chart_points": chart_points,
+        "history_rows": history_rows,
+        "footer_note": "Clinical note: This report supports glaucoma screening review only. It is not a standalone diagnostic decision.",
+    }
+
+    filename_base = _safe_filename(
+        f"patient_clinical_summary_{patient_code}_{patient_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
+        "patient_clinical_summary",
+    )
+
+    return payload, filename_base, len(history_rows)
+
+
+@router.get("/patient-clinical/pdf")
+async def export_patient_clinical_pdf_go(
+    patient_id: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    generated_by = _get_user_display_name(current_user)
+    generated_by_user_id = getattr(current_user, "user_id", None)
+
+    clinic_name = await _get_system_setting(
+        db=db,
+        set_code="CLINIC_NAME",
+        fallback="Clinic Name",
+    )
+
+    go_payload, filename_base, record_count = await _build_patient_clinical_report_payload(
+        patient_id=patient_id,
+        db=db,
+        current_user=current_user,
+        clinic_name=clinic_name,
+        generated_by=generated_by,
+    )
+
+    filename = f"{filename_base}.pdf"
+    filters = {
+        "patient_id": go_payload["patient"].get("patient_id"),
+        "patient_name": go_payload["patient"].get("patient_name"),
+    }
+
+    try:
+        logger.info(
+            "Calling Go patient clinical PDF service | patient_id=%s | record_count=%s",
+            patient_id,
+            record_count,
+        )
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                _get_report_service_url("/reports/patient-clinical/pdf"),
+                json=go_payload,
+            )
+            response.raise_for_status()
+
+        await _save_report_history(
+            db=db,
+            report_type="patient_clinical_summary",
+            report_title="Patient Clinical Summary Report",
+            generated_by_user_id=generated_by_user_id,
+            generated_by_name=generated_by,
+            filters=filters,
+            record_count=record_count,
+            status="success",
+            file_name=filename,
+            error_message=None,
+        )
+
+    except httpx.HTTPError as error:
+        error_message = (
+            "Go report service patient clinical PDF endpoint is unavailable: "
+            f"{str(error)}"
+        )
+
+        await _save_report_history(
+            db=db,
+            report_type="patient_clinical_summary",
+            report_title="Patient Clinical Summary Report",
+            generated_by_user_id=generated_by_user_id,
+            generated_by_name=generated_by,
+            filters=filters,
+            record_count=record_count,
+            status="failed",
+            file_name=filename,
+            error_message=error_message,
+        )
+
+        logger.exception(
+            "Patient clinical PDF export failed | patient_id=%s | file_name=%s",
+            patient_id,
+            filename,
+        )
+
+        raise HTTPException(status_code=503, detail=error_message)
+
+    return StreamingResponse(
+        iter([response.content]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
 
 @router.get("/history")
 async def get_report_history(
@@ -2503,7 +3079,7 @@ async def export_high_risk_pdf(
 async def check_go_report_service_health():
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get("http://localhost:8081/health")
+            response = await client.get(_get_report_service_url("/health"))
             response.raise_for_status()
 
         return {
@@ -2522,7 +3098,7 @@ async def check_go_report_service_health():
 async def get_go_test_pdf():
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get("http://localhost:8081/reports/test-pdf")
+            response = await client.get(_get_report_service_url("/reports/test-pdf"))
             response.raise_for_status()
 
         return StreamingResponse(
@@ -2589,7 +3165,7 @@ async def export_high_risk_pdf_go(
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                "http://localhost:8081/reports/high-risk/pdf",
+                _get_report_service_url("/reports/high-risk/pdf"),
                 json=payload,
             )
             response.raise_for_status()

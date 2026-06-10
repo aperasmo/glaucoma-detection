@@ -9,29 +9,31 @@ import API from "../api/index";
 
 import { useTheme } from "../theme/ThemeProvider";
 import { useSettings } from "../context/SettingsContext";
+
+
 const NAV_GROUPS = [
   {
     label: "Main",
     items: [
-      { label: "Dashboard",         path: "/dashboard",      icon: "⬛", roles: ["admin", "doctor", "nurse"] },
-      { label: "Patients",          path: "/patients",       icon: "👥", roles: ["admin", "doctor", "nurse"] },
-      { label: "Run Screening",     path: "/screenings/new", icon: "🔬", roles: ["admin", "nurse"] },
-      { label: "Screening History", path: "/screenings",     icon: "📋", roles: ["admin", "doctor", "nurse"] },
-      { label: "Reports",           path: "/reports",        icon: "📄", roles: ["admin", "doctor", "nurse"] },
+      { label: "Dashboard",         path: "/dashboard",      icon: "/assets/icons/dashboard.svg", roles: ["admin", "doctor", "nurse"] },
+      { label: "Patients",          path: "/patients",       icon: "/assets/icons/patients.svg", roles: ["admin", "doctor", "nurse"] },
+      { label: "Run Screening",     path: "/screenings/new", icon: "/assets/icons/run-screening.svg", roles: ["admin", "nurse"] },
+      { label: "Screening History", path: "/screenings",     icon: "/assets/icons/screening-history.svg", roles: ["admin", "doctor", "nurse"] },
+      { label: "Reports",           path: "/reports",        icon: "/assets/icons/reports.svg", roles: ["admin", "doctor", "nurse"] },
     ],
   },
   {
     label: "Analytics",
     items: [
-      { label: "Analytics",         path: "/analytics",      icon: "📊", roles: ["admin", "doctor", "nurse"] },
-      { label: "Model Performance", path: "/models",         icon: "🤖", roles: ["admin", "doctor", "nurse"] },
+      { label: "Analytics",         path: "/analytics",      icon: "/assets/icons/analytics.svg", roles: ["admin", "doctor", "nurse"] },
+      { label: "Model Performance", path: "/models",         icon: "/assets/icons/model-performance.svg", roles: ["admin", "doctor", "nurse"] },
     ],
   },
   {
     label: "Admin",
     items: [
-      { label: "User Management",   path: "/users",          icon: "🔐", roles: ["admin"] },
-      { label: "Settings",          path: "/settings",       icon: "⚙️", roles: ["admin"] },
+      { label: "User Management",   path: "/users",          icon: "/assets/icons/user-management.svg", roles: ["admin"] },
+      { label: "Settings",          path: "/settings",       icon: "/assets/icons/settings.svg", roles: ["admin"] },
     ],
   },
 ];
@@ -125,9 +127,17 @@ function Layout({ title, actions, children }) {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-sbBar rounded-r" />
                       )}
 
-                      <span className="text-sm w-4 text-center">
-                        {item.icon}
-                      </span>
+                        <span
+                          className="w-4 h-4 shrink-0 opacity-90"
+                          style={{
+                            // CSS mask keeps SVG icons theme-aware.
+                            // The icon uses the current sidebar text colour instead of a fixed PNG colour.
+                            backgroundColor: "currentColor",
+                            WebkitMask: `url(${item.icon}) center / contain no-repeat`,
+                            mask: `url(${item.icon}) center / contain no-repeat`,
+                          }}
+                          aria-hidden="true"
+                        />
 
                       {item.label}
                     </div>

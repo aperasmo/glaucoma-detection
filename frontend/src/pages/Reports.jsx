@@ -14,6 +14,8 @@ const QUICK_PROMPTS = [
   "High-risk report this week",
   "Screening summary last month",
   "Referral letters this month",
+  "Patient clinical summary report",
+  "Longitudinal risk report by patient",
   "Active users",
   "Doctor user list",
 ];
@@ -21,144 +23,10 @@ const QUICK_PROMPTS = [
 const INITIAL_MESSAGES = [
   {
     role: "assistant",
-    text: "Ask me what report you want to generate. I can prepare patient, screening, referral, follow-up, and user reports using filters such as active, inactive, glaucoma, normal, doctor, nurse, this week, or this month.",
+    text: "Ask me what report you want to generate. I can prepare patient, screening, referral, follow-up, user, and patient clinical summary reports using filters such as active, inactive, glaucoma, normal, doctor, nurse, this week, this month, or a patient name.",
   },
 ];
 
-const ALL_PATIENTS = [
-  {
-    id: 1,
-    patientId: "PT-001",
-    name: "Margaret Thompson",
-    dob: "12 Mar 1948",
-    status: "active",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-05-12",
-    risk: "High",
-    clinician: "Dr. Smith",
-  },
-  {
-    id: 2,
-    patientId: "PT-002",
-    name: "Robert Williams",
-    dob: "5 Jul 1955",
-    status: "active",
-    diagnosis: "normal",
-    lastScreening: "2026-05-28",
-    risk: "Low",
-    clinician: "Dr. Johnson",
-  },
-  {
-    id: 3,
-    patientId: "PT-003",
-    name: "Dorothy Chen",
-    dob: "22 Nov 1962",
-    status: "inactive",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-01-03",
-    risk: "High",
-    clinician: "Dr. Smith",
-  },
-  {
-    id: 4,
-    patientId: "PT-004",
-    name: "James Patterson",
-    dob: "14 Apr 1957",
-    status: "active",
-    diagnosis: "normal",
-    lastScreening: "2026-06-01",
-    risk: "Low",
-    clinician: "Dr. Lee",
-  },
-  {
-    id: 5,
-    patientId: "PT-005",
-    name: "Helen Morrison",
-    dob: "30 Sep 1943",
-    status: "active",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-05-30",
-    risk: "High",
-    clinician: "Dr. Johnson",
-  },
-  {
-    id: 6,
-    patientId: "PT-006",
-    name: "William Clarke",
-    dob: "8 Feb 1960",
-    status: "inactive",
-    diagnosis: "normal",
-    lastScreening: "2025-11-15",
-    risk: "Low",
-    clinician: "Dr. Smith",
-  },
-  {
-    id: 7,
-    patientId: "PT-007",
-    name: "Susan Brown",
-    dob: "17 Jan 1952",
-    status: "active",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-05-29",
-    risk: "High",
-    clinician: "Dr. Lee",
-  },
-  {
-    id: 8,
-    patientId: "PT-008",
-    name: "Charles Davis",
-    dob: "26 Jun 1958",
-    status: "active",
-    diagnosis: "normal",
-    lastScreening: "2026-05-18",
-    risk: "Low",
-    clinician: "Dr. Johnson",
-  },
-  {
-    id: 9,
-    patientId: "PT-009",
-    name: "Nancy Wilson",
-    dob: "3 Oct 1946",
-    status: "inactive",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-02-08",
-    risk: "High",
-    clinician: "Dr. Smith",
-  },
-  {
-    id: 10,
-    patientId: "PT-010",
-    name: "Thomas Anderson",
-    dob: "11 May 1953",
-    status: "active",
-    diagnosis: "normal",
-    lastScreening: "2026-05-27",
-    risk: "Low",
-    clinician: "Dr. Lee",
-  },
-  {
-    id: 11,
-    patientId: "PT-011",
-    name: "Betty Taylor",
-    dob: "19 Aug 1947",
-    status: "active",
-    diagnosis: "glaucoma",
-    lastScreening: "2026-06-01",
-    risk: "High",
-    clinician: "Dr. Johnson",
-  },
-  {
-    id: 12,
-    patientId: "PT-012",
-    name: "George Martinez",
-    dob: "7 Dec 1961",
-    status: "inactive",
-    diagnosis: "normal",
-    lastScreening: "2025-12-05",
-    risk: "Low",
-    clinician: "Dr. Smith",
-  },
-];
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString("en-NZ", {
@@ -201,6 +69,7 @@ function formatReportType(type) {
   if (type === "referral_list") return "Referral List Report";
   if (type === "follow_up_list") return "Follow-up List Report";
   if (type === "user_list") return "User List Report";
+  if (type === "patient_clinical_summary") return "Patient Clinical Summary Report";
   return "Patient List Report";
 }
 
@@ -231,6 +100,10 @@ function formatFilterLabel(key) {
     diagnosis: "Screening result",
     eye_side: "Eye",
     role: "Role",
+    patient_query: "Patient",
+    patient_name: "Patient",
+    patient_code: "Patient ID",
+    patient_id: "Patient UUID",
     days_since_last_screening: "No follow-up within",
     date_range: "Date range",
     date_label: "Date range",
@@ -303,6 +176,34 @@ function extractDatePhrase(rawText) {
   return "";
 }
 
+function extractPatientQuery(rawText) {
+  const text = rawText.trim();
+
+  const patterns = [
+    /(?:patient clinical summary|patient clinical report|clinical summary|clinical report|patient report|longitudinal risk report|risk report|screening history)\s+(?:for|of)\s+(.+)$/i,
+    /(?:for|of)\s+([a-z][a-z\s.'-]+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+
+    if (!match?.[1]) continue;
+
+    let value = match[1].trim();
+
+    value = value
+      .replace(/\b(today|yesterday|this week|last week|this month|last month|this year|last year)\b/gi, "")
+      .replace(/\b(active|inactive|glaucoma|normal|positive|negative|left eye|right eye)\b/gi, "")
+      .replace(/[?.!,]+$/g, "")
+      .trim();
+
+    if (value) return value;
+  }
+
+  const patientCodeMatch = text.match(/\b(PAT\d{4,}|PT-\d{3,})\b/i);
+  return patientCodeMatch?.[1] || "";
+}
+
 function parseReportRequest(rawText) {
   const text = rawText.toLowerCase().trim();
 
@@ -341,47 +242,72 @@ function parseReportRequest(rawText) {
     text.includes("follow-up list") ||
     text.includes("due for follow");
 
+  const mentionsPatientClinicalReport =
+    text.includes("patient clinical") ||
+    text.includes("clinical summary for") ||
+    text.includes("clinical report for") ||
+    text.includes("patient report for") ||
+    text.includes("longitudinal risk report") ||
+    text.includes("risk report for") ||
+    text.includes("screening history for");
+
+  const patientQuery = extractPatientQuery(rawText);
+
+  if (mentionsPatientClinicalReport) {
+    reportType = "patient_clinical_summary";
+  }
+
   if (text.includes("high risk") || text.includes("high-risk")) {
     reportType = "high_risk";
   }
 
   if (
-    text.includes("screening summary") ||
-    text.includes("screening report") ||
-    text.includes("summary")
+    reportType !== "patient_clinical_summary" &&
+    (text.includes("screening summary") ||
+      text.includes("screening report") ||
+      text.includes("summary"))
   ) {
     reportType = "screening_summary";
   }
 
   if (
-  text.includes("follow-up") ||
-  text.includes("follow up") ||
-  text.includes("followup")
-) {
-  reportType = "follow_up_list";
-}
-
-  if (mentionsReferralReport) {
-    reportType = "referral_list";
-  }
-
-  if (mentionsFollowUpReport) {
+    text.includes("follow-up") ||
+    text.includes("follow up") ||
+    text.includes("followup")
+  ) {
     reportType = "follow_up_list";
   }
 
-  if (mentionsUserReport) {
+  if (reportType !== "patient_clinical_summary" && mentionsReferralReport) {
+    reportType = "referral_list";
+  }
+
+  if (reportType !== "patient_clinical_summary" && mentionsFollowUpReport) {
+    reportType = "follow_up_list";
+  }
+
+  if (reportType !== "patient_clinical_summary" && mentionsUserReport) {
     reportType = "user_list";
   }
 
   const filters = {};
 
-if (reportType === "follow_up_list") {
-  const daysMatch = text.match(/(\d{1,3})\s*[- ]?\s*(day|days|d)\b/);
+  if (reportType === "patient_clinical_summary") {
+    if (!patientQuery) {
+      return {
+        ok: false,
+        message: "Please include the patient name or patient ID. Example: Patient clinical report for [patient name or patient ID].",
+      };
+    }
 
-  filters.days_since_last_screening = daysMatch
-    ? Number(daysMatch[1])
-    : 1;
-}
+    filters.patient_query = patientQuery;
+  }
+
+  if (reportType === "follow_up_list") {
+    const daysMatch = text.match(/(\d{1,3})\s*[- ]?\s*(day|days|d)\b/);
+
+    filters.days_since_last_screening = daysMatch ? Number(daysMatch[1]) : 1;
+  }
 
   if (text.includes("inactive")) {
     filters.status = "inactive";
@@ -409,7 +335,7 @@ if (reportType === "follow_up_list") {
     }
   }
 
-  if (reportType !== "user_list") {
+  if (reportType !== "user_list" && reportType !== "patient_clinical_summary") {
     if (
       text.includes("glaucoma") ||
       text.includes("positive") ||
@@ -433,7 +359,7 @@ if (reportType === "follow_up_list") {
 
   const datePhrase = extractDatePhrase(text);
 
-  if (datePhrase) {
+  if (datePhrase && reportType !== "patient_clinical_summary") {
     filters.date_phrase = datePhrase;
   }
 
@@ -466,48 +392,6 @@ if (reportType === "follow_up_list") {
   };
 }
 
-function filterPatients(intent) {
-  if (!intent) return [];
-
-  const today = new Date("2026-06-01");
-  const weekAgo = new Date(today);
-  weekAgo.setDate(today.getDate() - 7);
-
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-  return ALL_PATIENTS.filter(patient => {
-    if (intent.report_type === "high_risk" && patient.risk !== "High") {
-      return false;
-    }
-
-    if (intent.filters?.status && patient.status !== intent.filters.status) {
-      return false;
-    }
-
-    if (
-      intent.filters?.diagnosis &&
-      patient.diagnosis !== intent.filters.diagnosis
-    ) {
-      return false;
-    }
-
-    if (
-      intent.filters?.date_range === "this_week" &&
-      new Date(patient.lastScreening) < weekAgo
-    ) {
-      return false;
-    }
-
-    if (
-      intent.filters?.date_range === "this_month" &&
-      new Date(patient.lastScreening) < monthStart
-    ) {
-      return false;
-    }
-
-    return true;
-  });
-}
 
 function StatusBadge({ value }) {
   const isActive = value === "active";
@@ -675,7 +559,7 @@ function getNonEmptyFilters(filters) {
     return value !== null && value !== undefined && value !== "";
   });
 
-  const hiddenKeys = new Set(["date_phrase", "date_from", "date_to"]);
+  const hiddenKeys = new Set(["date_phrase", "date_from", "date_to", "patient_id"]);
 
   return entries.filter(([key]) => !hiddenKeys.has(key));
 }
@@ -781,7 +665,30 @@ function getUserListSummary(summary) {
   ];
 }
 
+function getPatientClinicalSummary(summary) {
+  return [
+    { label: "Total screenings", value: summary?.total || 0 },
+    { label: "Latest result", value: summary?.latestResult || "N/A" },
+    { label: "Latest confidence", value: summary?.latestConfidence || "N/A" },
+    { label: "Highest confidence", value: summary?.highestConfidence || "N/A" },
+    { label: "Latest screening", value: summary?.latestScreening || "N/A" },
+    { label: "Eyes screened", value: summary?.eyesScreened || "N/A" },
+  ];
+}
+
 function getPreviewColumns(reportType) {
+  if (reportType === "patient_clinical_summary") {
+    return [
+      { key: "screening_date", label: "Date / Time" },
+      { key: "eye", label: "Eye" },
+      { key: "result", label: "Result" },
+      { key: "confidence", label: "Confidence" },
+      { key: "ohts", label: "OHTS" },
+      { key: "cdr", label: "CDR" },
+      { key: "clinician", label: "Clinician" },
+    ];
+  }
+
   if (reportType === "follow_up_list") {
     return [
       { key: "lastScreening", label: "Last Screening" },
@@ -903,13 +810,16 @@ function ReportDocumentPreview({
 
   const reportType = intent.report_type;
   const isHighRisk = reportType === "high_risk";
+  const isPatientClinical = reportType === "patient_clinical_summary";
   const isScreeningSummary = reportType === "screening_summary";
   const isReferralList = reportType === "referral_list";
   const isFollowUpList = reportType === "follow_up_list";
   const isUserList = reportType === "user_list";
 
   const filterEntries = getNonEmptyFilters(intent.filters);
-  const summaryCards = isHighRisk
+  const summaryCards = isPatientClinical
+    ? getPatientClinicalSummary(summary)
+    : isHighRisk
     ? getHighRiskSummary(rows)
     : isScreeningSummary
       ? getScreeningSummary(summary)
@@ -944,7 +854,9 @@ function ReportDocumentPreview({
           </h2>
 
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">
-            {isHighRisk
+            {isPatientClinical
+              ? "Generated from one patient's screening profile with longitudinal risk tracking."
+              : isHighRisk
               ? "Generated from high-risk screening records using validated report filters."
               : isScreeningSummary
                 ? "Generated from completed screening activity using validated report filters."
@@ -1088,7 +1000,9 @@ function ReportDocumentPreview({
         )}
 
       <p className="mt-5 text-xs leading-relaxed text-gray-500">
-        {isHighRisk
+        {isPatientClinical
+          ? "Clinical note: This patient-level report supports glaucoma screening review only. It is not a standalone diagnostic decision."
+          : isHighRisk
           ? "Clinical note: This report supports glaucoma screening review only. It is not a standalone diagnostic decision."
           : isScreeningSummary
             ? "Clinical note: This report summarises glaucoma screening activity and supports review or follow-up planning only."
@@ -1290,7 +1204,8 @@ function Reports() {
 
   const previewSummary = useMemo(() => {
     if (
-      (generatedIntent?.report_type === "screening_summary" ||
+      (generatedIntent?.report_type === "patient_clinical_summary" ||
+        generatedIntent?.report_type === "screening_summary" ||
         generatedIntent?.report_type === "referral_list" ||
         generatedIntent?.report_type === "follow_up_list" ||
         generatedIntent?.report_type === "user_list") &&
@@ -1724,7 +1639,7 @@ async function handleDownload() {
 
                   <p className="mt-5 text-[11px] leading-relaxed text-[var(--color-text3)]">
                     You can also type a custom request below, such as active
-                    glaucoma patients or screening summary last month.
+                    glaucoma patients, screening summary last month, or patient clinical report for a patient name or patient ID.
                   </p>
                 </div>
               ) : (

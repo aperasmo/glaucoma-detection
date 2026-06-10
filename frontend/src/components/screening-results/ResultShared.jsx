@@ -229,41 +229,41 @@ export function ImagePair({ data, result, selectedModelLabel }) {
         <div className="text-xs text-text3 text-center mb-2 uppercase tracking-wider">
           Original Fundus Image
         </div>
-        <div className="rounded-lg overflow-hidden bg-black min-h-44 flex items-center justify-center">
-          {data?.image_path ? (
-            <img
-              src={`${BACKEND}/${data.image_path.replace(/\\/g, "/")}`}
-              alt="Fundus"
-              className="w-full block"
-            />
-          ) : (
-            <span className="text-text3 text-xs">Not available</span>
-          )}
-        </div>
+          <div className="rounded-lg overflow-hidden bg-black aspect-[4/3] flex items-center justify-center">
+            {data?.image_path ? (
+              <img
+                src={`${BACKEND}/${data.image_path.replace(/\\/g, "/")}`}
+                alt="Fundus"
+                className="w-full h-full object-contain block"
+              />
+            ) : (
+              <span className="text-text3 text-xs">Not available</span>
+            )}
+          </div>
       </div>
 
       <div>
         <div className="text-xs text-text3 text-center mb-2 uppercase tracking-wider">
           {selectedModelLabel} Grad-CAM++
         </div>
-        <div className="rounded-lg overflow-hidden bg-black min-h-44 flex items-center justify-center">
-          {gradcamUrl ? (
-            <img
-              src={gradcamUrl}
-              alt={`${selectedModelLabel} Grad-CAM++`}
-              className="w-full block"
-              onError={e => {
-                e.currentTarget.style.display = "none";
-                const fallback = e.currentTarget.nextElementSibling;
-                if (fallback) fallback.style.display = "flex";
-              }}
-            />
-          ) : null}
-          <div className="hidden flex-col items-center justify-center text-text3 text-xs p-4 w-full h-full">
-            <div className="text-2xl mb-2">🔬</div>
-            <div>Grad-CAM++ not available</div>
+          <div className="rounded-lg overflow-hidden bg-black aspect-[4/3] flex items-center justify-center">
+            {gradcamUrl ? (
+              <img
+                src={gradcamUrl}
+                alt={`${selectedModelLabel} Grad-CAM++`}
+                className="w-full h-full object-contain block"
+                onError={e => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.nextElementSibling;
+                  if (fallback) fallback.style.display = "flex";
+                }}
+              />
+            ) : null}
+            <div className="hidden flex-col items-center justify-center text-text3 text-xs p-4 w-full h-full">
+              <div className="text-2xl mb-2">🔬</div>
+              <div>Grad-CAM++ not available</div>
+            </div>
           </div>
-        </div>
       </div>
     </div>
   );

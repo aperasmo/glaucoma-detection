@@ -23,6 +23,7 @@ class ScreeningResultResponse(BaseModel):
     ohts_score: Optional[Decimal] = None
     ohts_tier: Optional[str] = None
     referral_letter: Optional[str] = None
+    generation_time_ms: Optional[Decimal] = None
     llm_used: Optional[str] = None
     created_at: datetime
     cdr: Optional[float] = None

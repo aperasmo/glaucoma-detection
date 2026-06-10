@@ -176,11 +176,11 @@ function ModelPerformanceReference({ modelKey = "ensemble" }) {
 
       <div className="p-4">
         <div className="grid grid-cols-5 gap-3">
-          <MetricBox label="AUC" value={formatDecimal(selectedModel.auc)} />
+          <MetricBox label="AUC" value={formatPercent(selectedModel.auc)} />
           <MetricBox label="Sensitivity" value={formatPercent(selectedModel.sensitivity)} />
           <MetricBox label="Specificity" value={formatPercent(selectedModel.specificity)} />
           <MetricBox label="NPV" value={formatPercent(selectedModel.npv)} />
-          <MetricBox label="Youden Threshold" value={formatDecimal(selectedModel.threshold)} 
+          <MetricBox label="Youden Threshold" value={formatPercent(selectedModel.threshold)} 
             tooltip="Threshold selected during held-out test-set evaluation using Youden's J statistic.
             It may differ from the threshold used for this saved screening result."
           />

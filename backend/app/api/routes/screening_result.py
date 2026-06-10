@@ -966,7 +966,7 @@ def _build_llm_comparison_pdf(
         if result and getattr(result, "generation_time_ms", None) is not None:
             cell_flowables.append(
                 Paragraph(
-                    f"Generated in {float(result.generation_time_ms):.0f} ms",
+                    f"Generated in {float(result.generation_time_ms/1000):.2f} secs.",
                     generation_style,
                 )
             )
