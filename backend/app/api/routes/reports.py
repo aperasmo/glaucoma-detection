@@ -36,15 +36,21 @@ from app.db.database import get_db
 from app.services.screening_service import get_analytics
 from app.core.dependencies import get_current_user
 from app.core.logger import get_logger
+from app.core.config import settings
 from app.models.user import User
 from app.models.report_history import ReportHistory
-from app.core.config import settings
+from app.services.report_assistant_llm_service import (
+    ReportAssistantLLMDisabled,
+    ReportAssistantLLMError,
+    interpret_report_assistant_prompt,
+)
+
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 logger = get_logger(__name__)
 
-REPORT_SERVICE_BASE_URL_ENV = "REPORT_SERVICE_BASE_URL"
 ENSEMBLE_MODEL_USED = "ensemble"
+
 
 def _get_report_service_url(path: str) -> str:
     base_url = settings.REPORT_SERVICE_BASE_URL.strip().rstrip("/")
@@ -91,6 +97,12 @@ class ReportAssistantPreviewRequest(BaseModel):
     ]
     filters: ReportAssistantFilters = Field(default_factory=ReportAssistantFilters)
     format: Literal["pdf"] = "pdf"
+    preview_data: dict[str, Any] | None = None
+
+
+
+class ReportAssistantInterpretRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=1000)
 
 
 def _safe_text(value: Any, fallback: str = "N/A") -> str:
@@ -257,6 +269,41 @@ def _patient_name(first_name: Any, last_name: Any) -> str:
     full_name = f"{_safe_text(first_name, '').strip()} {_safe_text(last_name, '').strip()}".strip()
     return full_name or "N/A"
 
+def _get_patient_search_value(filters: ReportAssistantFilters) -> str | None:
+    value = (
+        filters.patient_query
+        or filters.patient_name
+        or filters.patient_code
+        or filters.patient_id
+    )
+
+    if value is None:
+        return None
+
+    value = str(value).strip()
+
+    return value or None
+
+
+def _add_patient_search_filter(
+    params: dict,
+    where_clauses: list[str],
+    filters: ReportAssistantFilters,
+    columns: list[str],
+) -> None:
+    patient_search = _get_patient_search_value(filters)
+
+    if not patient_search:
+        return
+
+    params["patient_query"] = f"%{patient_search.lower()}%"
+
+    search_conditions = [
+        f"LOWER(COALESCE({column}::text, '')) LIKE :patient_query"
+        for column in columns
+    ]
+
+    where_clauses.append(f"({' OR '.join(search_conditions)})")
 
 def _date_range_start(date_range: str | None) -> date | None:
     MONTH_LOOKUP = {
@@ -520,6 +567,18 @@ def _parse_nz_date(value: str) -> date:
                 "for example 01/05/2026."
             ),
         )
+
+def _llm_display(value: Any) -> str:
+    labels = {
+        "gpt4o": "GPT-4o",
+        "gpt4o_mini": "GPT-4o mini",
+        "gemini": "Gemini",
+        "llama": "LLaMA",
+    }
+
+    value_text = _safe_text(value, "").strip()
+
+    return labels.get(value_text, value_text or "N/A")
 
 
 def _resolve_date_filter(
@@ -826,6 +885,18 @@ async def _preview_follow_up_list_report(
         params["eye_side"] = payload.filters.eye_side
         where_clauses.append("eye_side = :eye_side")
 
+    _add_patient_search_filter(
+        params=params,
+        where_clauses=where_clauses,
+        filters=payload.filters,
+        columns=[
+            "patient_code",
+            "first_name",
+            "last_name",
+            "CONCAT(first_name, ' ', last_name)",
+        ],
+    )
+
     if date_start:
         params["date_start"] = date_start
         where_clauses.append("last_screening >= :date_start")
@@ -990,14 +1061,14 @@ async def _preview_follow_up_list_report(
                 "status": payload.filters.status,
                 "diagnosis": payload.filters.diagnosis,
                 "eye_side": payload.filters.eye_side,
+                "patient_query": _get_patient_search_value(payload.filters),
                 "days_since_last_screening": days_threshold,
                 "date_from": date_start.isoformat() if date_start else None,
                 "date_to": date_end.isoformat() if date_end else None,
                 "date_label": date_label,
             }.items()
             if value is not None
-        },
-        "summary": summary,
+        },        "summary": summary,
         "rows": response_rows,
         "generated_by": f"{current_user.first_name} {current_user.last_name}",
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1011,11 +1082,11 @@ async def _preview_referral_list_report(
     date_end: date | None,
     date_label: str | None,
 ) -> dict:
-    params = {}
+    params = {
+    "clinical_llm_used": "gpt4o",
+    }
     where_clauses = [
         "s.status = 'complete'",
-        "sr.referral_letter IS NOT NULL",
-        "TRIM(sr.referral_letter) <> ''",
     ]
 
     if payload.filters.status:
@@ -1030,6 +1101,18 @@ async def _preview_referral_list_report(
         params["eye_side"] = payload.filters.eye_side
         where_clauses.append("s.eye_side = :eye_side")
 
+    _add_patient_search_filter(
+        params=params,
+        where_clauses=where_clauses,
+        filters=payload.filters,
+        columns=[
+            "p.patient_code",
+            "p.first_name",
+            "p.last_name",
+            "CONCAT(p.first_name, ' ', p.last_name)",
+        ],
+    )
+
     if date_start:
         params["date_start"] = date_start
         where_clauses.append("COALESCE(sr.updated_at, sr.created_at) >= :date_start")
@@ -1041,6 +1124,18 @@ async def _preview_referral_list_report(
     where_sql = " AND ".join(where_clauses)
 
     query = text(f"""
+        WITH ranked_referrals AS (
+            SELECT
+                sr.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY sr.screening_id
+                    ORDER BY COALESCE(sr.updated_at, sr.created_at) DESC
+                ) AS referral_rank
+                FROM screening_results sr
+                WHERE sr.referral_letter IS NOT NULL
+                AND TRIM(sr.referral_letter) <> ''
+                AND sr.llm_used = :clinical_llm_used
+        )
         SELECT
             sr.screening_results_id,
             COALESCE(sr.updated_at, sr.created_at) AS referral_date,
@@ -1065,7 +1160,7 @@ async def _preview_referral_list_report(
                 NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''),
                 'N/A'
             ) AS clinician
-        FROM screening_results sr
+        FROM ranked_referrals sr
         JOIN screenings s
             ON s.screening_id = sr.screening_id
         JOIN patients p
@@ -1073,7 +1168,11 @@ async def _preview_referral_list_report(
         LEFT JOIN users u
             ON u.user_id = s.screened_by
         WHERE {where_sql}
-        ORDER BY COALESCE(sr.updated_at, sr.created_at) DESC
+        AND sr.referral_rank = 1
+        ORDER BY
+            p.last_name ASC,
+            p.first_name ASC,
+            COALESCE(sr.updated_at, sr.created_at) DESC
         LIMIT 500
     """)
 
@@ -1091,8 +1190,8 @@ async def _preview_referral_list_report(
 
     response_rows = []
 
-    for row in rows:
-        llm_used = _safe_text(row.get("llm_used"), "N/A")
+    for row in rows:        
+        llm_used = _llm_display(row.get("llm_used"))
         signed_by = _safe_text(row.get("signed_by"), "Unsigned")
 
         response_rows.append({
@@ -1146,6 +1245,7 @@ async def _preview_referral_list_report(
                 "status": payload.filters.status,
                 "diagnosis": payload.filters.diagnosis,
                 "eye_side": payload.filters.eye_side,
+                "patient_query": _get_patient_search_value(payload.filters),
                 "date_from": date_start.isoformat() if date_start else None,
                 "date_to": date_end.isoformat() if date_end else None,
                 "date_label": date_label,
@@ -1173,7 +1273,6 @@ async def _preview_screening_summary_report(
 
     where_clauses = [
         "s.status = 'complete'",
-        "sr.model_used = :model_used",
     ]
 
     if payload.filters.status:
@@ -1187,6 +1286,17 @@ async def _preview_screening_summary_report(
     if payload.filters.eye_side:
         params["eye_side"] = payload.filters.eye_side
         where_clauses.append("s.eye_side = :eye_side")
+    _add_patient_search_filter(
+        params=params,
+        where_clauses=where_clauses,
+        filters=payload.filters,
+        columns=[
+            "p.patient_code",
+            "p.first_name",
+            "p.last_name",
+            "CONCAT(p.first_name, ' ', p.last_name)",
+        ],
+    )        
 
     if date_start:
         params["date_start"] = date_start
@@ -1199,6 +1309,17 @@ async def _preview_screening_summary_report(
     where_sql = " AND ".join(where_clauses)
 
     query = text(f"""
+        WITH ranked_results AS (
+            SELECT
+                sr.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY sr.screening_id, sr.model_used
+                    ORDER BY COALESCE(sr.updated_at, sr.created_at) DESC
+                ) AS result_rank
+            FROM screening_results sr
+            WHERE sr.model_used = :model_used
+            AND sr.llm_used IS NULL
+        )
         SELECT
             s.screening_id,
             s.created_at AS screening_date,
@@ -1222,12 +1343,17 @@ async def _preview_screening_summary_report(
         FROM screenings s
         JOIN patients p
             ON p.patient_id = s.patient_id
-        JOIN screening_results sr
+        JOIN ranked_results sr
             ON sr.screening_id = s.screening_id
+        AND sr.result_rank = 1
         LEFT JOIN users u
             ON u.user_id = s.screened_by
         WHERE {where_sql}
-        ORDER BY s.created_at DESC
+        ORDER BY
+        p.last_name ASC,
+        p.first_name ASC,
+        s.created_at DESC,
+        s.eye_side ASC
         LIMIT 500
     """)
 
@@ -1306,6 +1432,7 @@ async def _preview_screening_summary_report(
                 "status": payload.filters.status,
                 "diagnosis": payload.filters.diagnosis,
                 "eye_side": payload.filters.eye_side,
+                "patient_query": _get_patient_search_value(payload.filters),
                 "date_from": date_start.isoformat() if date_start else None,
                 "date_to": date_end.isoformat() if date_end else None,
                 "date_label": date_label,
@@ -1404,14 +1531,19 @@ async def _resolve_patient_for_report(
     if len(exact_matches) == 1:
         return dict(exact_matches[0])
 
-    matches = ", ".join(
-        f"{_patient_name(row.get('first_name'), row.get('last_name'))} ({_safe_text(row.get('patient_code'))})"
+    matches = [
+        {
+            "patient_id": str(row.get("patient_id")),
+            "patient_code": _safe_text(row.get("patient_code")),
+            "patient_name": _patient_name(row.get("first_name"), row.get("last_name")),
+        }
         for row in rows
-    )
+    ]
 
-    raise HTTPException(
-        status_code=400,
-        detail=f"Multiple patients matched. Please use the patient ID/code. Matches: {matches}",
+    raise HTTPException(status_code=409,
+        detail={ "needs_patient_selection": True, "report_type": "patient_clinical_summary",
+            "message": "Multiple patients matched. Please choose one patient.", "matches": matches,
+        },
     )
 
 
@@ -1473,6 +1605,48 @@ async def _preview_patient_clinical_summary_report(
         "generated_by": generated_by,
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
+
+
+@router.post("/assistant/interpret")
+async def interpret_assistant_report(
+    payload: ReportAssistantInterpretRequest,
+    current_user: User = Depends(get_current_user),
+):
+    logger.info(
+        "Report assistant LLM interpretation requested | user_id=%s",
+        getattr(current_user, "user_id", None),
+    )
+
+    try:
+        return await interpret_report_assistant_prompt(payload.prompt)
+
+    except ReportAssistantLLMDisabled as error:
+        raise HTTPException(
+            status_code=503,
+            detail=str(error),
+        ) from error
+
+    except httpx.HTTPError as error:
+        logger.exception(
+            "Report assistant LLM provider request failed | user_id=%s",
+            getattr(current_user, "user_id", None),
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Report assistant LLM provider is unavailable.",
+        ) from error
+
+    except ReportAssistantLLMError as error:
+        logger.exception(
+            "Report assistant LLM interpretation failed | user_id=%s",
+            getattr(current_user, "user_id", None),
+        )
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
 
 
 @router.post("/assistant/preview")
@@ -1567,6 +1741,18 @@ async def preview_assistant_report(
         where_clauses.append(
             "(prediction = 'glaucoma' OR ohts_tier IN ('possible', 'critical'))"
         )
+
+    _add_patient_search_filter(
+        params=params,
+        where_clauses=where_clauses,
+        filters=payload.filters,
+        columns=[
+            "patient_code",
+            "first_name",
+            "last_name",
+            "CONCAT(first_name, ' ', last_name)",
+        ],
+    )
 
     where_sql = " AND ".join(where_clauses)
 
@@ -1694,13 +1880,13 @@ async def preview_assistant_report(
                 "status": payload.filters.status,
                 "diagnosis": payload.filters.diagnosis,
                 "eye_side": payload.filters.eye_side,
+                "patient_query": _get_patient_search_value(payload.filters),
                 "date_from": date_start.isoformat() if date_start else None,
                 "date_to": date_end.isoformat() if date_end else None,
                 "date_label": date_label,
             }.items()
             if value is not None
-        },
-        "summary": summary,
+        },        "summary": summary,
         "rows": response_rows,
         "generated_by": f"{current_user.first_name} {current_user.last_name}",
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1741,7 +1927,8 @@ def _assistant_filter_labels(filters: dict) -> list[str]:
         labels.append(f"Role: {role.title()}")
 
     if days_since_last_screening:
-        labels.append(f"No follow-up within: {days_since_last_screening} days")
+        day_label = "day" if int(days_since_last_screening) == 1 else "days"
+        labels.append(f"No follow-up within: {days_since_last_screening} {day_label}")
 
     if date_label:
         labels.append(f"Date range: {date_label}")
@@ -1859,8 +2046,7 @@ def _build_assistant_tabular_payload(
             {"label": "Normal", "value": str(summary.get("normal", 0))},
             {"label": "Signed", "value": str(summary.get("signed", 0))},
             {"label": "Unsigned", "value": str(summary.get("unsigned", 0))},
-            {"label": "GPT-4o", "value": str(summary.get("gpt4o", 0))},
-            {"label": "Gemini", "value": str(summary.get("gemini", 0))},
+            {"label": "Clinical LLM", "value": "GPT-4o"},
         ]
 
     elif report_type == "user_list":
@@ -2205,11 +2391,21 @@ async def export_assistant_report_pdf_go(
             current_user=current_user,
         )
 
-    preview_data = await preview_assistant_report(
-        payload=payload,
-        db=db,
-        current_user=current_user,
-    )
+    preview_data = payload.preview_data
+
+    if preview_data:
+        preview_data = dict(preview_data)
+    else:
+        preview_data = await preview_assistant_report(
+            payload=payload,
+            db=db,
+            current_user=current_user,
+        )
+
+    preview_data["filters"] = {
+        **_filters_to_dict(payload.filters),
+        **(preview_data.get("filters") or {}),
+    }
 
     clinic_name = await _get_system_setting(
         db=db,

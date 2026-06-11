@@ -121,6 +121,17 @@ type PatientClinicalReportRequest struct {
 	FooterNote    string                      `json:"footer_note"`
 }
 
+type PatientClinicalBatchReportRequest struct {
+	ReportCode    string                         `json:"report_code"`
+	Title         string                         `json:"title"`
+	Caption       string                         `json:"caption"`
+	ClinicName    string                         `json:"clinic_name"`
+	GeneratedDate string                         `json:"generated_date"`
+	GeneratedBy   string                         `json:"generated_by"`
+	Patients      []PatientClinicalReportRequest `json:"patients"`
+	FooterNote    string                         `json:"footer_note"`
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -232,6 +243,38 @@ func patientClinicalPdfHandler(w http.ResponseWriter, r *http.Request) {
 
 	pdf := buildPatientClinicalReportPdf(request)
 	filename := safeFileName(request.ReportCode, "patient_clinical_summary") + "_go.pdf"
+
+	writePdfResponse(w, pdf, filename)
+}
+
+func patientClinicalBatchPdfHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request PatientClinicalBatchReportRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(request.Title) == "" {
+		request.Title = "Patient Clinical Summary Report"
+	}
+
+	if strings.TrimSpace(request.ReportCode) == "" {
+		request.ReportCode = "patient_clinical_summary_batch"
+	}
+
+	if len(request.Patients) == 0 {
+		http.Error(w, "At least one patient report is required", http.StatusBadRequest)
+		return
+	}
+
+	pdf := buildPatientClinicalBatchReportPdf(request)
+	filename := safeFileName(request.ReportCode, "patient_clinical_summary_batch") + "_go.pdf"
 
 	writePdfResponse(w, pdf, filename)
 }
@@ -591,18 +634,6 @@ func drawGenericTable(
 
 		drawWrappedRow(values, rowIndex%2 == 1)
 	}
-
-	minimumRows := 8
-
-	for index := len(rows); index < minimumRows; index++ {
-		ensureSpaceForRow(minRowHeight)
-
-		for _, width := range widths {
-			pdf.CellFormat(width, minRowHeight, "", "1", 0, "L", false, 0, "")
-		}
-
-		pdf.Ln(minRowHeight)
-	}
 }
 
 func splitTextForCell(pdf *gofpdf.Fpdf, value string, maxWidth float64) []string {
@@ -720,6 +751,68 @@ func buildPatientClinicalReportPdf(request PatientClinicalReportRequest) *gofpdf
 	y = drawPatientClinicalSummary(pdf, request.Summary, y+4)
 	y = drawPatientClinicalChart(pdf, request.ChartPoints, y+5)
 	drawPatientClinicalHistory(pdf, request.HistoryRows, y+6)
+
+	return pdf
+}
+
+func buildPatientClinicalBatchReportPdf(request PatientClinicalBatchReportRequest) *gofpdf.Fpdf {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(10, 10, 10)
+	pdf.SetAutoPageBreak(true, 14)
+
+	pageWidth, _ := pdf.GetPageSize()
+	leftMargin, _, rightMargin, _ := pdf.GetMargins()
+	contentWidth := pageWidth - leftMargin - rightMargin
+
+	footerNote := safeText(
+		request.FooterNote,
+		"Clinical note: This report supports glaucoma screening review only. It is not a standalone diagnostic decision.",
+	)
+
+	pdf.SetFooterFunc(func() {
+		pdf.SetY(-10)
+		pdf.SetFont("Arial", "", 8)
+		pdf.CellFormat(contentWidth*0.78, 6, footerNote, "", 0, "L", false, 0, "")
+		pdf.CellFormat(contentWidth*0.22, 6, fmt.Sprintf("Page %d", pdf.PageNo()), "", 0, "R", false, 0, "")
+	})
+
+	for _, patientRequest := range request.Patients {
+		if strings.TrimSpace(patientRequest.ReportCode) == "" {
+			patientRequest.ReportCode = "patient_clinical_summary"
+		}
+
+		if strings.TrimSpace(patientRequest.Title) == "" {
+			patientRequest.Title = safeText(request.Title, "Patient Clinical Summary Report")
+		}
+
+		if strings.TrimSpace(patientRequest.Caption) == "" {
+			patientRequest.Caption = request.Caption
+		}
+
+		if strings.TrimSpace(patientRequest.ClinicName) == "" {
+			patientRequest.ClinicName = request.ClinicName
+		}
+
+		if strings.TrimSpace(patientRequest.GeneratedDate) == "" {
+			patientRequest.GeneratedDate = request.GeneratedDate
+		}
+
+		if strings.TrimSpace(patientRequest.GeneratedBy) == "" {
+			patientRequest.GeneratedBy = request.GeneratedBy
+		}
+
+		if strings.TrimSpace(patientRequest.FooterNote) == "" {
+			patientRequest.FooterNote = footerNote
+		}
+
+		pdf.AddPage()
+		drawPatientClinicalHeader(pdf, patientRequest)
+		y := 44.0
+		y = drawPatientClinicalDetails(pdf, patientRequest.Patient, y)
+		y = drawPatientClinicalSummary(pdf, patientRequest.Summary, y+4)
+		y = drawPatientClinicalChart(pdf, patientRequest.ChartPoints, y+5)
+		drawPatientClinicalHistory(pdf, patientRequest.HistoryRows, y+6)
+	}
 
 	return pdf
 }
@@ -1173,6 +1266,7 @@ func main() {
 	mux.HandleFunc("/reports/high-risk/pdf", highRiskPdfHandler)
 	mux.HandleFunc("/reports/tabular/pdf", tabularReportPdfHandler)
 	mux.HandleFunc("/reports/patient-clinical/pdf", patientClinicalPdfHandler)
+	mux.HandleFunc("/reports/patient-clinical/batch/pdf", patientClinicalBatchPdfHandler)
 
 	reportServiceAddr := requiredEnv("REPORT_SERVICE_ADDR")
 

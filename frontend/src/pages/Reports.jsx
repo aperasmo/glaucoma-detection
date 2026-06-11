@@ -17,7 +17,7 @@ const QUICK_PROMPTS = [
   "Patient clinical summary report",
   "Longitudinal risk report by patient",
   "Active users",
-  "Doctor user list",
+  // "Doctor user list",
 ];
 
 const INITIAL_MESSAGES = [
@@ -180,8 +180,10 @@ function extractPatientQuery(rawText) {
   const text = rawText.trim();
 
   const patterns = [
-    /(?:patient clinical summary|patient clinical report|clinical summary|clinical report|patient report|longitudinal risk report|risk report|screening history)\s+(?:for|of)\s+(.+)$/i,
-    /(?:for|of)\s+([a-z][a-z\s.'-]+)$/i,
+    /(?:all\s+)?patients?\s+(?:with\s+name|named)\s+(.+)$/i,
+    /patient\s+name\s+(.+)$/i,
+    /(?:patient clinical summary|patient clinical report|clinical summary|clinical report|patient report|longitudinal report|longitudinal risk report|risk report|screening history)\s+(?:for|of)\s+(.+)$/i,
+    /(?:for|of)\s+([a-z0-9][a-z0-9\s.'-]+)$/i,
   ];
 
   for (const pattern of patterns) {
@@ -247,6 +249,7 @@ function parseReportRequest(rawText) {
     text.includes("clinical summary for") ||
     text.includes("clinical report for") ||
     text.includes("patient report for") ||
+    text.includes("longitudinal report") ||
     text.includes("longitudinal risk report") ||
     text.includes("risk report for") ||
     text.includes("screening history for");
@@ -292,15 +295,18 @@ function parseReportRequest(rawText) {
 
   const filters = {};
 
+
+  if (patientQuery && reportType !== "user_list") {
+    filters.patient_query = patientQuery;
+  }
+
   if (reportType === "patient_clinical_summary") {
-    if (!patientQuery) {
+    if (!filters.patient_query) {
       return {
         ok: false,
         message: "Please include the patient name or patient ID. Example: Patient clinical report for [patient name or patient ID].",
       };
     }
-
-    filters.patient_query = patientQuery;
   }
 
   if (reportType === "follow_up_list") {
@@ -454,6 +460,30 @@ function ChatBubble({ message }) {
         }`}
       >
         {message.text}
+      </div>
+    </div>
+  );
+}
+
+function AssistantProgress({ label }) {
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[88%] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface2)] px-3 py-2 text-sm text-[var(--color-text1)]">
+        <div className="flex items-center gap-2">
+          <span>{label}</span>
+
+          <span className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-text3)]" />
+            <span
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-text3)]"f
+              style={{ animationDelay: "150ms" }}
+            />
+            <span
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-text3)]"
+              style={{ animationDelay: "300ms" }}
+            />
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -908,7 +938,9 @@ function ReportDocumentPreview({
                 key={key}
                 className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200"
               >
-                {formatFilterLabel(key)}: {formatFilterValue(value)}
+                {formatFilterLabel(key)}: {key === "days_since_last_screening"
+                  ? `${value} ${Number(value) === 1 ? "day" : "days"}`
+                  : formatFilterValue(value)}
               </span>
             ))
           ) : (
@@ -1117,7 +1149,9 @@ function ReportHistoryPanel({ items, isLoading, error, onRefresh }) {
                                 key={`${item.reportHistoryId}-${key}`}
                                 className="rounded-full bg-[var(--color-surface2)] px-2 py-1 text-[11px] text-[var(--color-text2)] ring-1 ring-[var(--color-border)]"
                               >
-                                {formatFilterLabel(key)}: {formatFilterValue(value)}
+                                {formatFilterLabel(key)}: {key === "days_since_last_screening"
+                                  ? `${value} ${Number(value) === 1 ? "day" : "days"}`
+                                  : formatFilterValue(value)}                                
                               </span>
                             ))}
 
@@ -1172,14 +1206,131 @@ function ReportHistoryPanel({ items, isLoading, error, onRefresh }) {
   );
 }
 
+  function extractPatientQueryFromPrompt(rawText) {
+    const text = String(rawText || "").trim();
+
+    if (!text) return "";
+
+    const patterns = [
+      /(?:patients?\s+with\s+name|patients?\s+named|patient\s+name)\s+(.+)$/i,
+      /(?:patient clinical summary|patient clinical report|clinical summary|clinical report|patient report|longitudinal report|longitudinal risk report|screening history)\s+(?:for|of)\s+(.+)$/i,
+      /(?:for|of)\s+([A-Za-z0-9][A-Za-z0-9\s._-]*)$/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+
+      if (match?.[1]) {
+        return match[1]
+          .replace(/[?.!,]+$/g, "")
+          .replace(/\b(this week|this month|last week|last month|today|yesterday)\b/gi, "")
+          .trim();
+      }
+    }
+
+    return "";
+  }
+
+function normaliseAssistantIntent(rawText, data) {
+  const rawPrompt = String(rawText || "").trim();
+  const text = rawPrompt.toLowerCase();
+  const filters = { ...(data?.filters || {}) };
+
+  const patientQuery =
+    data?.patient_query ||
+    data?.patient_name ||
+    data?.patient_code ||
+    data?.patient_id ||
+    filters.patient_query ||
+    filters.patient_name ||
+    filters.patient_code ||
+    filters.patient_id ||
+    extractPatientQueryFromPrompt(rawText);
+
+  if (patientQuery) {
+    filters.patient_query = patientQuery;
+  }
+
+  delete filters.patient_name;
+  delete filters.patient_code;
+  delete filters.patient_id;
+
+  let reportType = data?.report_type || "patient_list";
+
+  const asksForPatientClinicalReport =
+    text.includes("longitudinal") ||
+    text.includes("clinical summary") ||
+    text.includes("clinical report") ||
+    text.includes("patient clinical") ||
+    text.includes("screening history");
+
+  const asksForScreeningSummary =
+    text.includes("screening summary") ||
+    text.includes("screening report");
+
+  const asksForPatientListByName =
+    text.includes("all patients") ||
+    text.includes("patients with name") ||
+    text.includes("patients named") ||
+    text.includes("patient name");
+
+  const isSimplePatientSearch =
+    /^patients?\s+[a-z0-9][a-z0-9\s.'-]*$/i.test(rawPrompt);
+
+  if (asksForPatientClinicalReport) {
+    reportType = "patient_clinical_summary";
+  } else if (asksForScreeningSummary) {
+    reportType = "screening_summary";
+  } else if (asksForPatientListByName || isSimplePatientSearch) {
+    reportType = "patient_list";
+  }
+
+  const hasEnoughInformation =
+    reportType !== "patient_clinical_summary" || Boolean(filters.patient_query);
+
+  if (data?.needs_clarification && !hasEnoughInformation) {
+    return {
+      ok: false,
+      message:
+        data?.clarification_question ||
+        "Please provide more detail so I can prepare the correct report.",
+    };
+  }
+
+  if (reportType === "patient_clinical_summary" && !filters.patient_query) {
+    return {
+      ok: false,
+      message:
+        "Please provide the patient name or patient ID for the patient clinical summary report.",
+    };
+  }
+
+  return {
+    ok: true,
+    intent: {
+      report_type: reportType,
+      filters,
+      format: "pdf",
+    },
+    llmMeta: {
+      llm_used: data?.llm_used,
+      model_used: data?.model_used,
+      duration_ms: data?.duration_ms,
+      token_usage: data?.token_usage,
+    },
+  };
+}
+
 function Reports() {
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = useState("");
+  const [isInterpreting, setIsInterpreting] = useState(false);
   const [currentIntent, setCurrentIntent] = useState(null);
   const [generatedIntent, setGeneratedIntent] = useState(null);
   const [reportRows, setReportRows] = useState([]);
   const [reportSummary, setReportSummary] = useState(null);
   const [reportTitle, setReportTitle] = useState("AI Report Assistant");
+  const [reportPreviewData, setReportPreviewData] = useState(null);
 
   const hasReport = Boolean(generatedIntent);
   const showInitialPrompts = messages.length === 1 && !currentIntent;
@@ -1196,6 +1347,8 @@ function Reports() {
   const [reportHistory, setReportHistory] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+
+  const [patientSelection, setPatientSelection] = useState(null);
 
   {/* THEME */}
   const { currentTheme, themes } = useTheme();
@@ -1222,6 +1375,32 @@ function Reports() {
       normal: reportRows.filter(row => row.diagnosis === "normal").length,
     };
   }, [generatedIntent, reportRows, reportSummary]);
+
+  async function handleSelectPatientForReport(patient) {
+    if (!patient || isGenerating) return;
+
+    setPatientSelection(null);
+
+    const intent = {
+      report_type: "patient_clinical_summary",
+      filters: {
+        patient_id: patient.patient_id,
+        patient_code: patient.patient_code,
+        patient_name: patient.patient_name,
+      },
+      format: "pdf",
+    };
+
+    setMessages(prev => [
+      ...prev,
+      {
+        role: "user",
+        text: `${patient.patient_name} (${patient.patient_code})`,
+      },
+    ]);
+
+    await generateReportPreview(intent);
+  }
 
   async function fetchReportHistory({ silent = false } = {}) {
     if (!silent) {
@@ -1252,15 +1431,54 @@ function Reports() {
     fetchReportHistory();
   }
 
-  function submitPrompt(text) {
+  async function interpretPromptWithAssistant(trimmedText) {
+    try {
+      const response = await API.post("/reports/assistant/interpret", {
+        prompt: trimmedText,
+      });
+
+      const data = response.data || {};
+
+      if (data.needs_clarification) {
+        return {
+          ok: false,
+          message:
+            data.clarification_question ||
+            "Please provide more detail so I can prepare the correct report.",
+        };
+      }
+
+      if (!data.report_type) {
+        return {
+          ok: false,
+          message: "I could not identify the report type. Please rephrase your request.",
+        };
+      }
+
+      return {
+        ok: true,
+        source: data.llm_used ? "llm" : "parser",
+        modelUsed: data.model_used || null,
+        durationMs: data.duration_ms || null,
+        intent: {
+          report_type: data.report_type,
+          filters: data.filters || {},
+          format: "pdf",
+        },
+      };
+    } catch (error) {
+      console.warn("LLM report interpretation unavailable. Falling back to rule parser.", error);
+      return parseReportRequest(trimmedText);
+    }
+  }
+
+  async function submitPrompt(text) {
     const trimmedText = text.trim();
 
     if (!trimmedText) return;
 
     setActiveView("current");
 
-    const result = parseReportRequest(trimmedText);
-    //console.log("Parsed report request:", result); 
     setMessages(prev => [
       ...prev,
       {
@@ -1268,6 +1486,23 @@ function Reports() {
         text: trimmedText,
       },
     ]);
+    setIsInterpreting(true);
+    let result;
+
+    setIsInterpreting(true);
+
+    try {
+      const response = await API.post("/reports/assistant/interpret", {
+        prompt: trimmedText,
+      });
+
+      result = normaliseAssistantIntent(trimmedText, response.data);
+    } catch (error) {
+      console.warn("LLM report interpretation failed. Falling back to rule parser.", error);
+      result = parseReportRequest(trimmedText);
+    } finally {
+      setIsInterpreting(false);
+    }
 
     if (!result.ok) {
       setCurrentIntent(null);
@@ -1280,11 +1515,12 @@ function Reports() {
       ]);
       return;
     }
-
-    setCurrentIntent(result.intent);
+    setPatientSelection(null);
+    setCurrentIntent(null);
     setGeneratedIntent(null);
     setReportRows([]);
     setReportSummary(null);
+    setReportPreviewData(null);
     setReportTitle("AI Report Assistant");
 
     setMessages(prev => [
@@ -1292,36 +1528,61 @@ function Reports() {
       {
         role: "assistant",
         text:
-          "I understood your request. Please review the report type and filters below before generating the report.",
+          result.llmMeta?.llm_used
+            ? "I used the report assistant LLM to organise your request. Please review the report type and filters below before generating the report."
+            : "I understood your request. Please review the report type and filters below before generating the report.",
       },
     ]);
+
+    await generateReportPreview(result.intent);
   }
 
   function handleSubmit(event) {
     event.preventDefault();
-    submitPrompt(inputValue);
+
+    const submittedText = inputValue;
     setInputValue("");
+
+    void submitPrompt(submittedText);
   }
 
-  async function handleGenerate() {
-  if (!currentIntent || isGenerating) return;
+async function generateReportPreview(intent) {
+  if (!intent || isGenerating) return;
 
   setIsGenerating(true);
   setReportError("");
 
   try {
-    const response = await API.post("/reports/assistant/preview", currentIntent);
+    const response = await API.post("/reports/assistant/preview", intent);
     const data = response.data;
 
-    setReportRows(data.rows || []);
-    setReportSummary(data.summary || null);
-    setPreviewPage(1);
-    setGeneratedIntent({
+    const mergedFilters = {
+      ...(intent.filters || {}),
+      ...(data.filters || {}),
+    };
+
+    const previewData = {
+      ...data,
       report_type: data.report_type,
-      filters: data.filters || currentIntent.filters,
+      title: data.title || formatReportType(intent.report_type),
+      filters: mergedFilters,
+      rows: data.rows || [],
+      summary: data.summary || null,
+    };
+
+    setReportRows(previewData.rows);
+    setReportSummary(previewData.summary);
+    setReportPreviewData(previewData);
+    setPatientSelection(null);
+    setPreviewPage(1);
+
+    setGeneratedIntent({
+      report_type: previewData.report_type,
+      filters: mergedFilters,
       format: "pdf",
     });
-    setReportTitle(data.title || formatReportType(currentIntent.report_type));
+
+    setReportTitle(previewData.title);
     setCurrentIntent(null);
     setActiveView("current");
 
@@ -1329,15 +1590,44 @@ function Reports() {
       ...prev,
       {
         role: "assistant",
-        text: `Report preview generated. ${(data.rows || []).length} record${
-          (data.rows || []).length === 1 ? "" : "s"
+        text: `Report preview generated. ${previewData.rows.length} record${
+          previewData.rows.length === 1 ? "" : "s"
         } matched the selected filters.`,
       },
     ]);
   } catch (error) {
+    const detail = error.response?.data?.detail;
+
+    if (
+      detail &&
+      typeof detail === "object" &&
+      detail.needs_patient_selection
+    ) {
+      setPatientSelection({
+        report_type: detail.report_type || "patient_clinical_summary",
+        matches: detail.matches || [],
+      });
+
+      setReportError("");
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          text:
+            detail.message ||
+            "Multiple patients matched. Please choose one patient.",
+        },
+      ]);
+
+      return;
+    }
+
     const message =
-      error.response?.data?.detail ||
-      "Unable to generate the report preview. Please try again.";
+      typeof detail === "string"
+        ? detail
+        : error.message ||
+          "Unable to generate the report preview. Please try again.";
 
     setReportError(message);
 
@@ -1352,7 +1642,13 @@ function Reports() {
     setIsGenerating(false);
   }
 }
+
+  async function handleGenerate() {
+    await generateReportPreview(currentIntent);
+  }
+
   function handleClear() {
+    setPatientSelection(null);
     setMessages(INITIAL_MESSAGES);
     setInputValue("");
     setCurrentIntent(null);
@@ -1360,10 +1656,25 @@ function Reports() {
     setReportRows([]);
     setReportSummary(null);
     setReportTitle("AI Report Assistant");
+    setReportPreviewData(null);
     setPreviewPage(1);
     setActiveView("current");
     setHistoryError("");
   }
+
+function buildPdfPayload() {
+  return {
+    ...generatedIntent,
+    preview_data: {
+      ...(reportPreviewData || {}),
+      report_type: generatedIntent.report_type,
+      title: reportTitle,
+      filters: generatedIntent.filters || {},
+      summary: reportSummary || previewSummary,
+      rows: reportRows,
+    },
+  };
+}
 
 async function handleDownload() {
   if (!hasReport || !generatedIntent || isDownloading) return;
@@ -1374,7 +1685,7 @@ async function handleDownload() {
   try {
     const response = await API.post(
       "/reports/assistant/pdf-go",
-      generatedIntent,
+      buildPdfPayload(),
       {
         responseType: "blob",
       }
@@ -1425,7 +1736,7 @@ async function handleDownload() {
     try {
       const response = await API.post(
         "/reports/assistant/pdf-go",
-        generatedIntent,
+        buildPdfPayload(),
         {
           responseType: "blob",
         }
@@ -1650,12 +1961,47 @@ async function handleDownload() {
                       message={message}
                     />
                   ))}
-                  <IntentCard
+                  {(isInterpreting || isGenerating) && (
+                    <AssistantProgress
+                      label={
+                        isInterpreting
+                          ? "Interpreting request . . ."
+                          : "Preparing report preview . . ."
+                      }
+                    />
+                  )}                  
+                  {patientSelection?.matches?.length > 0 && (
+                    <div className="mx-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm">
+                      <p className="mb-2 text-xs font-semibold text-[var(--color-text3)]">
+                        Choose patient
+                      </p>
+
+                      <div className="space-y-2">
+                        {patientSelection.matches.map(patient => (
+                          <button
+                            key={patient.patient_id}
+                            type="button"
+                            onClick={() => handleSelectPatientForReport(patient)}
+                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface2)] px-3 py-2 text-left text-xs text-[var(--color-text1)] transition-colors hover:border-accent/40 hover:bg-accent/10"
+                          >
+                            <span className="block font-semibold">
+                              {patient.patient_name}
+                            </span>
+                            <span className="text-[var(--color-text3)]">
+                              {patient.patient_code}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}                  
+                  {/* <IntentCard
                     intent={currentIntent}
                     onGenerate={handleGenerate}
                     isGenerating={isGenerating}
-                  />
+                  /> */}
                 </>
+                
               )}
             </div>
 
@@ -1666,15 +2012,16 @@ async function handleDownload() {
                     type="text"
                     value={inputValue}
                     onChange={event => setInputValue(event.target.value)}
-                    placeholder="Ask for a report"
-                    className="min-w-0 flex-1 bg-transparent text-sm text-[var(--color-text1)] placeholder:text-[var(--color-text3)] focus:outline-none"
+                    placeholder={isInterpreting ? "Organising request..." : "Ask for a report"}
+                    disabled={isInterpreting}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-[var(--color-text1)] placeholder:text-[var(--color-text3)] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none"
                   />
 
                   <button
                     type="submit"
-                    disabled={!inputValue.trim()}
+                    disabled={!inputValue.trim() || isInterpreting}
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-                      inputValue.trim()
+                      inputValue.trim() && !isInterpreting
                         ? "bg-accent text-white hover:bg-accent2"
                         : "text-[var(--color-text3)] cursor-not-allowed"
                     }`}

@@ -71,4 +71,10 @@ class Settings(BaseSettings):
 
     # --- Reports Services ---
     REPORT_SERVICE_BASE_URL: str = "http://localhost:8001"    
+        # --- Report Assistant LLM ---    
+    REPORT_ASSISTANT_LLM_ENABLED: bool = False
+    REPORT_ASSISTANT_LLM_API_URL: str | None = None
+    REPORT_ASSISTANT_LLM_API_KEY: str | None = None
+    REPORT_ASSISTANT_LLM_MODEL: str | None = None
+    REPORT_ASSISTANT_LLM_TIMEOUT_SECONDS: int = 20
 settings = Settings()
