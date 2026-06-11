@@ -45,7 +45,6 @@ from app.services.report_assistant_llm_service import (
     interpret_report_assistant_prompt,
 )
 
-
 router = APIRouter(prefix="/reports", tags=["Reports"])
 logger = get_logger(__name__)
 
@@ -98,7 +97,6 @@ class ReportAssistantPreviewRequest(BaseModel):
     filters: ReportAssistantFilters = Field(default_factory=ReportAssistantFilters)
     format: Literal["pdf"] = "pdf"
     preview_data: dict[str, Any] | None = None
-
 
 
 class ReportAssistantInterpretRequest(BaseModel):
@@ -269,6 +267,7 @@ def _patient_name(first_name: Any, last_name: Any) -> str:
     full_name = f"{_safe_text(first_name, '').strip()} {_safe_text(last_name, '').strip()}".strip()
     return full_name or "N/A"
 
+
 def _get_patient_search_value(filters: ReportAssistantFilters) -> str | None:
     value = (
         filters.patient_query
@@ -299,11 +298,11 @@ def _add_patient_search_filter(
     params["patient_query"] = f"%{patient_search.lower()}%"
 
     search_conditions = [
-        f"LOWER(COALESCE({column}::text, '')) LIKE :patient_query"
-        for column in columns
+        f"LOWER(COALESCE({column}::text, '')) LIKE :patient_query" for column in columns
     ]
 
     where_clauses.append(f"({' OR '.join(search_conditions)})")
+
 
 def _date_range_start(date_range: str | None) -> date | None:
     MONTH_LOOKUP = {
@@ -333,7 +332,6 @@ def _date_range_start(date_range: str | None) -> date | None:
         "december": 12,
     }
 
-
     def _month_bounds(year: int, month: int) -> tuple[date, date]:
         start = date(year, month, 1)
 
@@ -344,7 +342,6 @@ def _date_range_start(date_range: str | None) -> date | None:
 
         return start, end
 
-
     def _quarter_bounds(year: int, quarter: int) -> tuple[date, date]:
         start_month = ((quarter - 1) * 3) + 1
         start = date(year, start_month, 1)
@@ -354,15 +351,15 @@ def _date_range_start(date_range: str | None) -> date | None:
 
         return start, end
 
-
     def _display_date_label(start: date, end: date) -> str:
         return (
             f"{start.day} {start.strftime('%b %Y')} to "
             f"{end.day} {end.strftime('%b %Y')}"
         )
 
-
-    def _parse_month_day_range(phrase: str, default_year: int) -> tuple[date, date] | None:
+    def _parse_month_day_range(
+        phrase: str, default_year: int
+    ) -> tuple[date, date] | None:
         pattern = (
             r"(?:from|between)\s+"
             r"([a-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+"
@@ -389,8 +386,9 @@ def _date_range_start(date_range: str | None) -> date | None:
         if not start_month or not end_month:
             return None
 
-        return date(start_year, start_month, start_day), date(end_year, end_month, end_day)
-
+        return date(start_year, start_month, start_day), date(
+            end_year, end_month, end_day
+        )
 
     def _resolve_date_filter(
         filters: ReportAssistantFilters,
@@ -408,7 +406,9 @@ def _date_range_start(date_range: str | None) -> date | None:
                 )
 
             label = filters.date_label or (
-                _display_date_label(start, end) if start and end else "Custom date range"
+                _display_date_label(start, end)
+                if start and end
+                else "Custom date range"
             )
 
             return start, end, label
@@ -545,6 +545,7 @@ def _date_range_start(date_range: str | None) -> date | None:
             ),
         )
 
+
 def _display_date_label(start: date, end: date) -> str:
     return (
         f"{start.day} {start.strftime('%b %Y')} to "
@@ -567,6 +568,7 @@ def _parse_nz_date(value: str) -> date:
                 "for example 01/05/2026."
             ),
         )
+
 
 def _llm_display(value: Any) -> str:
     labels = {
@@ -811,15 +813,17 @@ async def _preview_user_list_report(
     for row in rows:
         status = "active" if bool(row.get("is_active")) else "inactive"
 
-        response_rows.append({
-            "userId": _safe_text(row.get("user_code")),
-            "name": _patient_name(row.get("first_name"), row.get("last_name")),
-            "role": _safe_text(row.get("role")).title(),
-            "email": _safe_text(row.get("email")),
-            "mobile": _safe_text(row.get("mobile_number")),
-            "status": status,
-            "createdAt": _format_date(row.get("created_at")),
-        })
+        response_rows.append(
+            {
+                "userId": _safe_text(row.get("user_code")),
+                "name": _patient_name(row.get("first_name"), row.get("last_name")),
+                "role": _safe_text(row.get("role")).title(),
+                "email": _safe_text(row.get("email")),
+                "mobile": _safe_text(row.get("mobile_number")),
+                "status": status,
+                "createdAt": _format_date(row.get("created_at")),
+            }
+        )
 
     summary = {
         "total": len(response_rows),
@@ -849,7 +853,6 @@ async def _preview_user_list_report(
         "generated_by": f"{current_user.first_name} {current_user.last_name}",
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-
 
 
 async def _preview_follow_up_list_report(
@@ -1001,29 +1004,33 @@ async def _preview_follow_up_list_report(
     for row in rows:
         referral_status = _safe_text(row.get("referral_status"), "Not generated")
 
-        response_rows.append({
-            "lastScreening": _format_date(row.get("last_screening")),
-            "patientId": _safe_text(row.get("patient_code")),
-            "name": _patient_name(row.get("first_name"), row.get("last_name")),
-            "ageGender": (
-                f"{_calculate_age(row.get('dob'))} / "
-                f"{_safe_text(row.get('gender')).title()}"
-            ),
-            "status": _patient_status_label(row.get("is_active")),
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "diagnosis": _safe_text(row.get("prediction"), "N/A"),
-            "confidence": _format_percent(row.get("confidence_score")),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "ohts": _ohts_display({
-                "ohts_tier": row.get("ohts_tier"),
-                "ohts_score": row.get("ohts_score"),
-            }),
-            "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
-            "daysElapsed": str(row.get("days_elapsed") or 0),
-            "referralStatus": referral_status,
-            "clinician": _safe_text(row.get("clinician")),
-            "followUpReason": _safe_text(row.get("follow_up_reason")),
-        })
+        response_rows.append(
+            {
+                "lastScreening": _format_date(row.get("last_screening")),
+                "patientId": _safe_text(row.get("patient_code")),
+                "name": _patient_name(row.get("first_name"), row.get("last_name")),
+                "ageGender": (
+                    f"{_calculate_age(row.get('dob'))} / "
+                    f"{_safe_text(row.get('gender')).title()}"
+                ),
+                "status": _patient_status_label(row.get("is_active")),
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "diagnosis": _safe_text(row.get("prediction"), "N/A"),
+                "confidence": _format_percent(row.get("confidence_score")),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "ohts": _ohts_display(
+                    {
+                        "ohts_tier": row.get("ohts_tier"),
+                        "ohts_score": row.get("ohts_score"),
+                    }
+                ),
+                "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
+                "daysElapsed": str(row.get("days_elapsed") or 0),
+                "referralStatus": referral_status,
+                "clinician": _safe_text(row.get("clinician")),
+                "followUpReason": _safe_text(row.get("follow_up_reason")),
+            }
+        )
 
     days_elapsed_values = []
 
@@ -1044,10 +1051,16 @@ async def _preview_follow_up_list_report(
         "glaucoma": sum(1 for row in response_rows if row["diagnosis"] == "glaucoma"),
         "possibleOhts": sum(1 for row in response_rows if "Possible" in row["ohts"]),
         "criticalOhts": sum(1 for row in response_rows if "Critical" in row["ohts"]),
-        "withReferral": sum(1 for row in response_rows if row["referralStatus"] == "Generated"),
-        "withoutReferral": sum(1 for row in response_rows if row["referralStatus"] != "Generated"),
+        "withReferral": sum(
+            1 for row in response_rows if row["referralStatus"] == "Generated"
+        ),
+        "withoutReferral": sum(
+            1 for row in response_rows if row["referralStatus"] != "Generated"
+        ),
         "averageDaysElapsed": (
-            f"{average_days_elapsed:.0f} days" if average_days_elapsed is not None else "N/A"
+            f"{average_days_elapsed:.0f} days"
+            if average_days_elapsed is not None
+            else "N/A"
         ),
         "daysThreshold": days_threshold,
     }
@@ -1068,11 +1081,13 @@ async def _preview_follow_up_list_report(
                 "date_label": date_label,
             }.items()
             if value is not None
-        },        "summary": summary,
+        },
+        "summary": summary,
         "rows": response_rows,
         "generated_by": f"{current_user.first_name} {current_user.last_name}",
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
+
 
 async def _preview_referral_list_report(
     payload: ReportAssistantPreviewRequest,
@@ -1083,7 +1098,7 @@ async def _preview_referral_list_report(
     date_label: str | None,
 ) -> dict:
     params = {
-    "clinical_llm_used": "gpt4o",
+        "clinical_llm_used": "gpt4o",
     }
     where_clauses = [
         "s.status = 'complete'",
@@ -1119,7 +1134,9 @@ async def _preview_referral_list_report(
 
     if date_end:
         params["date_end_exclusive"] = date_end + timedelta(days=1)
-        where_clauses.append("COALESCE(sr.updated_at, sr.created_at) < :date_end_exclusive")
+        where_clauses.append(
+            "COALESCE(sr.updated_at, sr.created_at) < :date_end_exclusive"
+        )
 
     where_sql = " AND ".join(where_clauses)
 
@@ -1190,39 +1207,43 @@ async def _preview_referral_list_report(
 
     response_rows = []
 
-    for row in rows:        
+    for row in rows:
         llm_used = _llm_display(row.get("llm_used"))
         signed_by = _safe_text(row.get("signed_by"), "Unsigned")
 
-        response_rows.append({
-            "referralDate": _format_date(row.get("referral_date")),
-            "screeningDate": _format_date(row.get("screening_date")),
-            "patientId": _safe_text(row.get("patient_code")),
-            "name": _patient_name(row.get("first_name"), row.get("last_name")),
-            "ageGender": (
-                f"{_calculate_age(row.get('dob'))} / "
-                f"{_safe_text(row.get('gender')).title()}"
-            ),
-            "status": _patient_status_label(row.get("is_active")),
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "model": _safe_text(row.get("model_used")),
-            "diagnosis": _safe_text(row.get("prediction"), "N/A"),
-            "confidence": _format_percent(row.get("confidence_score")),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "ohts": _ohts_display({
-                "ohts_tier": row.get("ohts_tier"),
-                "ohts_score": row.get("ohts_score"),
-            }),
-            "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
-            "llm": llm_used,
-            "generationTime": (
-                f"{_format_number(row.get('generation_time_ms'), 0)} ms"
-                if row.get("generation_time_ms") is not None
-                else "N/A"
-            ),
-            "signedBy": signed_by,
-            "clinician": _safe_text(row.get("clinician")),
-        })
+        response_rows.append(
+            {
+                "referralDate": _format_date(row.get("referral_date")),
+                "screeningDate": _format_date(row.get("screening_date")),
+                "patientId": _safe_text(row.get("patient_code")),
+                "name": _patient_name(row.get("first_name"), row.get("last_name")),
+                "ageGender": (
+                    f"{_calculate_age(row.get('dob'))} / "
+                    f"{_safe_text(row.get('gender')).title()}"
+                ),
+                "status": _patient_status_label(row.get("is_active")),
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "model": _safe_text(row.get("model_used")),
+                "diagnosis": _safe_text(row.get("prediction"), "N/A"),
+                "confidence": _format_percent(row.get("confidence_score")),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "ohts": _ohts_display(
+                    {
+                        "ohts_tier": row.get("ohts_tier"),
+                        "ohts_score": row.get("ohts_score"),
+                    }
+                ),
+                "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
+                "llm": llm_used,
+                "generationTime": (
+                    f"{_format_number(row.get('generation_time_ms'), 0)} ms"
+                    if row.get("generation_time_ms") is not None
+                    else "N/A"
+                ),
+                "signedBy": signed_by,
+                "clinician": _safe_text(row.get("clinician")),
+            }
+        )
 
     summary = {
         "total": len(response_rows),
@@ -1296,7 +1317,7 @@ async def _preview_screening_summary_report(
             "p.last_name",
             "CONCAT(p.first_name, ' ', p.last_name)",
         ],
-    )        
+    )
 
     if date_start:
         params["date_start"] = date_start
@@ -1383,35 +1404,39 @@ async def _preview_screening_summary_report(
 
         risk = _risk_label(row.get("prediction"), row.get("ohts_tier"))
 
-        response_rows.append({
-            "screeningDate": _format_date(row.get("screening_date")),
-            "lastScreening": _format_date(row.get("screening_date")),
-            "patientId": _safe_text(row.get("patient_code")),
-            "name": _patient_name(row.get("first_name"), row.get("last_name")),
-            "ageGender": (
-                f"{_calculate_age(row.get('dob'))} / "
-                f"{_safe_text(row.get('gender')).title()}"
-            ),
-            "status": _patient_status_label(row.get("is_active")),
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "diagnosis": _safe_text(row.get("prediction"), "N/A"),
-            "confidence": _format_percent(confidence_score),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "ohts": _ohts_display({
-                "ohts_tier": row.get("ohts_tier"),
-                "ohts_score": row.get("ohts_score"),
-            }),
-            "risk": risk,
-            "gradcam": _has_gradcam({
-                "gradcam_path": row.get("gradcam_path"),
-            }),
-            "clinician": _safe_text(row.get("clinician")),
-        })
+        response_rows.append(
+            {
+                "screeningDate": _format_date(row.get("screening_date")),
+                "lastScreening": _format_date(row.get("screening_date")),
+                "patientId": _safe_text(row.get("patient_code")),
+                "name": _patient_name(row.get("first_name"), row.get("last_name")),
+                "ageGender": (
+                    f"{_calculate_age(row.get('dob'))} / "
+                    f"{_safe_text(row.get('gender')).title()}"
+                ),
+                "status": _patient_status_label(row.get("is_active")),
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "diagnosis": _safe_text(row.get("prediction"), "N/A"),
+                "confidence": _format_percent(confidence_score),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "ohts": _ohts_display(
+                    {
+                        "ohts_tier": row.get("ohts_tier"),
+                        "ohts_score": row.get("ohts_score"),
+                    }
+                ),
+                "risk": risk,
+                "gradcam": _has_gradcam(
+                    {
+                        "gradcam_path": row.get("gradcam_path"),
+                    }
+                ),
+                "clinician": _safe_text(row.get("clinician")),
+            }
+        )
 
     average_confidence = (
-        sum(confidence_values) / len(confidence_values)
-        if confidence_values
-        else None
+        sum(confidence_values) / len(confidence_values) if confidence_values else None
     )
 
     summary = {
@@ -1446,17 +1471,13 @@ async def _preview_screening_summary_report(
     }
 
 
-
 async def _resolve_patient_for_report(
     filters: ReportAssistantFilters,
     db: Session,
 ) -> dict:
     patient_id = (filters.patient_id or "").strip()
     patient_query = (
-        filters.patient_query
-        or filters.patient_code
-        or filters.patient_name
-        or ""
+        filters.patient_query or filters.patient_code or filters.patient_name or ""
     ).strip()
 
     if not patient_id and not patient_query:
@@ -1540,9 +1561,13 @@ async def _resolve_patient_for_report(
         for row in rows
     ]
 
-    raise HTTPException(status_code=409,
-        detail={ "needs_patient_selection": True, "report_type": "patient_clinical_summary",
-            "message": "Multiple patients matched. Please choose one patient.", "matches": matches,
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "needs_patient_selection": True,
+            "report_type": "patient_clinical_summary",
+            "message": "Multiple patients matched. Please choose one patient.",
+            "matches": matches,
         },
     )
 
@@ -1586,7 +1611,9 @@ async def _preview_patient_clinical_summary_report(
         generated_by=generated_by,
     )
 
-    patient_name = _patient_name(patient_row.get("first_name"), patient_row.get("last_name"))
+    patient_name = _patient_name(
+        patient_row.get("first_name"), patient_row.get("last_name")
+    )
     patient_code = _safe_text(patient_row.get("patient_code"))
 
     return {
@@ -1833,30 +1860,36 @@ async def preview_assistant_report(
         status = _patient_status_label(row.get("is_active"))
         diagnosis = _safe_text(row.get("prediction"), "N/A")
 
-        response_rows.append({
-            "patientId": _safe_text(row.get("patient_code")),
-            "name": _patient_name(row.get("first_name"), row.get("last_name")),
-            "dob": _format_date(row.get("dob")),
-            "ageGender": (
-                f"{_calculate_age(row.get('dob'))} / "
-                f"{_safe_text(row.get('gender')).title()}"
-            ),
-            "status": status,
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "diagnosis": diagnosis,
-            "confidence": _format_percent(row.get("confidence_score")),
-            "ohts": _ohts_display({
-                "ohts_tier": row.get("ohts_tier"),
-                "ohts_score": row.get("ohts_score"),
-            }),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "gradcam": _has_gradcam({
-                "gradcam_path": row.get("gradcam_path"),
-            }),
-            "lastScreening": _format_date(row.get("last_screening")),
-            "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
-            "clinician": _safe_text(row.get("clinician")),
-        })
+        response_rows.append(
+            {
+                "patientId": _safe_text(row.get("patient_code")),
+                "name": _patient_name(row.get("first_name"), row.get("last_name")),
+                "dob": _format_date(row.get("dob")),
+                "ageGender": (
+                    f"{_calculate_age(row.get('dob'))} / "
+                    f"{_safe_text(row.get('gender')).title()}"
+                ),
+                "status": status,
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "diagnosis": diagnosis,
+                "confidence": _format_percent(row.get("confidence_score")),
+                "ohts": _ohts_display(
+                    {
+                        "ohts_tier": row.get("ohts_tier"),
+                        "ohts_score": row.get("ohts_score"),
+                    }
+                ),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "gradcam": _has_gradcam(
+                    {
+                        "gradcam_path": row.get("gradcam_path"),
+                    }
+                ),
+                "lastScreening": _format_date(row.get("last_screening")),
+                "risk": _risk_label(row.get("prediction"), row.get("ohts_tier")),
+                "clinician": _safe_text(row.get("clinician")),
+            }
+        )
 
     summary = {
         "total": len(response_rows),
@@ -1886,7 +1919,8 @@ async def preview_assistant_report(
                 "date_label": date_label,
             }.items()
             if value is not None
-        },        "summary": summary,
+        },
+        "summary": summary,
         "rows": response_rows,
         "generated_by": f"{current_user.first_name} {current_user.last_name}",
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1909,7 +1943,9 @@ def _assistant_filter_labels(filters: dict) -> list[str]:
     days_since_last_screening = filters.get("days_since_last_screening")
 
     if patient_name:
-        patient_label = f"{patient_name} ({patient_code})" if patient_code else patient_name
+        patient_label = (
+            f"{patient_name} ({patient_code})" if patient_code else patient_name
+        )
         labels.append(f"Patient: {patient_label}")
     elif patient_query:
         labels.append(f"Patient: {patient_query}")
@@ -1952,21 +1988,23 @@ def _build_assistant_tabular_payload(
         tabular_rows = []
 
         for row in rows:
-            tabular_rows.append({
-                "last_screening": _format_date_display(row.get("lastScreening")),
-                "patient_id": _safe_text(row.get("patientId")),
-                "patient_name": _safe_text(row.get("name")),
-                "age_gender": _safe_text(row.get("ageGender")),
-                "eye": _safe_text(row.get("eye")),
-                "prediction": _safe_text(row.get("diagnosis")).title(),
-                "confidence": _safe_text(row.get("confidence")),
-                "ohts": _safe_text(row.get("ohts")),
-                "cdr": _safe_text(row.get("cdr")),
-                "days_elapsed": _safe_text(row.get("daysElapsed")),
-                "referral_status": _safe_text(row.get("referralStatus")),
-                "clinician": _safe_text(row.get("clinician")),
-                "follow_up_reason": _safe_text(row.get("followUpReason")),
-            })
+            tabular_rows.append(
+                {
+                    "last_screening": _format_date_display(row.get("lastScreening")),
+                    "patient_id": _safe_text(row.get("patientId")),
+                    "patient_name": _safe_text(row.get("name")),
+                    "age_gender": _safe_text(row.get("ageGender")),
+                    "eye": _safe_text(row.get("eye")),
+                    "prediction": _safe_text(row.get("diagnosis")).title(),
+                    "confidence": _safe_text(row.get("confidence")),
+                    "ohts": _safe_text(row.get("ohts")),
+                    "cdr": _safe_text(row.get("cdr")),
+                    "days_elapsed": _safe_text(row.get("daysElapsed")),
+                    "referral_status": _safe_text(row.get("referralStatus")),
+                    "clinician": _safe_text(row.get("clinician")),
+                    "follow_up_reason": _safe_text(row.get("followUpReason")),
+                }
+            )
 
         columns = [
             {"key": "last_screening", "label": "Last Screening", "width": 0.10},
@@ -1996,28 +2034,36 @@ def _build_assistant_tabular_payload(
             {"label": "Possible OHTS", "value": str(summary.get("possibleOhts", 0))},
             {"label": "Critical OHTS", "value": str(summary.get("criticalOhts", 0))},
             {"label": "With referral", "value": str(summary.get("withReferral", 0))},
-            {"label": "Without referral", "value": str(summary.get("withoutReferral", 0))},
-            {"label": "Average days elapsed", "value": str(summary.get("averageDaysElapsed", "N/A"))},
+            {
+                "label": "Without referral",
+                "value": str(summary.get("withoutReferral", 0)),
+            },
+            {
+                "label": "Average days elapsed",
+                "value": str(summary.get("averageDaysElapsed", "N/A")),
+            },
         ]
 
     elif report_type == "referral_list":
         tabular_rows = []
 
         for row in rows:
-            tabular_rows.append({
-                "referral_date": _format_date_display(row.get("referralDate")),
-                "patient_id": _safe_text(row.get("patientId")),
-                "patient_name": _safe_text(row.get("name")),
-                "age_gender": _safe_text(row.get("ageGender")),
-                "eye": _safe_text(row.get("eye")),
-                "prediction": _safe_text(row.get("diagnosis")).title(),
-                "confidence": _safe_text(row.get("confidence")),
-                "cdr": _safe_text(row.get("cdr")),
-                "ohts": _safe_text(row.get("ohts")),
-                "llm": _safe_text(row.get("llm")),
-                "signed_by": _safe_text(row.get("signedBy")),
-                "clinician": _safe_text(row.get("clinician")),
-            })
+            tabular_rows.append(
+                {
+                    "referral_date": _format_date_display(row.get("referralDate")),
+                    "patient_id": _safe_text(row.get("patientId")),
+                    "patient_name": _safe_text(row.get("name")),
+                    "age_gender": _safe_text(row.get("ageGender")),
+                    "eye": _safe_text(row.get("eye")),
+                    "prediction": _safe_text(row.get("diagnosis")).title(),
+                    "confidence": _safe_text(row.get("confidence")),
+                    "cdr": _safe_text(row.get("cdr")),
+                    "ohts": _safe_text(row.get("ohts")),
+                    "llm": _safe_text(row.get("llm")),
+                    "signed_by": _safe_text(row.get("signedBy")),
+                    "clinician": _safe_text(row.get("clinician")),
+                }
+            )
 
         columns = [
             {"key": "referral_date", "label": "Referral Date", "width": 0.10},
@@ -2034,7 +2080,9 @@ def _build_assistant_tabular_payload(
             {"key": "clinician", "label": "Clinician", "width": 0.15},
         ]
 
-        caption = "Referral list report generated from validated AI Report Assistant filters."
+        caption = (
+            "Referral list report generated from validated AI Report Assistant filters."
+        )
         footer_note = (
             "Clinical note: This report lists generated referral letters for clinical review and follow-up. "
             "It does not replace professional judgement or referral pathway requirements."
@@ -2053,15 +2101,17 @@ def _build_assistant_tabular_payload(
         tabular_rows = []
 
         for row in rows:
-            tabular_rows.append({
-                "user_id": _safe_text(row.get("userId")),
-                "user_name": _safe_text(row.get("name")),
-                "role": _safe_text(row.get("role")),
-                "email": _safe_text(row.get("email")),
-                "mobile": _safe_text(row.get("mobile")),
-                "status": _safe_text(row.get("status")).title(),
-                "created_date": _format_date_display(row.get("createdAt")),
-            })
+            tabular_rows.append(
+                {
+                    "user_id": _safe_text(row.get("userId")),
+                    "user_name": _safe_text(row.get("name")),
+                    "role": _safe_text(row.get("role")),
+                    "email": _safe_text(row.get("email")),
+                    "mobile": _safe_text(row.get("mobile")),
+                    "status": _safe_text(row.get("status")).title(),
+                    "created_date": _format_date_display(row.get("createdAt")),
+                }
+            )
 
         columns = [
             {"key": "user_id", "label": "User ID", "width": 0.11},
@@ -2073,7 +2123,9 @@ def _build_assistant_tabular_payload(
             {"key": "created_date", "label": "Created Date", "width": 0.12},
         ]
 
-        caption = "User list report generated from validated AI Report Assistant filters."
+        caption = (
+            "User list report generated from validated AI Report Assistant filters."
+        )
         footer_note = (
             "System note: This report supports user account review and access monitoring only. "
             "Passwords and security hashes are never included."
@@ -2092,20 +2144,22 @@ def _build_assistant_tabular_payload(
         tabular_rows = []
 
         for row in rows:
-            tabular_rows.append({
-                "screening_date": _format_date_display(row.get("screeningDate")),
-                "patient_id": _safe_text(row.get("patientId")),
-                "patient_name": _safe_text(row.get("name")),
-                "age_gender": _safe_text(row.get("ageGender")),
-                "eye": _safe_text(row.get("eye")),
-                "prediction": _safe_text(row.get("diagnosis")).title(),
-                "confidence": _safe_text(row.get("confidence")),
-                "cdr": _safe_text(row.get("cdr")),
-                "ohts": _safe_text(row.get("ohts")),
-                "risk": _safe_text(row.get("risk")),
-                "gradcam": _safe_text(row.get("gradcam")),
-                "clinician": _safe_text(row.get("clinician")),
-            })
+            tabular_rows.append(
+                {
+                    "screening_date": _format_date_display(row.get("screeningDate")),
+                    "patient_id": _safe_text(row.get("patientId")),
+                    "patient_name": _safe_text(row.get("name")),
+                    "age_gender": _safe_text(row.get("ageGender")),
+                    "eye": _safe_text(row.get("eye")),
+                    "prediction": _safe_text(row.get("diagnosis")).title(),
+                    "confidence": _safe_text(row.get("confidence")),
+                    "cdr": _safe_text(row.get("cdr")),
+                    "ohts": _safe_text(row.get("ohts")),
+                    "risk": _safe_text(row.get("risk")),
+                    "gradcam": _safe_text(row.get("gradcam")),
+                    "clinician": _safe_text(row.get("clinician")),
+                }
+            )
 
         columns = [
             {"key": "screening_date", "label": "Screening Date", "width": 0.10},
@@ -2166,19 +2220,21 @@ def _build_assistant_tabular_payload(
             if "critical" in ohts_text:
                 critical_ohts += 1
 
-            tabular_rows.append({
-                "patient_id": _safe_text(row.get("patientId")),
-                "patient_name": _safe_text(row.get("name")),
-                "age_gender": _safe_text(row.get("ageGender")),
-                "eye": _safe_text(row.get("eye")),
-                "prediction": _safe_text(row.get("diagnosis")).title(),
-                "confidence": _safe_text(row.get("confidence")),
-                "ohts": _safe_text(row.get("ohts")),
-                "cdr": _safe_text(row.get("cdr")),
-                "screening_date": _format_date_display(row.get("lastScreening")),
-                "gradcam": _safe_text(row.get("gradcam")),
-                "clinician": _safe_text(row.get("clinician")),
-            })
+            tabular_rows.append(
+                {
+                    "patient_id": _safe_text(row.get("patientId")),
+                    "patient_name": _safe_text(row.get("name")),
+                    "age_gender": _safe_text(row.get("ageGender")),
+                    "eye": _safe_text(row.get("eye")),
+                    "prediction": _safe_text(row.get("diagnosis")).title(),
+                    "confidence": _safe_text(row.get("confidence")),
+                    "ohts": _safe_text(row.get("ohts")),
+                    "cdr": _safe_text(row.get("cdr")),
+                    "screening_date": _format_date_display(row.get("lastScreening")),
+                    "gradcam": _safe_text(row.get("gradcam")),
+                    "clinician": _safe_text(row.get("clinician")),
+                }
+            )
 
         columns = [
             {"key": "patient_id", "label": "Patient ID", "width": 0.10},
@@ -2210,7 +2266,11 @@ def _build_assistant_tabular_payload(
             {"label": "High risk cases", "value": str(len(rows))},
             {
                 "label": "Average confidence",
-                "value": f"{average_confidence:.0f}%" if average_confidence is not None else "N/A",
+                "value": (
+                    f"{average_confidence:.0f}%"
+                    if average_confidence is not None
+                    else "N/A"
+                ),
             },
             {"label": "Possible OHTS", "value": str(possible_ohts)},
             {"label": "Critical OHTS", "value": str(critical_ohts)},
@@ -2220,16 +2280,18 @@ def _build_assistant_tabular_payload(
         tabular_rows = []
 
         for row in rows:
-            tabular_rows.append({
-                "patient_id": _safe_text(row.get("patientId")),
-                "patient_name": _safe_text(row.get("name")),
-                "date_of_birth": _format_date_display(row.get("dob")),
-                "status": _safe_text(row.get("status")).title(),
-                "diagnosis": _safe_text(row.get("diagnosis")).title(),
-                "last_screening": _format_date_display(row.get("lastScreening")),
-                "risk": _safe_text(row.get("risk")),
-                "clinician": _safe_text(row.get("clinician")),
-            })
+            tabular_rows.append(
+                {
+                    "patient_id": _safe_text(row.get("patientId")),
+                    "patient_name": _safe_text(row.get("name")),
+                    "date_of_birth": _format_date_display(row.get("dob")),
+                    "status": _safe_text(row.get("status")).title(),
+                    "diagnosis": _safe_text(row.get("diagnosis")).title(),
+                    "last_screening": _format_date_display(row.get("lastScreening")),
+                    "risk": _safe_text(row.get("risk")),
+                    "clinician": _safe_text(row.get("clinician")),
+                }
+            )
 
         columns = [
             {"key": "patient_id", "label": "Patient ID", "width": 0.11},
@@ -2270,7 +2332,6 @@ def _build_assistant_tabular_payload(
         "footer_note": footer_note,
         "orientation": "L",
     }
-
 
 
 def _filters_to_dict(filters: ReportAssistantFilters) -> dict:
@@ -2356,7 +2417,9 @@ def _format_report_history_row(row: ReportHistory) -> dict:
         "reportHistoryId": str(row.report_history_id),
         "reportType": row.report_type,
         "reportTitle": row.report_title,
-        "generatedByUserId": str(row.generated_by_user_id) if row.generated_by_user_id else None,
+        "generatedByUserId": (
+            str(row.generated_by_user_id) if row.generated_by_user_id else None
+        ),
         "generatedByName": row.generated_by_name,
         "filters": filters,
         "recordCount": row.record_count,
@@ -2464,8 +2527,7 @@ async def export_assistant_report_pdf_go(
 
     except httpx.HTTPError as error:
         error_message = (
-            "Go report service tabular PDF endpoint is unavailable: "
-            f"{str(error)}"
+            "Go report service tabular PDF endpoint is unavailable: " f"{str(error)}"
         )
 
         await _save_report_history(
@@ -2495,12 +2557,8 @@ async def export_assistant_report_pdf_go(
     return StreamingResponse(
         iter([response.content]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
 
 
 def _format_datetime_display(value: Any) -> str:
@@ -2515,7 +2573,11 @@ def _format_datetime_display(value: Any) -> str:
         except ValueError:
             return _safe_text(value)
 
-    return value_datetime.strftime("%d %b %Y, %I:%M %p").replace("AM", "am").replace("PM", "pm")
+    return (
+        value_datetime.strftime("%d %b %Y, %I:%M %p")
+        .replace("AM", "am")
+        .replace("PM", "pm")
+    )
 
 
 def _format_axis_label(value: Any, same_day_only: bool) -> str:
@@ -2531,7 +2593,12 @@ def _format_axis_label(value: Any, same_day_only: bool) -> str:
             return _format_date_display(value)
 
     if same_day_only:
-        return value_datetime.strftime("%I:%M %p").lstrip("0").replace("AM", "am").replace("PM", "pm")
+        return (
+            value_datetime.strftime("%I:%M %p")
+            .lstrip("0")
+            .replace("AM", "am")
+            .replace("PM", "pm")
+        )
 
     return value_datetime.strftime("%d %b %Y")
 
@@ -2637,7 +2704,9 @@ async def _build_patient_clinical_report_payload(
 
     screening_rows = list(screenings_result.mappings().all())
 
-    patient_name = _patient_name(patient_row.get("first_name"), patient_row.get("last_name"))
+    patient_name = _patient_name(
+        patient_row.get("first_name"), patient_row.get("last_name")
+    )
     patient_code = _safe_text(patient_row.get("patient_code"))
 
     confidence_values: list[float] = []
@@ -2674,9 +2743,11 @@ async def _build_patient_clinical_report_payload(
 
     if screening_rows:
         date_keys = {
-            row.get("screening_date").date().isoformat()
-            if isinstance(row.get("screening_date"), datetime)
-            else str(row.get("screening_date")).split("T")[0].split(" ")[0]
+            (
+                row.get("screening_date").date().isoformat()
+                if isinstance(row.get("screening_date"), datetime)
+                else str(row.get("screening_date")).split("T")[0].split(" ")[0]
+            )
             for row in screening_rows
             if row.get("screening_date") is not None
         }
@@ -2698,52 +2769,81 @@ async def _build_patient_clinical_report_payload(
                 confidence_percent = None
 
         if confidence_percent is not None:
-            chart_points.append({
-                "date_time": row.get("screening_date").isoformat() if row.get("screening_date") else None,
-                "axis_label": _format_axis_label(row.get("screening_date"), same_day_only),
-                "eye": _safe_text(row.get("eye_side")).title(),
-                "result": _safe_text(row.get("prediction"), "pending"),
-                "confidence": round(confidence_percent, 1),
-            })
+            chart_points.append(
+                {
+                    "date_time": (
+                        row.get("screening_date").isoformat()
+                        if row.get("screening_date")
+                        else None
+                    ),
+                    "axis_label": _format_axis_label(
+                        row.get("screening_date"), same_day_only
+                    ),
+                    "eye": _safe_text(row.get("eye_side")).title(),
+                    "result": _safe_text(row.get("prediction"), "pending"),
+                    "confidence": round(confidence_percent, 1),
+                }
+            )
 
-        history_rows.append({
-            "screening_date": _format_datetime_display(row.get("screening_date")),
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "result": _result_label(row.get("prediction")),
-            "confidence": _format_percent(row.get("confidence_score"), 1),
-            "ohts": _ohts_display({
-                "ohts_tier": row.get("ohts_tier"),
-                "ohts_score": row.get("ohts_score"),
-            }),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "clinician": _safe_text(row.get("clinician")),
-        })
+        history_rows.append(
+            {
+                "screening_date": _format_datetime_display(row.get("screening_date")),
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "result": _result_label(row.get("prediction")),
+                "confidence": _format_percent(row.get("confidence_score"), 1),
+                "ohts": _ohts_display(
+                    {
+                        "ohts_tier": row.get("ohts_tier"),
+                        "ohts_score": row.get("ohts_score"),
+                    }
+                ),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "clinician": _safe_text(row.get("clinician")),
+            }
+        )
 
     summary_items = [
         {"label": "Total screenings", "value": str(len(screening_rows))},
         {
             "label": "Latest result",
-            "value": _result_label(latest_row.get("prediction")) if latest_row else "N/A",
+            "value": (
+                _result_label(latest_row.get("prediction")) if latest_row else "N/A"
+            ),
         },
         {
             "label": "Latest confidence",
-            "value": f"{latest_confidence:.1f}%" if latest_confidence is not None else "N/A",
+            "value": (
+                f"{latest_confidence:.1f}%" if latest_confidence is not None else "N/A"
+            ),
         },
         {
             "label": "Highest confidence",
-            "value": f"{highest_confidence:.1f}%" if highest_confidence is not None else "N/A",
+            "value": (
+                f"{highest_confidence:.1f}%"
+                if highest_confidence is not None
+                else "N/A"
+            ),
         },
         {
             "label": "Latest screening",
-            "value": _format_datetime_display(latest_row.get("screening_date")) if latest_row else "N/A",
+            "value": (
+                _format_datetime_display(latest_row.get("screening_date"))
+                if latest_row
+                else "N/A"
+            ),
         },
         {
             "label": "Eyes screened",
-            "value": ", ".join(sorted({
-                _safe_text(row.get("eye_side")).title()
-                for row in screening_rows
-                if row.get("eye_side")
-            })) or "N/A",
+            "value": ", ".join(
+                sorted(
+                    {
+                        _safe_text(row.get("eye_side")).title()
+                        for row in screening_rows
+                        if row.get("eye_side")
+                    }
+                )
+            )
+            or "N/A",
         },
     ]
 
@@ -2795,12 +2895,14 @@ async def export_patient_clinical_pdf_go(
         fallback="Clinic Name",
     )
 
-    go_payload, filename_base, record_count = await _build_patient_clinical_report_payload(
-        patient_id=patient_id,
-        db=db,
-        current_user=current_user,
-        clinic_name=clinic_name,
-        generated_by=generated_by,
+    go_payload, filename_base, record_count = (
+        await _build_patient_clinical_report_payload(
+            patient_id=patient_id,
+            db=db,
+            current_user=current_user,
+            clinic_name=clinic_name,
+            generated_by=generated_by,
+        )
     )
 
     filename = f"{filename_base}.pdf"
@@ -2866,10 +2968,9 @@ async def export_patient_clinical_pdf_go(
     return StreamingResponse(
         iter([response.content]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
 
 @router.get("/history")
 async def get_report_history(
@@ -2992,15 +3093,19 @@ def _build_high_risk_pdf(
     )
 
     header_table.hAlign = "LEFT"
-    header_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (0, 0), (0, 0), "LEFT"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
 
     story.append(header_table)
     story.append(Paragraph(_safe_text(clinic_name, "Clinic Name"), normal_style))
@@ -3019,13 +3124,11 @@ def _build_high_risk_pdf(
     average_confidence = sum(confidences) / len(confidences) if confidences else None
 
     possible_ohts = sum(
-        1 for row in rows
-        if "possible" in _safe_text(row.get("ohts_tier"), "").lower()
+        1 for row in rows if "possible" in _safe_text(row.get("ohts_tier"), "").lower()
     )
 
     critical_ohts = sum(
-        1 for row in rows
-        if "critical" in _safe_text(row.get("ohts_tier"), "").lower()
+        1 for row in rows if "critical" in _safe_text(row.get("ohts_tier"), "").lower()
     )
 
     summary_data = [
@@ -3041,49 +3144,57 @@ def _build_high_risk_pdf(
     )
 
     summary_table.hAlign = "LEFT"
-    summary_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
 
     story.append(summary_table)
     story.append(Spacer(1, 0.6 * cm))
 
-    table_rows = [[
-        "Code",
-        "Patient",
-        "Age / Gender",
-        "Eye",
-        "Prediction",
-        "Confidence",
-        "OHTS",
-        "CDR",
-        "Screening Date",
-        "Grad Cam",
-    ]]
+    table_rows = [
+        [
+            "Code",
+            "Patient",
+            "Age / Gender",
+            "Eye",
+            "Prediction",
+            "Confidence",
+            "OHTS",
+            "CDR",
+            "Screening Date",
+            "Grad Cam",
+        ]
+    ]
 
     for row in rows:
-        table_rows.append([
-            Paragraph(_safe_text(row.get("patient_code")), small_style),
-            Paragraph(_safe_text(row.get("patient_name")), small_style),
-            Paragraph(
-                f"{_calculate_age(row.get('dob'))} / {_safe_text(row.get('gender')).title()}",
-                small_style,
-            ),
-            Paragraph(_safe_text(row.get("eye_side")).title(), small_style),
-            Paragraph(_safe_text(row.get("prediction")), small_style),
-            Paragraph(_format_percent(row.get("confidence_score")), small_style),
-            Paragraph(_ohts_display(row), small_style),
-            Paragraph(_format_number(row.get("cdr"), 3), small_style),
-            Paragraph(_format_date(row.get("created_at")), small_style),
-            Paragraph(_has_gradcam(row), small_style),
-        ])
+        table_rows.append(
+            [
+                Paragraph(_safe_text(row.get("patient_code")), small_style),
+                Paragraph(_safe_text(row.get("patient_name")), small_style),
+                Paragraph(
+                    f"{_calculate_age(row.get('dob'))} / {_safe_text(row.get('gender')).title()}",
+                    small_style,
+                ),
+                Paragraph(_safe_text(row.get("eye_side")).title(), small_style),
+                Paragraph(_safe_text(row.get("prediction")), small_style),
+                Paragraph(_format_percent(row.get("confidence_score")), small_style),
+                Paragraph(_ohts_display(row), small_style),
+                Paragraph(_format_number(row.get("cdr"), 3), small_style),
+                Paragraph(_format_date(row.get("created_at")), small_style),
+                Paragraph(_has_gradcam(row), small_style),
+            ]
+        )
 
     while len(table_rows) < 9:
         table_rows.append(["", "", "", "", "", "", "", "", "", ""])
@@ -3108,17 +3219,21 @@ def _build_high_risk_pdf(
     )
 
     report_table.hAlign = "LEFT"
-    report_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 10),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    report_table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 10),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
 
     story.append(report_table)
 
@@ -3171,30 +3286,30 @@ def _build_go_high_risk_payload(
     average_confidence = sum(confidences) / len(confidences) if confidences else None
 
     possible_ohts = sum(
-        1 for row in rows
-        if "possible" in _safe_text(row.get("ohts_tier"), "").lower()
+        1 for row in rows if "possible" in _safe_text(row.get("ohts_tier"), "").lower()
     )
 
     critical_ohts = sum(
-        1 for row in rows
-        if "critical" in _safe_text(row.get("ohts_tier"), "").lower()
+        1 for row in rows if "critical" in _safe_text(row.get("ohts_tier"), "").lower()
     )
 
     go_rows = []
 
     for row in rows:
-        go_rows.append({
-            "code": _safe_text(row.get("patient_code")),
-            "patient": _safe_text(row.get("patient_name")),
-            "age_gender": f"{_calculate_age(row.get('dob'))} / {_safe_text(row.get('gender')).title()}",
-            "eye": _safe_text(row.get("eye_side")).title(),
-            "prediction": _safe_text(row.get("prediction")),
-            "confidence": _format_percent(row.get("confidence_score")),
-            "ohts": _ohts_display(row),
-            "cdr": _format_number(row.get("cdr"), 3),
-            "screening_date": _format_date(row.get("created_at")),
-            "grad_cam": _has_gradcam(row),
-        })
+        go_rows.append(
+            {
+                "code": _safe_text(row.get("patient_code")),
+                "patient": _safe_text(row.get("patient_name")),
+                "age_gender": f"{_calculate_age(row.get('dob'))} / {_safe_text(row.get('gender')).title()}",
+                "eye": _safe_text(row.get("eye_side")).title(),
+                "prediction": _safe_text(row.get("prediction")),
+                "confidence": _format_percent(row.get("confidence_score")),
+                "ohts": _ohts_display(row),
+                "cdr": _format_number(row.get("cdr"), 3),
+                "screening_date": _format_date(row.get("created_at")),
+                "grad_cam": _has_gradcam(row),
+            }
+        )
 
     return {
         "clinic_name": _safe_text(clinic_name, "Clinic Name"),
@@ -3265,9 +3380,7 @@ async def export_high_risk_pdf(
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -3380,7 +3493,5 @@ async def export_high_risk_pdf_go(
     return StreamingResponse(
         iter([response.content]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
