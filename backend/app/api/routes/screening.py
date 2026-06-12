@@ -72,6 +72,7 @@ async def upload_screening(
             run_ml_inference,
             screening_id=screening.screening_id,
             image_path=screening.image_path,
+             created_by=current_user.user_id,
         )
 
         return screening
@@ -157,7 +158,7 @@ async def get_screening(
     return screening
 
 
-async def run_ml_inference(screening_id: UUID, image_path: str):
+async def run_ml_inference(screening_id: UUID, image_path: str, created_by: Optional[UUID] = None,):
     # 1. Load the three models (EfficientNetB0, VGG16, EfficientNetV2)
     # 2. Run inference and ensemble
     # 3. Generate Grad-CAM++ heatmap
@@ -173,7 +174,7 @@ async def run_ml_inference(screening_id: UUID, image_path: str):
                 screening_id=screening_id,
                 image_path=image_path,
                 db=db,
-                created_by=None,
+                created_by=created_by,
             )
     except Exception as e:
         logger.error(f"ML inference pipeline failed for screening {screening_id}: {e}", exc_info=True)
