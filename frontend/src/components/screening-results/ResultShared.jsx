@@ -1,7 +1,7 @@
 // frontend/src/components/screening-results/ResultShared.jsx
 // Shared helpers and presentational components for Screening Result views.
 
-export const BACKEND = "http://localhost:8000";
+export const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export const MODEL_OPTIONS = [
   { key: "efficientnetb0", label: "EfficientNetB0" },

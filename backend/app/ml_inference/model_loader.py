@@ -17,7 +17,6 @@ MODELS_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__),  # ml_inference/
     "..",                        # app/
     "..",                        # backend/
-    "..",                        # glaucoma-detection/
     "models",
 ))
 
