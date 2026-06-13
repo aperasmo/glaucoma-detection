@@ -1,0 +1,34 @@
+# docker-compose.dev.yml
+# Development override - extends docker-compose.yml for local dev workflow
+#
+# Usage:
+#   Start dev environment:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db backend report-service
+#
+#   Stop dev environment:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+#
+# Frontend runs separately outside Docker:
+#   cd frontend && npm run dev
+#
+# What this override does:
+# - Mounts ./backend/app into the container for live code sync
+# - Adds --reload to uvicorn so backend restarts on every code change
+# - Frontend is excluded - run it locally with npm run dev on port 5173
+
+services:
+  backend:
+    volumes:
+      # Live code sync - mounts local app/ folder into the container
+      # Any change to backend/app/*.py is immediately visible inside the container
+      # --reload picks up the change and restarts uvicorn automatically
+      - ./backend/app:/app/app
+
+      # Keep model and uploads mounts from docker-compose.yml
+      - ./backend/models:/app/models
+      - ./uploads:/app/uploads
+
+    # Override CMD from Dockerfile - adds --reload flag
+    # --reload = uvicorn watches for file changes and restarts automatically
+    # --reload-dir = only watch app/ folder, not models or uploads
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]

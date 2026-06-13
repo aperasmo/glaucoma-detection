@@ -1,0 +1,39 @@
+# Go build cache and binaries
+# Binary is compiled fresh inside the Docker builder stage
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+report-service
+/bin/
+/tmp/
+
+# Go test and coverage
+*.test
+*.out
+coverage.html
+
+# Go module cache
+vendor/
+
+# Environment and secrets
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md

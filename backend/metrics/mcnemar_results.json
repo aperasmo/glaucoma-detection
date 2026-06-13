@@ -1,0 +1,73 @@
+{
+  "test_set_size": 415,
+  "method": "mid-p McNemar's test",
+  "threshold_method": "Youden's J per model",
+  "significance_level": 0.05,
+  "reference": "Fagerland et al. (2013). BMC Medical Research Methodology, 13(1), 91.",
+  "results": [
+    {
+      "model_a": "efficientnetb0",
+      "model_b": "vgg16",
+      "contingency": {
+        "a": 282,
+        "b": 24,
+        "c": 57,
+        "d": 52
+      },
+      "statistic": 12.642,
+      "p_value": 0.000311,
+      "interpretation": "p < 0.001 (highly significant)",
+      "conclusion": "vgg16 is significantly better",
+      "accuracy_a": 0.7373,
+      "accuracy_b": 0.8169
+    },
+    {
+      "model_a": "efficientnetb0",
+      "model_b": "efficientnetv2",
+      "contingency": {
+        "a": 284,
+        "b": 22,
+        "c": 75,
+        "d": 34
+      },
+      "statistic": 27.8763,
+      "p_value": 0.0,
+      "interpretation": "p < 0.001 (highly significant)",
+      "conclusion": "efficientnetv2 is significantly better",
+      "accuracy_a": 0.7373,
+      "accuracy_b": 0.8651
+    },
+    {
+      "model_a": "vgg16",
+      "model_b": "efficientnetv2",
+      "contingency": {
+        "a": 322,
+        "b": 17,
+        "c": 37,
+        "d": 39
+      },
+      "statistic": 6.6852,
+      "p_value": 0.008109,
+      "interpretation": "p = 0.0081 (very significant)",
+      "conclusion": "efficientnetv2 is significantly better",
+      "accuracy_a": 0.8169,
+      "accuracy_b": 0.8651
+    },
+    {
+      "model_a": "efficientnetv2",
+      "model_b": "ensemble",
+      "contingency": {
+        "a": 337,
+        "b": 22,
+        "c": 10,
+        "d": 46
+      },
+      "statistic": 3.7812,
+      "p_value": 0.042862,
+      "interpretation": "p = 0.0429 (significant)",
+      "conclusion": "efficientnetv2 is significantly better",
+      "accuracy_a": 0.8651,
+      "accuracy_b": 0.8361
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+# Virtual environment
+venv/
+backend_env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Environment and secrets
+.env
+*.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+
+# Test images and runtime data
+test_images/
+test_images/done/
+uploads/
+
+# ML model files
+# Models are volume-mounted at runtime, not baked into the image
+# Local: mounted from ./backend/models via docker-compose.yml
+# EC2: uploaded once manually, mounted from EC2 filesystem
+models/
+
+# Database
+*.db
+*.sqlite
+
+# Alembic cache
+alembic/__pycache__/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Postman
+*.postman_collection.json
+*.postman_environment.json
+
+# Docs and markdown
+*.md
+
+# Qodo
+.qodo/

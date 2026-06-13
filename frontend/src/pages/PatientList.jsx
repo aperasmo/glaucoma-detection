@@ -29,7 +29,7 @@ function ResultBadge({ prediction }) {
   const map = {
     glaucoma: { cls: "bg-neg/10 text-neg border-neg/20",   label: "Positive" },
     normal:   { cls: "bg-pos/10 text-pos border-pos/20",   label: "Negative" },
-    pending:  { cls: "bg-warn/10 text-warn border-warn/20", label: "Pending" },
+    pending:  { cls: "bg-warn/10 text-warn border-warn/20", label: "No Record" },
   };
   const c = map[prediction?.toLowerCase()] || map.pending;
   return (

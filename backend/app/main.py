@@ -42,9 +42,9 @@ async def lifespan(app: FastAPI):
     setup_logger()
     # Load all ML models into memory on server startup.
     # Models stay loaded for the lifetime of the server process.
-    logger.info("Loading ML models...")
+    logger.info("Loading ML models... Please wait...")
     load_all_models()
-    logger.info("ML models ready.")
+    logger.info("ML models are now ready.")
     start_scheduler()
     yield
     # Cleanup on shutdown if needed

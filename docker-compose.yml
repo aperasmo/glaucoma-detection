@@ -1,0 +1,103 @@
+services:
+
+  # PostgreSQL database
+  # Uses a named volume so data persists between container restarts
+  # backend service waits for this to be healthy before starting
+  db:
+    image: postgres:15-alpine
+    container_name: glaucoma_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: glaucoma_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d glaucoma_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - glaucoma_network
+    restart: unless-stopped
+
+  # FastAPI backend
+  # env_file loads backend/.env for all secrets and settings
+  # environment block overrides the two localhost references that break inside Docker
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: glaucoma_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override DATABASE_URL - replace localhost with db service name
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@db:5432/glaucoma_db
+      # Override REPORT_SERVICE_BASE_URL - replace localhost with report-service name
+      REPORT_SERVICE_BASE_URL: http://report-service:8081
+    volumes:
+      # Mount models from host filesystem - not baked into the image
+      # Local: reads from ./backend/models on your machine
+      # EC2: upload models once via scp, mount from EC2 filesystem
+      - ./backend/models:/app/models
+      # Uploads - fundus images and Grad-CAM++ heatmaps
+      # Local: stored in ./uploads/ at project root, persists across restarts
+      # EC2: change this to /mnt/ebs-uploads:/app/uploads after EBS is attached
+      - ./uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - glaucoma_network
+    restart: unless-stopped
+
+  # Go PDF report microservice
+  # REPORT_SERVICE_ADDR tells the Go service which port to listen on
+  report-service:
+    build:
+      context: ./go-services/report-service
+      dockerfile: Dockerfile
+    container_name: glaucoma_report_service
+    environment:
+      REPORT_SERVICE_ADDR: ":8081"    
+    ports:
+      - "8081:8081"
+    networks:
+      - glaucoma_network
+    restart: unless-stopped
+
+  # React frontend served by Nginx
+  # VITE_API_URL is a build-time arg - baked into the JS bundle by Vite
+  # Default is http://localhost:8000 for local Docker Compose
+  # Change VITE_API_URL in root .env before building for EC2 deployment
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: glaucoma_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - glaucoma_network
+    restart: unless-stopped
+
+# Named volume for PostgreSQL data persistence
+# Data survives container restarts
+# To wipe data completely: docker compose down -v
+volumes:
+  postgres_data:
+
+# Custom bridge network
+# All services communicate using service names as hostnames
+# db, backend, report-service, and frontend are all resolvable within this network
+networks:
+  glaucoma_network:
+    driver: bridge
