@@ -715,7 +715,7 @@ function getPreviewColumns(reportType) {
       { key: "confidence", label: "Confidence" },
       { key: "ohts", label: "OHTS" },
       { key: "cdr", label: "CDR" },
-      { key: "clinician", label: "Clinician" },
+      { key: "clinician", label: "Screened By" },
     ];
   }
 
@@ -732,7 +732,7 @@ function getPreviewColumns(reportType) {
       { key: "cdr", label: "CDR" },
       { key: "daysElapsed", label: "Days" },
       { key: "referralStatus", label: "Referral" },
-      { key: "clinician", label: "Clinician" },
+      { key: "clinician", label: "Screened By" },
       { key: "followUpReason", label: "Follow-up Reason" },
     ];
   }
@@ -750,7 +750,7 @@ function getPreviewColumns(reportType) {
       { key: "ohts", label: "OHTS" },
       { key: "llm", label: "LLM" },
       { key: "signedBy", label: "Signed By" },
-      { key: "clinician", label: "Clinician" },
+      { key: "clinician", label: "Screened By" },
     ];
   }
 
@@ -779,7 +779,7 @@ function getPreviewColumns(reportType) {
       { key: "ohts", label: "OHTS" },
       { key: "risk", label: "Risk" },
       { key: "gradcam", label: "Grad-CAM" },
-      { key: "clinician", label: "Clinician" },
+      { key: "clinician", label: "Screened By" },
     ];
   }
 
@@ -795,7 +795,7 @@ function getPreviewColumns(reportType) {
       { key: "cdr", label: "CDR" },
       { key: "lastScreening", label: "Screening Date" },
       { key: "gradcam", label: "Grad-CAM" },
-      { key: "clinician", label: "Clinician" },
+      { key: "clinician", label: "Screened By" },
     ];
   }
 
@@ -807,7 +807,7 @@ function getPreviewColumns(reportType) {
     { key: "diagnosis", label: "Diagnosis" },
     { key: "lastScreening", label: "Last Screening" },
     { key: "risk", label: "Risk" },
-    { key: "clinician", label: "Clinician" },
+    { key: "clinician", label: "Screened By" },
   ];
 }
 

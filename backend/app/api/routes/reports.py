@@ -2018,7 +2018,7 @@ def _build_assistant_tabular_payload(
             {"key": "cdr", "label": "CDR", "width": 0.05},
             {"key": "days_elapsed", "label": "Days", "width": 0.05},
             {"key": "referral_status", "label": "Referral", "width": 0.08},
-            {"key": "clinician", "label": "Clinician", "width": 0.10},
+            {"key": "clinician", "label": "Screened By", "width": 0.10},
             {"key": "follow_up_reason", "label": "Follow-up Reason", "width": 0.15},
         ]
 
@@ -2077,7 +2077,7 @@ def _build_assistant_tabular_payload(
             {"key": "ohts", "label": "OHTS", "width": 0.08},
             {"key": "llm", "label": "LLM", "width": 0.08},
             {"key": "signed_by", "label": "Signed By", "width": 0.10},
-            {"key": "clinician", "label": "Clinician", "width": 0.15},
+            {"key": "clinician", "label": "Screened By", "width": 0.15},
         ]
 
         caption = (
@@ -2173,7 +2173,7 @@ def _build_assistant_tabular_payload(
             {"key": "ohts", "label": "OHTS", "width": 0.09},
             {"key": "risk", "label": "Risk", "width": 0.06},
             {"key": "gradcam", "label": "Grad-CAM", "width": 0.07},
-            {"key": "clinician", "label": "Clinician", "width": 0.08},
+            {"key": "clinician", "label": "Screened By", "width": 0.08},
         ]
 
         caption = "Screening summary report generated from validated AI Report Assistant filters."
@@ -2247,7 +2247,7 @@ def _build_assistant_tabular_payload(
             {"key": "cdr", "label": "CDR", "width": 0.07},
             {"key": "screening_date", "label": "Screening Date", "width": 0.11},
             {"key": "gradcam", "label": "Grad-CAM", "width": 0.08},
-            {"key": "clinician", "label": "Clinician", "width": 0.14},
+            {"key": "clinician", "label": "Screened By", "width": 0.14},
         ]
 
         caption = "High-risk screening report generated from validated AI Report Assistant filters."
@@ -2301,7 +2301,7 @@ def _build_assistant_tabular_payload(
             {"key": "diagnosis", "label": "Diagnosis", "width": 0.12},
             {"key": "last_screening", "label": "Last Screening", "width": 0.13},
             {"key": "risk", "label": "Risk", "width": 0.09},
-            {"key": "clinician", "label": "Clinician", "width": 0.13},
+            {"key": "clinician", "label": "Screened By", "width": 0.13},
         ]
 
         caption = "Patient list generated from validated AI Report Assistant filters."
