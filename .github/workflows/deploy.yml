@@ -1,0 +1,38 @@
+name: Deploy GlaucomaAI
+
+# Triggers on every push to main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/glaucoma-detection
+
+            # Pull latest code from GitHub
+            git pull origin main
+
+            # Rebuild backend and frontend only
+            # db and report-service are excluded - rarely change
+            docker compose build --no-cache backend frontend
+
+            # Restart only backend and frontend
+            # --no-deps = do not restart db or report-service
+            docker compose up -d --no-deps backend frontend
+
+            # Clean up old unused images to free disk space
+            docker image prune -f
