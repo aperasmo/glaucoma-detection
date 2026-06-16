@@ -32,8 +32,8 @@ const NAV_GROUPS = [
   {
     label: "Admin",
     items: [
-      { label: "User Management",   path: "/users",          icon: "/assets/icons/user-management.svg", roles: ["admin"] },
-      { label: "Settings",          path: "/settings",       icon: "/assets/icons/settings.svg", roles: ["admin"] },
+      { label: "User Management",   path: "/users",          icon: "/assets/icons/user-management.svg", roles: ["admin", "doctor", "nurse"] },
+      { label: "Settings",          path: "/settings",       icon: "/assets/icons/settings.svg", roles: ["admin", "doctor", "nurse"] },
     ],
   },
 ];

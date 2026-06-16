@@ -9,6 +9,8 @@ import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
+
+
 const GRADIENTS = [
   "from-accent to-accent2",
   "from-pos to-emerald-700",
@@ -65,6 +67,9 @@ function Dashboard() {
   const [stats, setStats] = useState(null);
   const [recentScreenings, setRecentScreenings] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const { user:currentUser } = useAuth();
+  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
 
   useEffect(() => {
     Promise.all([
@@ -226,12 +231,14 @@ function Dashboard() {
             <span className="text-sm font-semibold text-text1">Quick Actions</span>
           </div>
           <div className="p-4 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => navigate("/patients/new")}
-              className="flex items-center justify-center gap-1.5 py-3.5 bg-accent hover:bg-accent2 text-white text-sm font-medium rounded-xl border-0 transition-colors cursor-pointer font-sans"
-            >
-              ➕ New Patient
-            </button>
+              {!isDemo && (
+                <button
+                  onClick={() => navigate("/patients/new")}
+                  className="flex items-center justify-center gap-1.5 py-3.5 bg-accent hover:bg-accent2 text-white text-sm font-medium rounded-xl border-0 transition-colors cursor-pointer font-sans"
+                >
+                  ➕ New Patient
+                </button>
+              )}
             <button
               onClick={() => navigate("/screenings/new")}
               className="flex items-center justify-center gap-1.5 py-3.5 text-text2 border border-white/12 text-sm font-medium rounded-xl bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"

@@ -13,7 +13,11 @@ import { THEME_GROUPS } from "../theme/themes";
 
 import { useSettings } from "../context/SettingsContext";
 
+import { useAuth } from "../context/AuthContext";
+
+
 const inputClass = "w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans";
+const inputDisabledClass = "w-full bg-surface3 border border-white/7 rounded-lg px-3 py-2.5 text-sm text-text3 outline-none cursor-not-allowed font-sans";
 
 function SectionDivider({ label }) {
   return (
@@ -92,6 +96,10 @@ function Settings() {
 
   const { currentTheme, setTheme, themes } = useTheme();
   const { refreshSettings } = useSettings();
+
+  const { user } = useAuth();
+  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
+
   // Form states
 const [general, setGeneral] = useState({
   CLINIC_NAME:               "",
@@ -279,13 +287,15 @@ function updateThresholds(key, value) {
       {saving && <span className="text-xs text-text3">Saving...</span>}
       {saved  && <span className="text-xs text-pos">✓ All settings saved.</span>}
       {error  && <span className="text-xs text-neg">{error}</span>}
-      <button
-        onClick={saveAll}
-        disabled={saving || !isDirty}
-        className="px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent2 disabled:bg-surface3 disabled:cursor-not-allowed rounded-lg border-0 transition-colors cursor-pointer font-sans"
-      >
-        {saving ? "Saving..." : "Save All Settings"}
-      </button>
+        {!isDemo && (
+          <button
+            onClick={saveAll}
+            disabled={saving || !isDirty}
+            className="px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent2 disabled:bg-surface3 disabled:cursor-not-allowed rounded-lg border-0 transition-colors cursor-pointer font-sans"
+          >
+            {saving ? "Saving..." : "Save All Settings"}
+          </button>
+        )}
     </div>
   );
 
@@ -357,13 +367,13 @@ function updateThresholds(key, value) {
             <SectionDivider label="Clinic Information" />
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="Clinic Name">
-                <input className={inputClass}
+                <input className={isDemo ? inputDisabledClass : inputClass}
                   value={general.CLINIC_NAME}
                   onChange={e => updateGeneral("CLINIC_NAME", e.target.value)}
                   placeholder="GlaucomaAI Clinical System" />
               </FormField>
               <FormField label="Clinic Email">
-                <input type="email" className={inputClass}
+                <input type="email" className={isDemo ? inputDisabledClass : inputClass}
                   value={general.CLINIC_EMAIL}
                   onChange={e => updateGeneral("CLINIC_EMAIL", e.target.value)}
                   placeholder="clinic@example.com" />
@@ -371,13 +381,13 @@ function updateThresholds(key, value) {
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="Clinic Phone">
-                <input className={inputClass}
+                <input className={isDemo ? inputDisabledClass : inputClass}
                   value={general.CLINIC_PHONE}
                   onChange={e => updateGeneral("CLINIC_PHONE", e.target.value)}
                   placeholder="+64 9 555 0000" />
               </FormField>
               <FormField label="Clinic Address">
-                <input className={inputClass}
+                <input className={isDemo ? inputDisabledClass : inputClass}
                   value={general.CLINIC_ADDRESS}
                   onChange={e => updateGeneral("CLINIC_ADDRESS", e.target.value)}
                   placeholder="123 Queen Street, Auckland" />
@@ -390,13 +400,13 @@ function updateThresholds(key, value) {
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="Referring Clinician Name">
-                <input className={inputClass}
+                <input className={isDemo ? inputDisabledClass : inputClass}
                   value={general.REFERRING_CLINICIAN_NAME}
                   onChange={e => updateGeneral("REFERRING_CLINICIAN_NAME", e.target.value)}
                   placeholder="Dr. Smith" />
               </FormField>
               <FormField label="Referring Clinician Title">
-                <input className={inputClass}
+                <input className={isDemo ? inputDisabledClass : inputClass}
                   value={general.REFERRING_CLINICIAN_TITLE}
                   onChange={e => updateGeneral("REFERRING_CLINICIAN_TITLE", e.target.value)}
                   placeholder="General Ophthalmologist" />
@@ -407,7 +417,7 @@ function updateThresholds(key, value) {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="High Risk Email Alert">
                 <select
-                  className={`${inputClass} cursor-pointer`}
+                  className={`${isDemo ? inputDisabledClass : inputClass} cursor-pointer`}
                   value={general.EMAIL_NOTIFICATIONS}
                   onChange={e => updateGeneral("EMAIL_NOTIFICATIONS", e.target.value)}
                 >
@@ -417,7 +427,7 @@ function updateThresholds(key, value) {
               </FormField>
               <FormField label="Alert Email">
                 <input
-                  className={inputClass}
+                  className={isDemo ? inputDisabledClass : inputClass}
                   value={general.ALERT_EMAIL}
                   onChange={e => updateGeneral("ALERT_EMAIL", e.target.value)}
                   placeholder="alerts@clinic.com"
@@ -487,7 +497,7 @@ function updateThresholds(key, value) {
                     hint="Confidence above this value triggers high risk alert."
                   >
                     <input type="number" step="0.01" min="0" max="1"
-                      className={inputClass}
+                      className={isDemo ? inputDisabledClass : inputClass}
                       value={thresholds.HIGH_RISK_THRESHOLD}
                       onChange={e => updateThresholds("HIGH_RISK_THRESHOLD", e.target.value)}
                     />
@@ -497,7 +507,7 @@ function updateThresholds(key, value) {
                     hint="Sensitivity-first threshold. 85.4% sensitivity at 0.47."
                   >
                     <input type="number" step="0.001" min="0" max="1"
-                      className={inputClass}
+                      className={isDemo ? inputDisabledClass : inputClass}
                       value={thresholds.SENSITIVITY_THRESHOLD}
                       onChange={e => updateThresholds("SENSITIVITY_THRESHOLD", e.target.value)}
                     />
@@ -520,7 +530,7 @@ function updateThresholds(key, value) {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <FormField label="Notification Email">
                 <input
-                  className={inputClass}
+                  className={isDemo ? inputDisabledClass : inputClass}
                   value={notifications.NOTIFICATION_EMAIL}
                   onChange={e => updateNotifications("NOTIFICATION_EMAIL", e.target.value)}
                   placeholder="alerts@clinic.com"
@@ -528,7 +538,7 @@ function updateThresholds(key, value) {
               </FormField>
               <FormField label="Notify on OHTS Tiers">
                 <input
-                  className={inputClass}
+                  className={isDemo ? inputDisabledClass : inputClass}
                   value={notifications.NOTIFICATION_THRESHOLD}
                   onChange={e => updateNotifications("NOTIFICATION_THRESHOLD", e.target.value)}
                   placeholder="critical,possible"
@@ -574,35 +584,41 @@ function updateThresholds(key, value) {
                     <span className="w-1.5 h-1.5 rounded-full bg-current" />
                     {badgeLabel}
                   </span>
-                  <button
-                    onClick={() => testApi(service.key)}
-                    disabled={testing}
-                    className="px-3 py-1.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    {testing ? (
-                      <>
-                        <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
-                        Testing...
-                      </>
-                    ) : "Test"}
-                  </button>
+                    {!isDemo && (
+                      <button
+                        onClick={() => testApi(service.key)}
+                        disabled={testing}
+                        className="px-3 py-1.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {testing ? (
+                          <>
+                            <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
+                            Testing...
+                          </>
+                        ) : "Test"}
+                      </button>
+                    )}
                 </div>
               );
             })}
 
             <div className="pt-4 border-t border-white/7">
-              <button
-                onClick={() => testApi(null)}
-                disabled={apiTesting["all"]}
-                className="w-full py-2.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {apiTesting["all"] ? (
-                  <>
-                    <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
-                    Testing All...
-                  </>
-                ) : "🔄 Test All Connections"}
-              </button>
+              {!isDemo && (
+                <div className="pt-4 border-t border-white/7">
+                  <button
+                    onClick={() => testApi(null)}
+                    disabled={apiTesting["all"]}
+                    className="w-full py-2.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {apiTesting["all"] ? (
+                      <>
+                        <span className="w-3 h-3 border border-text3 border-t-text2 rounded-full animate-spin" />
+                        Testing All...
+                      </>
+                    ) : "🔄 Test All Connections"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -7,6 +7,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
+import { useAuth } from "../context/AuthContext";
+
+
 
 function RoleBadge({ role }) {
   const styles = {
@@ -38,6 +41,9 @@ function UserDetail() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState(null);
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  const { user: currentUser } = useAuth();
+  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
 
   useEffect(() => {
     API.get(`/users/${userId}`)
@@ -225,35 +231,33 @@ async function handleResetPassword(e) {
                 </div>
               )}
 
-              {user?.is_active ? (
-                <button
-                  onClick={handleDeactivate}
-                  disabled={deactivating}
-                  className="w-full py-2.5 text-xs font-medium text-neg border border-neg/20 bg-neg/5 hover:bg-neg/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
-                >
-                  {deactivating ? "Deactivating..." : "⛔ Deactivate User"}
-                </button>
-                ) : (
-                <button
-                    onClick={handleReactivate}
-                    disabled={deactivating}
-                    className="w-full py-2.5 text-xs font-medium text-pos border border-pos/20 bg-pos/5 hover:bg-pos/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
-                >
-                    {deactivating ? "Reactivating..." : "✅ Reactivate User"}
-                </button>
-                )}
-                <button
-                onClick={() => { setShowResetModal(true); setResetError(null); setNewPassword(""); }}
-                className="w-full py-2.5 text-xs font-medium text-warn border border-warn/20 bg-warn/5 hover:bg-warn/10 rounded-lg transition-colors cursor-pointer font-sans"
-                >
-                🔑 Reset Password
-                </button>
-              <button
-                onClick={() => navigate("/users")}
-                className="w-full py-2.5 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
-              >
-                ← Back to User Management
-              </button>
+              {!isDemo && (
+                <>
+                  {user?.is_active ? (
+                    <button
+                      onClick={handleDeactivate}
+                      disabled={deactivating}
+                      className="w-full py-2.5 text-xs font-medium text-neg border border-neg/20 bg-neg/5 hover:bg-neg/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
+                    >
+                      {deactivating ? "Deactivating..." : "⛔ Deactivate User"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleReactivate}
+                      disabled={deactivating}
+                      className="w-full py-2.5 text-xs font-medium text-pos border border-pos/20 bg-pos/5 hover:bg-pos/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
+                    >
+                      {deactivating ? "Reactivating..." : "✅ Reactivate User"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowResetModal(true); setResetError(null); setNewPassword(""); }}
+                    className="w-full py-2.5 text-xs font-medium text-warn border border-warn/20 bg-warn/5 hover:bg-warn/10 rounded-lg transition-colors cursor-pointer font-sans"
+                  >
+                    🔑 Reset Password
+                  </button>
+                </>
+              )}
 
             </div>
           </div>

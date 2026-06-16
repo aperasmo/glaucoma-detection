@@ -10,6 +10,7 @@ import API from "../api/index";
 import { useAuth } from "../context/AuthContext";
 
 
+
 // Role badge component
 function RoleBadge({ role }) {
   const styles = {
@@ -56,6 +57,10 @@ function UserManagement() {
   const { user } = useAuth();
   const location = useLocation();
 
+  const { user: currentUser } = useAuth();
+  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
+  
+
 useEffect(() => {
   setLoading(true);
   API.get("/users/")
@@ -86,12 +91,16 @@ useEffect(() => {
 
   // Top bar actions
   const actions = (
-    <button
-      onClick={() => navigate("/users/new")}
-      className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent2 transition-colors cursor-pointer border-0"
-    >
-      + New User
-    </button>
+    <>
+      {!isDemo && ( 
+        <button
+          onClick={() => navigate("/users/new")}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent2 transition-colors cursor-pointer border-0"
+        >
+          + New User
+        </button>
+      )}
+    </>
   );
 
   return (

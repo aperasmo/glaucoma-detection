@@ -12,6 +12,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 
+import { useAuth } from "../context/AuthContext";
+
+
 const GRADIENTS = [
   "from-accent to-accent2",
   "from-pos to-emerald-700",
@@ -520,6 +523,9 @@ function PatientProfile() {
   const [error, setError] = useState(null);
   const [exportingReport, setExportingReport] = useState(false);
 
+  const { user } = useAuth();
+  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
+
   useEffect(() => {
     let isMounted = true;
 
@@ -680,13 +686,16 @@ function PatientProfile() {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-2 p-4 pt-0">
-            <button
-              onClick={() => navigate(`/patients/${patientId}/edit`)}
-              className="flex-1 py-2 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
-            >
-              Edit
-            </button>
+          
+            <div className="flex gap-2 p-4 pt-0">
+              {!isDemo && (
+                <button
+                  onClick={() => navigate(`/patients/${patientId}/edit`)}
+                  className="flex-1 py-2 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+                >
+                  Edit
+                </button>
+              )}
             <button
               onClick={() => navigate("/screenings/new", { state: { patientId } })}
               className="flex-1 py-2 text-xs font-medium text-white bg-accent hover:bg-accent2 rounded-lg border-0 transition-colors cursor-pointer font-sans"

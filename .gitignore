@@ -100,7 +100,9 @@ allan_accessKeys_aws.csv
 # .MD FILES
 # ============================================
 SESSION_CHEATSHEET.md
-
+DEPLOYMENT_GUIDE.md
+PROJECT_STRUCTURE.md
+DEPLOYMENT_DOCUMENTATION.md
 # ============================================
 # .SH FILES
 # ============================================
