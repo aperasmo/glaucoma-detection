@@ -21,18 +21,30 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # set -e = stop the script immediately if any command fails
+            # Without this, a failed "git pull" (e.g. local edits conflicting,
+            # network issue, etc.) is silently ignored and the script carries on
+            # to build and restart containers from STALE code - while GitHub
+            # Actions still reports a green checkmark, hiding the real problem.
+            # With set -e, that same failure stops the script here and the
+            # workflow run shows red immediately, so it can't go unnoticed.
+            set -e
+
             cd ~/glaucoma-detection
 
-            # Pull latest code from GitHub
+            echo "Pulling latest code from GitHub..."
             git pull origin main
 
-            # Rebuild backend and frontend only
-            # db and report-service are excluded - rarely change
+            echo "Rebuilding backend and frontend images..."
+            # db and report-service are excluded - rarely change, and
+            # rebuilding db would risk disrupting the running database
             docker compose build --no-cache backend frontend
 
-            # Restart only backend and frontend
+            echo "Restarting backend and frontend containers..."
             # --no-deps = do not restart db or report-service
             docker compose up -d --no-deps backend frontend
 
-            # Clean up old unused images to free disk space
+            echo "Cleaning up unused Docker images..."
             docker image prune -f
+
+            echo "Deploy finished successfully."
