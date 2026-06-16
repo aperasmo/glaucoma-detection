@@ -18,6 +18,15 @@
 
 services:
   backend:
+    environment:
+      # WATCHFILES_FORCE_POLLING forces uvicorn's --reload file watcher
+      # (built on the "watchfiles" library) to poll for changes on an
+      # interval instead of relying on OS-level file-change notifications.
+      # Needed because the project lives on the Windows filesystem
+      # (/mnt/d/...) but Docker runs through WSL2 - native change
+      # notifications don't reliably cross that boundary, so saves in
+      # Windows/VS Code were never reaching the watcher inside the container.
+      WATCHFILES_FORCE_POLLING: "true"
     volumes:
       # Live code sync - mounts local app/ folder into the container
       # Any change to backend/app/*.py is immediately visible inside the container

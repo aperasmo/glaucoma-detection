@@ -104,7 +104,7 @@ async def login(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive. Please activate your account first.",
+            detail="Account is inactive. Please activate your account first or contact your System Administrator.",
         )
 
     # Generate JWT token with user_id as the subject

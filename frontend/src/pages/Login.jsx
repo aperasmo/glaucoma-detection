@@ -43,11 +43,12 @@ function Login() {
 
       login(accessToken, userRes.data);
       navigate("/dashboard");
-    } catch {
-      setError("Invalid email or password. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      } catch (err) {
+        const detail = err.response?.data?.detail;
+        setError(detail || "Invalid email or password. Please try again.");
+      } finally {
+        setLoading(false);
+      }
   }
 
   return (
