@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -60,6 +61,41 @@ type ReportColumn struct {
 	Width float64 `json:"width"`
 }
 
+type ReportRow map[string]string
+
+func (row *ReportRow) UnmarshalJSON(data []byte) error {
+	var raw map[string]interface{}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	converted := make(map[string]string, len(raw))
+
+	for key, value := range raw {
+		switch typedValue := value.(type) {
+		case nil:
+			converted[key] = ""
+		case string:
+			converted[key] = typedValue
+		case bool:
+			converted[key] = fmt.Sprintf("%t", typedValue)
+		case float64:
+			converted[key] = fmt.Sprintf("%v", typedValue)
+		default:
+			encoded, err := json.Marshal(typedValue)
+			if err != nil {
+				converted[key] = fmt.Sprint(typedValue)
+			} else {
+				converted[key] = string(encoded)
+			}
+		}
+	}
+
+	*row = converted
+	return nil
+}
+
 type TabularReportRequest struct {
 	ReportCode    string              `json:"report_code"`
 	Title         string              `json:"title"`
@@ -71,7 +107,7 @@ type TabularReportRequest struct {
 	Summary       []ReportSummaryItem `json:"summary"`
 	Filters       []string            `json:"filters"`
 	Columns       []ReportColumn      `json:"columns"`
-	Rows          []map[string]string `json:"rows"`
+	Rows          []ReportRow         `json:"rows"`
 	FooterNote    string              `json:"footer_note"`
 	Orientation   string              `json:"orientation"`
 }
@@ -280,10 +316,10 @@ func patientClinicalBatchPdfHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func convertHighRiskToTabular(request HighRiskReportRequest) TabularReportRequest {
-	rows := make([]map[string]string, 0, len(request.Rows))
+	rows := make([]ReportRow, 0, len(request.Rows))
 
 	for _, row := range request.Rows {
-		rows = append(rows, map[string]string{
+		rows = append(rows, ReportRow{
 			"code":           row.Code,
 			"patient":        row.Patient,
 			"age_gender":     row.AgeGender,
@@ -405,6 +441,10 @@ func buildTabularReportPdf(request TabularReportRequest) *gofpdf.Fpdf {
 
 	tableStartY := drawSummaryAndFilters(pdf, request)
 	drawGenericTable(pdf, contentWidth, request.Columns, request.Rows, tableStartY)
+
+	if isReferralReport(request) {
+		renderReferralImageReviewSection(pdf, contentWidth, request.Rows)
+	}
 
 	return pdf
 }
@@ -539,7 +579,7 @@ func drawGenericTable(
 	pdf *gofpdf.Fpdf,
 	contentWidth float64,
 	columns []ReportColumn,
-	rows []map[string]string,
+	rows []ReportRow,
 	startY float64,
 ) {
 	leftMargin, topMargin, _, bottomMargin := pdf.GetMargins()
@@ -634,6 +674,213 @@ func drawGenericTable(
 
 		drawWrappedRow(values, rowIndex%2 == 1)
 	}
+}
+
+func isReferralReport(request TabularReportRequest) bool {
+	reportCode := strings.ToLower(strings.TrimSpace(request.ReportCode))
+	title := strings.ToLower(strings.TrimSpace(request.Title))
+
+	return strings.Contains(reportCode, "referral") || strings.Contains(title, "referral")
+}
+
+func renderReferralImageReviewSection(pdf *gofpdf.Fpdf, contentWidth float64, rows []ReportRow) {
+	if !hasReferralImages(rows) {
+		return
+	}
+
+	pdf.Ln(5)
+
+	for index, row := range rows {
+		if !hasReferralImage(row) {
+			continue
+		}
+
+		renderReferralImagePair(pdf, contentWidth, row, index)
+	}
+}
+
+func hasReferralImages(rows []ReportRow) bool {
+	for _, row := range rows {
+		if hasReferralImage(row) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasReferralImage(row ReportRow) bool {
+	return strings.TrimSpace(firstNonEmpty(
+		row,
+		"originalFundusDataUrl",
+		"original_fundus_data_url",
+		"fundusDataUrl",
+		"fundus_data_url",
+		"imageDataUrl",
+		"image_data_url",
+	)) != "" || strings.TrimSpace(firstNonEmpty(
+		row,
+		"gradcamDataUrl",
+		"gradcam_data_url",
+		"gradCamDataUrl",
+		"grad_cam_data_url",
+	)) != ""
+}
+
+func renderReferralImagePair(pdf *gofpdf.Fpdf, contentWidth float64, row ReportRow, index int) {
+	leftMargin, topMargin, _, bottomMargin := pdf.GetMargins()
+	_, pageHeight := pdf.GetPageSize()
+
+	imageGap := 8.0
+	imageWidth := (contentWidth - imageGap) / 2
+	imageHeight := 58.0
+
+	if imageWidth > 120 {
+		imageWidth = 120
+		imageGap = contentWidth - (imageWidth * 2)
+	}
+
+	requiredHeight := 88.0
+
+	if pdf.GetY()+requiredHeight > pageHeight-bottomMargin {
+		pdf.AddPage()
+		pdf.SetY(topMargin)
+	}
+
+	patientName := safeText(firstNonEmpty(row, "name", "patient", "patientName", "patient_name"), "Patient")
+	patientID := safeText(firstNonEmpty(row, "patientId", "patient_id", "code"), "N/A")
+	eye := safeText(firstNonEmpty(row, "eye", "eye_side"), "N/A")
+	screeningDate := safeText(firstNonEmpty(row, "screeningDate", "screening_date", "referralDate", "referral_date"), "N/A")
+
+	pdf.SetFont("Arial", "B", 11)
+	pdf.CellFormat(contentWidth, 6, fmt.Sprintf("Clinical Image Review - %s (%s)", patientName, patientID), "", 1, "L", false, 0, "")
+
+	pdf.SetFont("Arial", "", 9)
+	pdf.CellFormat(contentWidth, 5, fmt.Sprintf("Eye: %s    Screening date: %s", eye, screeningDate), "", 1, "L", false, 0, "")
+	pdf.Ln(2)
+
+	startY := pdf.GetY()
+	leftX := leftMargin
+	rightX := leftMargin + imageWidth + imageGap
+
+	pdf.SetFont("Arial", "B", 9)
+	pdf.SetXY(leftX, startY)
+	pdf.CellFormat(imageWidth, 5, "Original Fundus Image", "", 0, "C", false, 0, "")
+	pdf.SetXY(rightX, startY)
+	pdf.CellFormat(imageWidth, 5, "Ensemble Grad-CAM++", "", 1, "C", false, 0, "")
+
+	imageTop := startY + 6
+
+	pdf.SetDrawColor(180, 180, 180)
+	pdf.Rect(leftX, imageTop, imageWidth, imageHeight, "")
+	pdf.Rect(rightX, imageTop, imageWidth, imageHeight, "")
+	pdf.SetDrawColor(0, 0, 0)
+
+	originalDataURL := firstNonEmpty(
+		row,
+		"originalFundusDataUrl",
+		"original_fundus_data_url",
+		"fundusDataUrl",
+		"fundus_data_url",
+		"imageDataUrl",
+		"image_data_url",
+	)
+	gradcamDataURL := firstNonEmpty(
+		row,
+		"gradcamDataUrl",
+		"gradcam_data_url",
+		"gradCamDataUrl",
+		"grad_cam_data_url",
+	)
+
+	leftAlias := fmt.Sprintf("ref_original_%d", index)
+	rightAlias := fmt.Sprintf("ref_gradcam_%d", index)
+
+	if ok, _ := registerImageFromDataURL(pdf, leftAlias, originalDataURL); ok {
+		pdf.ImageOptions(leftAlias, leftX+2, imageTop+2, imageWidth-4, imageHeight-4, false, gofpdf.ImageOptions{}, 0, "")
+	} else {
+		drawImagePlaceholder(pdf, leftX, imageTop, imageWidth, imageHeight, "Image not available")
+	}
+
+	if ok, _ := registerImageFromDataURL(pdf, rightAlias, gradcamDataURL); ok {
+		pdf.ImageOptions(rightAlias, rightX+2, imageTop+2, imageWidth-4, imageHeight-4, false, gofpdf.ImageOptions{}, 0, "")
+	} else {
+		drawImagePlaceholder(pdf, rightX, imageTop, imageWidth, imageHeight, "Grad-CAM not available")
+	}
+
+	pdf.SetY(imageTop + imageHeight + 4)
+	pdf.SetFont("Arial", "I", 8)
+	pdf.MultiCell(
+		contentWidth,
+		4,
+		"Grad-CAM++ provides visual explanation support and should be interpreted alongside the screening result. It is not a standalone diagnostic output.",
+		"",
+		"L",
+		false,
+	)
+	pdf.Ln(3)
+}
+
+func registerImageFromDataURL(pdf *gofpdf.Fpdf, alias string, dataURL string) (bool, error) {
+	dataURL = strings.TrimSpace(dataURL)
+
+	if dataURL == "" {
+		return false, nil
+	}
+
+	imageType := "JPG"
+	rawBase64 := dataURL
+
+	if strings.HasPrefix(strings.ToLower(dataURL), "data:") {
+		parts := strings.SplitN(dataURL, ",", 2)
+		if len(parts) != 2 {
+			return false, fmt.Errorf("invalid image data URL")
+		}
+
+		header := strings.ToLower(parts[0])
+		rawBase64 = parts[1]
+
+		if strings.Contains(header, "image/png") {
+			imageType = "PNG"
+		} else if strings.Contains(header, "image/jpeg") || strings.Contains(header, "image/jpg") {
+			imageType = "JPG"
+		}
+	}
+
+	rawBase64 = strings.NewReplacer("\n", "", "\r", "", " ", "").Replace(rawBase64)
+
+	imageBytes, err := base64.StdEncoding.DecodeString(rawBase64)
+	if err != nil {
+		return false, err
+	}
+
+	pdf.RegisterImageOptionsReader(
+		alias,
+		gofpdf.ImageOptions{
+			ImageType: imageType,
+			ReadDpi:   true,
+		},
+		bytes.NewReader(imageBytes),
+	)
+
+	return true, nil
+}
+
+func drawImagePlaceholder(pdf *gofpdf.Fpdf, x float64, y float64, width float64, height float64, label string) {
+	pdf.SetXY(x, y+(height/2)-3)
+	pdf.SetFont("Arial", "I", 8)
+	pdf.CellFormat(width, 6, label, "", 0, "C", false, 0, "")
+}
+
+func firstNonEmpty(row ReportRow, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(row[key])
+		if value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func splitTextForCell(pdf *gofpdf.Fpdf, value string, maxWidth float64) []string {

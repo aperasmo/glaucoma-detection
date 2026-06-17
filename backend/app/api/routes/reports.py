@@ -1,5 +1,11 @@
 # backend/app/api/routes/reports.py
 
+import re
+import httpx
+import base64
+import mimetypes
+import os
+
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Any, Literal
@@ -7,8 +13,6 @@ from pathlib import Path
 from inspect import isawaitable
 from html import escape
 import json
-import re
-import httpx
 
 from pydantic import BaseModel, Field
 
@@ -101,6 +105,35 @@ class ReportAssistantPreviewRequest(BaseModel):
 
 class ReportAssistantInterpretRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000)
+
+def _file_to_data_url(file_path: str | None) -> str | None:
+    if not file_path:
+        return None
+
+    if not os.path.exists(file_path):
+        return None
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    mime_type = mime_type or "image/jpeg"
+
+    with open(file_path, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("utf-8")
+
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _base64_to_data_url(raw_b64: str | None, mime_type: str = "image/jpeg") -> str | None:
+    if not raw_b64:
+        return None
+
+    raw_b64 = raw_b64.strip()
+    if not raw_b64:
+        return None
+
+    if raw_b64.startswith("data:"):
+        return raw_b64
+
+    return f"data:{mime_type};base64,{raw_b64}"
 
 
 def _safe_text(value: Any, fallback: str = "N/A") -> str:
@@ -1164,6 +1197,8 @@ async def _preview_referral_list_report(
             p.gender,
             p.is_active,
             s.eye_side,
+            s.image_path,
+            sr.gradcam_path,
             sr.model_used,
             sr.prediction,
             sr.confidence_score,
@@ -1242,6 +1277,8 @@ async def _preview_referral_list_report(
                 ),
                 "signedBy": signed_by,
                 "clinician": _safe_text(row.get("clinician")),
+                "originalFundusDataUrl": _file_to_data_url(row.image_path),
+                "gradcamDataUrl": _base64_to_data_url(row.gradcam_path),
             }
         )
 

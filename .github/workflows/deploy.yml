@@ -44,14 +44,15 @@ jobs:
             export VITE_COMMIT_HASH=$(git rev-parse --short HEAD)
             echo "Commit hash: $VITE_COMMIT_HASH"
 
-            echo "Rebuilding backend and frontend images..."
-            # db and report-service are excluded - rarely change, and
-            # rebuilding db would risk disrupting the running database
-            docker compose build --no-cache backend frontend
+            echo "Rebuilding backend, frontend, and report-service images..."
+            # db is excluded - rebuilding it would risk disrupting the
+            # running database and its data volume, which we never want
+            # to do as part of a routine code deploy
+            docker compose build --no-cache backend frontend report-service
 
-            echo "Restarting backend and frontend containers..."
-            # --no-deps = do not restart db or report-service
-            docker compose up -d --no-deps backend frontend
+            echo "Restarting backend, frontend, and report-service containers..."
+            # --no-deps = do not restart db (data integrity - see above)
+            docker compose up -d --no-deps backend frontend report-service
 
             echo "Cleaning up unused Docker images..."
             docker image prune -f
