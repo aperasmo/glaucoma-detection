@@ -282,9 +282,9 @@ function handleRangeTypeChange(value) {
         </span>
         )}
 
-        <button className="px-3 py-1.5 text-xs font-medium text-text2 border border-border2 rounded-lg bg-transparent hover:bg-surface2 transition-colors cursor-pointer font-sans flex items-center gap-1.5">
+        {/* <button className="px-3 py-1.5 text-xs font-medium text-text2 border border-border2 rounded-lg bg-transparent hover:bg-surface2 transition-colors cursor-pointer font-sans flex items-center gap-1.5">
         📤 Export
-        </button>
+        </button> */}
     </div>
     );
   if (loading) return (

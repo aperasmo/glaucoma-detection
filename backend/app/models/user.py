@@ -8,7 +8,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, String, Text,Integer
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
@@ -60,6 +60,10 @@ class User(Base):
     # --- Account Status ---
     # is_active=False disables the account without deleting data
     is_active = Column(Boolean, default=True, nullable=False)
+
+    # Login lockout tracking
+    failed_login_attempts = Column(Integer, nullable=False, default=0)
+    is_locked = Column(Boolean, nullable=False, default=False)
 
     # --- Remarks ---
     # Free text notes about the user account
