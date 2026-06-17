@@ -733,14 +733,14 @@ func renderReferralImagePair(pdf *gofpdf.Fpdf, contentWidth float64, row ReportR
 
 	imageGap := 8.0
 	imageWidth := (contentWidth - imageGap) / 2
-	imageHeight := 58.0
+	imageHeight := 70.0
 
 	if imageWidth > 120 {
 		imageWidth = 120
 		imageGap = contentWidth - (imageWidth * 2)
 	}
 
-	requiredHeight := 88.0
+	requiredHeight := 100.0
 
 	if pdf.GetY()+requiredHeight > pageHeight-bottomMargin {
 		pdf.AddPage()
@@ -785,6 +785,7 @@ func renderReferralImagePair(pdf *gofpdf.Fpdf, contentWidth float64, row ReportR
 		"imageDataUrl",
 		"image_data_url",
 	)
+
 	gradcamDataURL := firstNonEmpty(
 		row,
 		"gradcamDataUrl",
@@ -818,6 +819,7 @@ func renderReferralImagePair(pdf *gofpdf.Fpdf, contentWidth float64, row ReportR
 		"L",
 		false,
 	)
+
 	pdf.Ln(3)
 }
 

@@ -54,6 +54,36 @@ logger = get_logger(__name__)
 
 ENSEMBLE_MODEL_USED = "ensemble"
 
+def _image_path_to_data_url(file_path: Any) -> str | None:
+    path_text = _safe_text(file_path, "").strip()
+
+    if not path_text:
+        return None
+
+    if path_text.startswith("data:"):
+        return path_text
+
+    candidates = [
+        Path(path_text),
+        Path.cwd() / path_text,
+    ]
+
+    if path_text.startswith("/"):
+        candidates.append(Path.cwd() / path_text.lstrip("/"))
+
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                mime_type, _ = mimetypes.guess_type(str(candidate))
+                mime_type = mime_type or "image/jpeg"
+
+                encoded = base64.b64encode(candidate.read_bytes()).decode("utf-8")
+                return f"data:{mime_type};base64,{encoded}"
+        except OSError:
+            continue
+
+    return None
+
 
 def _get_report_service_url(path: str) -> str:
     base_url = settings.REPORT_SERVICE_BASE_URL.strip().rstrip("/")
@@ -1132,6 +1162,7 @@ async def _preview_referral_list_report(
 ) -> dict:
     params = {
         "clinical_llm_used": "gpt4o",
+        "ensemble_model_used": ENSEMBLE_MODEL_USED,
     }
     where_clauses = [
         "s.status = 'complete'",
@@ -1190,6 +1221,8 @@ async def _preview_referral_list_report(
             sr.screening_results_id,
             COALESCE(sr.updated_at, sr.created_at) AS referral_date,
             s.created_at AS screening_date,
+            s.image_path AS original_image_path,
+            ensemble_result.gradcam_path AS ensemble_gradcam_path,
             p.patient_code,
             p.first_name,
             p.last_name,
@@ -1197,8 +1230,6 @@ async def _preview_referral_list_report(
             p.gender,
             p.is_active,
             s.eye_side,
-            s.image_path,
-            sr.gradcam_path,
             sr.model_used,
             sr.prediction,
             sr.confidence_score,
@@ -1219,6 +1250,17 @@ async def _preview_referral_list_report(
             ON p.patient_id = s.patient_id
         LEFT JOIN users u
             ON u.user_id = s.screened_by
+        LEFT JOIN LATERAL (
+            SELECT
+                esr.gradcam_path
+            FROM screening_results esr
+            WHERE esr.screening_id = s.screening_id
+                AND esr.model_used = :ensemble_model_used
+                AND esr.llm_used IS NULL
+                AND esr.gradcam_path IS NOT NULL
+            ORDER BY COALESCE(esr.updated_at, esr.created_at) DESC
+            LIMIT 1
+        ) ensemble_result ON TRUE                 
         WHERE {where_sql}
         AND sr.referral_rank = 1
         ORDER BY
@@ -1277,8 +1319,8 @@ async def _preview_referral_list_report(
                 ),
                 "signedBy": signed_by,
                 "clinician": _safe_text(row.get("clinician")),
-                "originalFundusDataUrl": _file_to_data_url(row.image_path),
-                "gradcamDataUrl": _base64_to_data_url(row.gradcam_path),
+                "originalFundusDataUrl": _image_path_to_data_url(row.get("original_image_path")),
+                "gradcamDataUrl": _image_path_to_data_url(row.get("ensemble_gradcam_path")),
             }
         )
 
@@ -2099,6 +2141,8 @@ def _build_assistant_tabular_payload(
                     "llm": _safe_text(row.get("llm")),
                     "signed_by": _safe_text(row.get("signedBy")),
                     "clinician": _safe_text(row.get("clinician")),
+                    "originalFundusDataUrl": _safe_text(row.get("originalFundusDataUrl")),
+                    "gradcamDataUrl": _safe_text(row.get("gradcamDataUrl")),
                 }
             )
 

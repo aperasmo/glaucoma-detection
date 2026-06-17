@@ -169,6 +169,34 @@ def _find_logo_path() -> Path | None:
 
     return None
 
+def _resolve_existing_image_path(file_path: Any) -> Path | None:
+    path_text = _safe_text(file_path, "").strip()
+
+    if not path_text or path_text.startswith("data:"):
+        return None
+
+    raw_path = Path(path_text)
+    candidates = [raw_path]
+
+    if raw_path.is_absolute():
+        candidates.append(Path.cwd() / path_text.lstrip("/"))
+    else:
+        candidates.extend(
+            [
+                Path.cwd() / raw_path,
+                Path.cwd() / "backend" / raw_path,
+            ]
+        )
+
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+
+    return None
+
 
 async def _get_system_setting(
     db: AsyncSession,
@@ -377,6 +405,16 @@ def _build_referral_pdf(
         spaceAfter=2,
     )
 
+    compact_section_header_style = ParagraphStyle(
+        "ReferralCompactSectionHeader",
+        parent=styles["Normal"],
+        fontSize=8.0,
+        leading=8.8,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#1f2937"),
+        spaceAfter=0,
+    )
+
     title_style = ParagraphStyle(
         "ReferralTitle",
         parent=styles["Normal"],
@@ -432,7 +470,7 @@ def _build_referral_pdf(
     story.append(Spacer(1, 0.18 * cm))
 
     patient_rows = [
-        [Paragraph("PATIENT DETAILS", section_header_style), ""],
+        [Paragraph("PATIENT DETAILS", compact_section_header_style), ""],
         ["Name:", _safe_text(screening_data.get("patient_name"))],
         ["DOB:", _format_date_display(screening_data.get("patient_dob"))],
         ["Gender:", _safe_text(screening_data.get("patient_gender")).title()],
@@ -448,16 +486,17 @@ def _build_referral_pdf(
         ("SPAN", (0, 0), (-1, 0)),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2ff")),
         ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 8.8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.6),
+        ("LEADING", (0, 1), (-1, -1), 8.2),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
 
     summary_rows = [
-        [Paragraph("AI SCREENING SUMMARY", section_header_style), ""],
+        [Paragraph("AI SCREENING SUMMARY", compact_section_header_style), ""],
         ["Result:", _prediction_label(getattr(ensemble_result, "prediction", None))],
         ["Confidence:", _format_percent(getattr(ensemble_result, "confidence_score", None))],
         [
@@ -480,12 +519,13 @@ def _build_referral_pdf(
         ("SPAN", (0, 0), (-1, 0)),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ecfdf5")),
         ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 8.8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.6),
+        ("LEADING", (0, 1), (-1, -1), 8.2),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
 
     details_table = Table(
@@ -504,6 +544,89 @@ def _build_referral_pdf(
     ]))
 
     story.append(details_table)
+    story.append(Spacer(1, 0.10 * cm))
+
+    original_image_path = _resolve_existing_image_path(screening_data.get("image_path"))
+    gradcam_image_path = _resolve_existing_image_path(
+        getattr(ensemble_result, "gradcam_path", None)
+    )
+
+    image_width = (content_width - 0.35 * cm) / 2
+    image_height = 6.2 * cm
+
+    def _image_or_placeholder(
+        image_path: Path | None,
+        placeholder_text: str,
+    ):
+        if image_path:
+            return RLImage(str(image_path), width=image_width, height=image_height)
+
+        placeholder = Table(
+            [[Paragraph(f"<i>{escape(placeholder_text)}</i>", small_style)]],
+            colWidths=[image_width],
+            rowHeights=[image_height],
+        )
+        placeholder.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f9fafb")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        return placeholder
+
+    image_review_table = Table(
+        [
+            [Paragraph("CLINICAL IMAGE REVIEW", section_header_style), ""],
+            [
+                Paragraph("<b>Original Fundus Image</b>", small_style),
+                Paragraph("<b>Ensemble Grad-CAM++</b>", small_style),
+            ],
+            [
+                _image_or_placeholder(original_image_path, "Image not available"),
+                _image_or_placeholder(gradcam_image_path, "Grad-CAM not available"),
+            ],
+            [
+                Paragraph(
+                    "Grad-CAM++ provides visual explanation support and should be "
+                    "interpreted alongside the screening result. It is not a standalone "
+                    "diagnostic output.",
+                    small_style,
+                ),
+                "",
+            ],
+        ],
+        colWidths=[image_width, image_width],
+    )
+
+    image_review_table.setStyle(
+        TableStyle(
+            [
+                ("SPAN", (0, 0), (-1, 0)),
+                ("SPAN", (0, 3), (-1, 3)),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#d1d5db")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eff6ff")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#f8fafc")),
+                ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+                ("ALIGN", (0, 1), (-1, 1), "CENTER"),
+                ("ALIGN", (0, 2), (-1, 2), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+
+    story.append(image_review_table)
     story.append(Spacer(1, 0.18 * cm))
 
     raw_referral_text = _safe_text(
