@@ -30,10 +30,10 @@ def send_high_risk_notification(
     # Called as a background task after inference completes.
     # Never blocks the main inference pipeline.
 
-    subject = f"[GlaucomaAI] High-Risk Alert - {patient_code} - {patient_name}"
+    subject = f"[Glaucoma AI] High-Risk Alert - {patient_code} - {patient_name}"
 
     text_body = f"""
-GlaucomaAI High-Risk Screening Alert
+Glaucoma AI High-Risk Screening Alert
 
 Patient: {patient_name} ({patient_code})
 Eye Screened: {eye_side.capitalize()} eye
@@ -47,13 +47,13 @@ A referral letter has been automatically generated and is available in the syste
 
 Please review and arrange specialist referral as appropriate.
 
-This is an automated alert from GlaucomaAI Screening System.
+This is an automated alert from Glaucoma AI Screening System.
     """
 
     html_body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333;">
-        <h2 style="color: #dc2626;">GlaucomaAI - High-Risk Screening Alert</h2>
+        <h2 style="color: #dc2626;">Glaucoma AI - High-Risk Screening Alert</h2>
         <table style="border-collapse: collapse; width: 100%;">
             <tr>
                 <td style="padding: 8px; border: 1px solid #ddd;"><strong>Patient</strong></td>
@@ -88,7 +88,7 @@ This is an automated alert from GlaucomaAI Screening System.
         <p><strong>Please review and arrange specialist referral as appropriate.</strong></p>
         <hr/>
         <p style="font-size:12px; color:#888;">
-            This is an automated alert from GlaucomaAI Screening System.
+            This is an automated alert from Glaucoma AI Screening System.
         </p>
     </body>
     </html>
@@ -109,3 +109,76 @@ This is an automated alert from GlaucomaAI Screening System.
             notification_email,
             message.as_string(),
         )
+
+def send_account_locked_notification(
+    user_name: str,
+    user_email: str,
+    notification_email: str,
+) -> None:
+    # Send an account lockout alert to the shared clinic email.
+    # Called when a user reaches 5 failed login attempts.
+    # Notifies the admin/clinic email, not the locked user.
+
+    from datetime import datetime
+    lockout_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    subject = "Account Locked - Glaucoma AI"
+
+    text_body = f"""
+Glaucoma AI Account Locked Alert
+
+User: {user_name}
+Email: {user_email}
+Locked at: {lockout_time}
+
+This account has been automatically deactivated after 5 consecutive failed
+login attempts. The user will need an administrator to reactivate the account
+and reset their password before they can log in again.
+
+This is an automated alert from Glaucoma AI Screening System.
+    """
+
+    html_body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333;">
+        <h2 style="color: #dc2626;">Glaucoma AI - Account Locked Alert</h2>
+        <table style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>User</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{user_name}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{user_email}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Locked at</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{lockout_time}</td>
+            </tr>
+        </table>
+        <br/>
+        <p>This account has been automatically deactivated after 5 consecutive failed login attempts.</p>
+        <p><strong>An administrator must reactivate the account and reset the password before this user can log in again.</strong></p>
+        <hr/>
+        <p style="font-size:12px; color:#888;">
+            This is an automated alert from Glaucoma AI Screening System.
+        </p>
+    </body>
+    </html>
+    """
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = settings.SMTP_SENDER
+    message["To"] = notification_email
+
+    message.attach(MIMEText(text_body, "plain"))
+    message.attach(MIMEText(html_body, "html"))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.sendmail(
+            settings.SMTP_SENDER,
+            notification_email,
+            message.as_string(),
+        )        

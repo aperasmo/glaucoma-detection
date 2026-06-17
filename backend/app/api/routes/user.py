@@ -157,6 +157,8 @@ async def activate_user(
         )
 
     user.is_active = True
+    user.is_locked = False
+    user.failed_login_attempts = 0
     user.updated_by = current_user.user_id
     user.updated_at = datetime.utcnow()
 

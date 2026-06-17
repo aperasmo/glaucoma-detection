@@ -21,6 +21,9 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.core.logger import get_logger
 
+from app.utils.settings_helper import get_setting
+from app.utils.notifications import send_account_locked_notification
+
 logger = get_logger(__name__)
 
 
@@ -87,39 +90,111 @@ async def login(
     # Accepts OAuth2 standard form data - email as username, password.
     # Returns bearer token on success.
     # Blocks inactive accounts from logging in.
+    # Tracks failed login attempts - locks account after 5 failures.
 
-    # Fetch user by email
-    user = await get_user_by_email(db, form_data.username)
+    try:
+        # Fetch user by email
+        user = await get_user_by_email(db, form_data.username)
 
-    # Reject if user not found or password is wrong
-    # Same error message for both - never reveal which one failed
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        # Reject if user not found - same generic message, never reveal which one failed
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-    # Reject inactive accounts
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive. Please activate your account first or contact your System Administrator.",
-        )
+        # Reject if account is already locked due to past failed attempts
+        if user.is_locked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "detail": "Account deactivated due to multiple failed login attempts. Contact your administrator.",
+                    "error_code": "ACCOUNT_LOCKED",
+                },
+            )
 
-    # Generate JWT token with user_id as the subject
-    access_token = create_access_token(data={"sub": str(user.user_id)})
+        # Reject inactive accounts (admin deactivated, not lockout related)
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive. Please activate your account first or contact your System Administrator.",
+            )
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "user_id": str(user.user_id),
-            "user_code": user.user_code,
-            "full_name": f"{user.first_name} {user.last_name}",
-            "role": user.role,
+        # Verify password
+        if not verify_password(form_data.password, user.hashed_password):
+            # Increment failed attempts counter
+            user.failed_login_attempts += 1
+
+            # Lock the account if 5 failed attempts reached
+            if user.failed_login_attempts >= 5:
+                user.is_locked = True
+                user.is_active = False
+                await db.commit()
+
+                logger.warning(
+                    f"Account locked due to failed login attempts: {user.email}"
+                )
+
+                # Send lockout notification email
+                notification_email = await get_setting(
+                    db, "NOTIFICATION_EMAIL",
+                    default="aiglaucomascreeningsystem@gmail.com"
+                )
+                send_account_locked_notification(
+                    user_name=f"{user.first_name} {user.last_name}",
+                    user_email=user.email,
+                    notification_email=notification_email,
+                )
+
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "detail": "Account deactivated due to multiple failed login attempts. Contact your administrator.",
+                        "error_code": "ACCOUNT_LOCKED",
+                    },
+                )
+
+            await db.commit()
+
+            attempts_remaining = 5 - user.failed_login_attempts
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "detail": "Incorrect email or password.",
+                    "attempts_remaining": attempts_remaining,
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Login successful - reset failed attempts counter
+        user.failed_login_attempts = 0
+        await db.commit()
+
+        # Generate JWT token with user_id as the subject
+        access_token = create_access_token(data={"sub": str(user.user_id)})
+
+        logger.info(f"Login successful: {user.email}")
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "user_id": str(user.user_id),
+                "user_code": user.user_code,
+                "full_name": f"{user.first_name} {user.last_name}",
+                "role": user.role,
+            }
         }
-    }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login failed unexpectedly: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed due to a server error.",
+        )
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def get_me(current_user: User = Depends(get_current_user)):

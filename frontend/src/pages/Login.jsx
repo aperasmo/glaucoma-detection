@@ -24,10 +24,15 @@ function Login() {
   ? "/assets/glaucoma-ai-logo-dark.png"
   : "/assets/glaucoma-ai-logo-light.png";
 
+  const [attemptsRemaining, setAttemptsRemaining] = useState(null);
+  const [isLocked, setIsLocked] = useState(false);
+
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setAttemptsRemaining(null);
+    setIsLocked(false);
 
     try {
       const formData = new URLSearchParams();
@@ -44,8 +49,23 @@ function Login() {
       login(accessToken, userRes.data);
       navigate("/dashboard");
       } catch (err) {
-        const detail = err.response?.data?.detail;
-        setError(detail || "Invalid email or password. Please try again.");
+        const errorData = err.response?.data?.detail;
+
+        let errorMessage = "Login failed. Please try again.";
+        let errorCode = null;
+        let remaining = null;
+
+        if (typeof errorData === "string") {
+          errorMessage = errorData;
+        } else if (typeof errorData === "object" && errorData !== null) {
+          errorMessage = errorData.detail || errorMessage;
+          errorCode = errorData.error_code || null;
+          remaining = errorData.attempts_remaining ?? null;
+        }
+
+        setError(errorMessage);
+        setAttemptsRemaining(remaining);
+        setIsLocked(errorCode === "ACCOUNT_LOCKED");
       } finally {
         setLoading(false);
       }
@@ -152,8 +172,22 @@ function Login() {
 
             {/* Error */}
             {error && (
-              <div className="mb-4 px-3 py-2.5 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg">
-                {error}
+              <div className={`mb-4 px-3 py-2.5 rounded-lg text-xs ${
+                isLocked
+                  ? "bg-neg/10 border border-neg/30 text-neg"
+                  : "bg-neg/10 border border-neg/20 text-neg"
+              }`}>
+                <div>{error}</div>
+                {attemptsRemaining !== null && (
+                  <div className="mt-1 text-warn">
+                    {attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} remaining before account lockout.
+                  </div>
+                )}
+                {isLocked && (
+                  <div className="mt-1.5 text-text2">
+                    Please contact your system administrator to reactivate your account.
+                  </div>
+                )}
               </div>
             )}
 
