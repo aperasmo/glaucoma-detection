@@ -93,7 +93,9 @@ function Layout({ title, actions, children }) {
           <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
             Screening System
           </div>
-        
+          <div className="text-[11px] text-sbText3 font-mono mt-1 text-center opacity-80">
+            v.{__APP_VERSION__}
+          </div>        
         </div>
       </div>
 
