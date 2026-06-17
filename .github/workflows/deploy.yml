@@ -35,6 +35,15 @@ jobs:
             echo "Pulling latest code from GitHub..."
             git pull origin main
 
+            echo "Capturing commit hash for frontend build..."
+            # Computed HERE, on EC2's real git checkout, where .git and the
+            # git binary both genuinely exist - never inside the Docker
+            # build context. Exported so docker-compose.yml's
+            # ${VITE_COMMIT_HASH:-dev} substitution picks up this value
+            # instead of falling back to "dev" in production.
+            export VITE_COMMIT_HASH=$(git rev-parse --short HEAD)
+            echo "Commit hash: $VITE_COMMIT_HASH"
+
             echo "Rebuilding backend and frontend images..."
             # db and report-service are excluded - rarely change, and
             # rebuilding db would risk disrupting the running database

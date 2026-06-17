@@ -88,6 +88,11 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        # VITE_COMMIT_HASH must be EXPORTED in the shell before "docker
+        # compose build" runs - it is computed on EC2 from the real .git
+        # checkout in the deploy script, not something this file can derive
+        # itself. Default "dev" matches local behaviour when unset.
+        VITE_COMMIT_HASH: ${VITE_COMMIT_HASH:-dev}
     container_name: glaucoma_frontend
     ports:
       # FRONTEND_HOST_PORT lets each environment expose this on a different

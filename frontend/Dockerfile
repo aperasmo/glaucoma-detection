@@ -20,6 +20,14 @@ COPY . .
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
+# VITE_COMMIT_HASH is computed on the host where .git actually exists
+# (the EC2 deploy script, or your local machine) and passed in here.
+# vite.config.js cannot reliably compute this itself inside the build:
+# node:24-alpine has no git binary installed, and this build context
+# (./frontend) does not include the repo's .git folder one level up.
+ARG VITE_COMMIT_HASH
+ENV VITE_COMMIT_HASH=$VITE_COMMIT_HASH
+
 # Build the production bundle into dist/
 RUN npm run build
 
