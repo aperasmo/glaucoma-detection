@@ -288,7 +288,8 @@ function PendingPlaceholder() {
       <div className="p-5">
         <div className="bg-surface2 border border-white/7 rounded-xl p-6 text-center">
           <div className="text-sm font-semibold text-text1">
-            Segmentation pending
+            Approximate CDR unavailable <br />
+            The optic disc/cup approximation could not produce a reliable value for this screening.
           </div>
 
           <p className="text-xs text-text3 mt-2 max-w-xl mx-auto">

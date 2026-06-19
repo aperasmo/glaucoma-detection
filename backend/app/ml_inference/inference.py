@@ -316,20 +316,49 @@ async def run_inference_pipeline(
             averaged_heatmap = np.mean(resized_heatmaps, axis=0)
 
             # Extract CDR using averaged heatmap and original fundus image
+            logger.info(
+                "CDR extraction started | screening_id=%s | image_path=%s | ensemble_gradcam_path=%s | heatmap_shape=%s",
+                screening_id,
+                image_path,
+                ensemble_gradcam_path,
+                getattr(averaged_heatmap, "shape", None),
+            )
+
             segmentation_result = extract_cdr_classical(
                 fundus_image_path=image_path,
                 heatmap=averaged_heatmap,
             )
 
+            logger.info(
+                "CDR extraction completed | screening_id=%s | result=%s",
+                screening_id,
+                segmentation_result,
+            )
+
             # Update ensemble result record with CDR values
-            if ensemble_record and segmentation_result["cdr"] is not None:
+            if not ensemble_record:
+                logger.warning(
+                    "CDR not saved because ensemble record was not found | screening_id=%s",
+                    screening_id,
+                )
+            elif segmentation_result.get("cdr") is None:
+                logger.warning(
+                    "CDR not saved because extraction returned no valid CDR | screening_id=%s | result=%s",
+                    screening_id,
+                    segmentation_result,
+                )
+            else:
                 ensemble_record.cdr = segmentation_result["cdr"]
                 ensemble_record.disc_radius = segmentation_result["disc_radius"]
                 ensemble_record.cup_radius = segmentation_result["cup_radius"]
+
                 logger.info(
-                    f"CDR saved: {segmentation_result['cdr']} "
-                    f"disc={segmentation_result['disc_radius']} "
-                    f"cup={segmentation_result['cup_radius']}"
+                    "CDR values assigned to ensemble result = screening_id=%s | result_id=%s | cdr=%s | disc_radius=%s | cup_radius=%s",
+                    screening_id,
+                    getattr(ensemble_record, "screening_results_id", None),
+                    ensemble_record.cdr,
+                    ensemble_record.disc_radius,
+                    ensemble_record.cup_radius,
                 )
 
 
@@ -452,6 +481,14 @@ async def run_inference_pipeline(
         screening.status = "complete"
         screening.updated_at = datetime.utcnow()
         await db.commit()
+
+        logger.info(
+            "Inference transaction committed | screening_id=%s | ensemble_cdr=%s | ensemble_disc_radius=%s | ensemble_cup_radius=%s",
+            screening_id,
+            getattr(ensemble_record, "cdr", None) if "ensemble_record" in locals() else None,
+            getattr(ensemble_record, "disc_radius", None) if "ensemble_record" in locals() else None,
+            getattr(ensemble_record, "cup_radius", None) if "ensemble_record" in locals() else None,
+        )
 
         logger.info(
             f"Screening {screening_id} complete. "

@@ -43,7 +43,7 @@ function UserDetail() {
   const [resetSuccess, setResetSuccess] = useState(false);
 
   const { user: currentUser } = useAuth();
-  const isDemo = user?.full_name?.toLowerCase().endsWith(" user");
+  const isDemo = currentUser?.full_name?.toLowerCase().endsWith(" user");
 
   useEffect(() => {
     API.get(`/users/${userId}`)
@@ -217,51 +217,47 @@ async function handleResetPassword(e) {
               ))}
             </div>
           </div>
-
-          {/* Admin Actions */}
-          <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-white/7">
-              <span className="text-sm font-semibold text-text1">Admin Actions</span>
-            </div>
-            <div className="p-5 flex flex-col gap-3">
-
-              {actionError && (
-                <div className="px-3 py-2.5 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg">
-                  {actionError}
-                </div>
-              )}
-
               {!isDemo && (
                 <>
-                  {user?.is_active ? (
-                    <button
-                      onClick={handleDeactivate}
-                      disabled={deactivating}
-                      className="w-full py-2.5 text-xs font-medium text-neg border border-neg/20 bg-neg/5 hover:bg-neg/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
-                    >
-                      {deactivating ? "Deactivating..." : "⛔ Deactivate User"}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleReactivate}
-                      disabled={deactivating}
-                      className="w-full py-2.5 text-xs font-medium text-pos border border-pos/20 bg-pos/5 hover:bg-pos/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
-                    >
-                      {deactivating ? "Reactivating..." : "✅ Reactivate User"}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setShowResetModal(true); setResetError(null); setNewPassword(""); }}
-                    className="w-full py-2.5 text-xs font-medium text-warn border border-warn/20 bg-warn/5 hover:bg-warn/10 rounded-lg transition-colors cursor-pointer font-sans"
-                  >
-                    🔑 Reset Password
-                  </button>
+                  {/* Admin Actions */}
+                  <div className="bg-surface border border-white/7 rounded-xl overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-white/7">
+                      <span className="text-sm font-semibold text-text1">Admin Actions</span>
+                    </div>
+                    <div className="p-5 flex flex-col gap-3">
+
+                      {actionError && (
+                        <div className="px-3 py-2.5 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg">
+                          {actionError}
+                        </div>
+                      )}
+                          {user?.is_active ? (
+                            <button
+                              onClick={handleDeactivate}
+                              disabled={deactivating}
+                              className="w-full py-2.5 text-xs font-medium text-neg border border-neg/20 bg-neg/5 hover:bg-neg/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
+                            >
+                              {deactivating ? "Deactivating..." : "⛔ Deactivate User"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleReactivate}
+                              disabled={deactivating}
+                              className="w-full py-2.5 text-xs font-medium text-pos border border-pos/20 bg-pos/5 hover:bg-pos/10 rounded-lg transition-colors cursor-pointer font-sans disabled:opacity-50"
+                            >
+                              {deactivating ? "Reactivating..." : "✅ Reactivate User"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { setShowResetModal(true); setResetError(null); setNewPassword(""); }}
+                            className="w-full py-2.5 text-xs font-medium text-warn border border-warn/20 bg-warn/5 hover:bg-warn/10 rounded-lg transition-colors cursor-pointer font-sans"
+                          >
+                            🔑 Reset Password
+                          </button>
+                    </div>
+                  </div>
                 </>
               )}
-
-            </div>
-          </div>
-
         </div>
       </div>
 
