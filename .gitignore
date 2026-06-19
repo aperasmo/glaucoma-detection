@@ -94,7 +94,7 @@ backend/test_images/
 # AWS FILES
 # ============================================
 *.pem
-allan_accessKeys_aws.csv
+*accessKeys*.csv
 
 # ============================================
 # .MD FILES
