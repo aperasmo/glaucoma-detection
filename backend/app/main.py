@@ -30,6 +30,9 @@ from app.api.routes.admin import router as admin_router # Admin-only routes for 
 from app.api.routes.reports import router as reports_router # Reports routes - PDF exports and report endpoints
 
 from app.api.routes.model_performance import router as model_performance_router # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
+from app.api.routes.llm_evaluation import router as evaluation_router # 
+
+
 # Module-level logger for main application events
 logger = get_logger(__name__)
 
@@ -85,7 +88,7 @@ app.include_router(settings_router) # System settings routes - admin-only settin
 app.include_router(admin_router) # Admin-only routes for system monitoring and maintenance tasks
 app.include_router(reports_router) # Reports routes - PDF exports and report endpoints
 app.include_router(model_performance_router) # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
-
+app.include_router(evaluation_router) # LLM evaluation
 
 # --- Health Check Endpoint ---
 # This is the first route we register.

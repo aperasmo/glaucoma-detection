@@ -5,6 +5,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
+import {
+  formatDate,
+  getReferralResult,
+  normaliseSignatoryText,
+} from "../components/screening-results/ResultShared";
 
 const GRADIENTS = [
   "from-accent to-accent2",
@@ -80,13 +85,13 @@ function PatientList() {
     return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
   }
 
-  function formatDate(d) {
-    if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-NZ", {
-      day: "2-digit", month: "short", year: "numeric",
-      timeZone: "Pacific/Auckland",
-    });
-  }
+  // function formatDate(d) {
+  //   if (!d) return "-";
+  //   return new Date(d).toLocaleDateString("en-NZ", {
+  //     day: "2-digit", month: "short", year: "numeric",
+  //     timeZone: "Pacific/Auckland",
+  //   });
+  // }
 
 function getLatestResult(p) {
   return p.latest_screening?.result || null;

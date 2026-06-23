@@ -184,6 +184,7 @@ async def login(
                 "user_code": user.user_code,
                 "full_name": f"{user.first_name} {user.last_name}",
                 "role": user.role,
+                "is_researcher": user.is_researcher,
             }
         }
 
@@ -207,4 +208,5 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "role": current_user.role,
         "is_active": current_user.is_active,
+        "is_researcher": current_user.is_researcher,
     }

@@ -84,6 +84,8 @@ class User(Base):
     created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_by = Column(UUID(as_uuid=True), nullable=True)
 
+    is_researcher = Column(Boolean, nullable=False, default=False)
+
     def __repr__(self):
         # Safe representation - never includes password
         return f"<User {self.user_code} {self.last_name}, {self.first_name} role={self.role}>"

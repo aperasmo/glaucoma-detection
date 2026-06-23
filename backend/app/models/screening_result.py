@@ -9,7 +9,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Numeric, String, Text,Integer
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
@@ -101,6 +101,18 @@ class ScreeningResult(Base):
     # Time taken by the LLM to generate the referral letter in milliseconds.
     # Used for multi-LLM performance comparison in Research Mode.
     generation_time_ms = Column(Numeric(10, 2), nullable=True)
+
+    # Token usage tracking per LLM call - used for cost/quality comparison
+    # across providers (e.g. deciding whether to switch LLM providers based
+    # on cost-per-letter). Only populated for LLM referral letter records
+    # (llm_used IS NOT NULL) - always NULL on the clinical ensemble result
+    # and on the 3 individual model records.
+    # Field names normalised across providers - OpenAI/Groq return these
+    # names natively; Gemini's differently-named usage_metadata fields are
+    # mapped to match in llm_referral.py before being saved here.
+    prompt_tokens  = Column(Integer, nullable=True)
+    completion_tokens = Column(Integer, nullable=True)
+    total_tokens = Column(Integer, nullable=True)
 
     # Clinician name who signs the referral letter.
     # Populated from system settings REFERRING_CLINICIAN_NAME on generation.

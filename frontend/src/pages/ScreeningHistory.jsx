@@ -7,6 +7,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
+import {
+  formatDate,
+  getReferralResult,
+  normaliseSignatoryText,
+} from "../components/screening-results/ResultShared";
 
 const GRADIENTS = [
   "from-accent to-accent2",
@@ -128,14 +133,14 @@ function ScreeningHistory() {
       .catch(() => setLoadingMore(false));
   }
 
-  function formatDate(d) {
-    if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-NZ", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-      timeZone: "Pacific/Auckland",
-    });
-  }
+  // function formatDate(d) {
+  //   if (!d) return "-";
+  //   return new Date(d).toLocaleDateString("en-NZ", {
+  //     day: "2-digit", month: "short", year: "numeric",
+  //     hour: "2-digit", minute: "2-digit",
+  //     timeZone: "Pacific/Auckland",
+  //   });
+  // }
 
   // Filter screenings
   const filtered = screenings.filter(s => {

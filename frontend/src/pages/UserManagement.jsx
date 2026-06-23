@@ -8,7 +8,11 @@ import { useNavigate, useLocation} from "react-router-dom";
 import Layout from "../components/Layout";
 import API from "../api/index";
 import { useAuth } from "../context/AuthContext";
-
+import {
+  formatDate,
+  getReferralResult,
+  normaliseSignatoryText,
+} from "../components/screening-results/ResultShared";
 
 
 // Role badge component
@@ -81,13 +85,13 @@ useEffect(() => {
   const doctorCount = users.filter(u => u.role === "doctor").length;
   const nurseCount = users.filter(u => u.role === "nurse").length;
 
-  function formatDate(d) {
-    if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-NZ", {
-      day: "2-digit", month: "short", year: "numeric",
-      timeZone: "Pacific/Auckland",
-    });
-  }
+  // function formatDate(d) {
+  //   if (!d) return "-";
+  //   return new Date(d).toLocaleDateString("en-NZ", {
+  //     day: "2-digit", month: "short", year: "numeric",
+  //     timeZone: "Pacific/Auckland",
+  //   });
+  // }
 
   // Top bar actions
   const actions = (

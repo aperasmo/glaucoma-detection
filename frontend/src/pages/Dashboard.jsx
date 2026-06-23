@@ -8,7 +8,11 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import API from "../api/index";
-
+import {
+  formatDate,
+  getReferralResult,
+  normaliseSignatoryText,
+} from "../components/screening-results/ResultShared";
 
 
 const GRADIENTS = [
@@ -84,13 +88,13 @@ function Dashboard() {
       .catch(() => setLoading(false));
   }, []);
 
-  function formatDate(d) {
-    if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-NZ", {
-      day: "2-digit", month: "short", year: "numeric",
-      timeZone: "Pacific/Auckland",
-    });
-  }
+  // function formatDate(d) {
+  //   if (!d) return "-";
+  //   return new Date(d).toLocaleDateString("en-NZ", {
+  //     day: "2-digit", month: "short", year: "numeric",
+  //     timeZone: "Pacific/Auckland",
+  //   });
+  // }
 
   const greeting = new Date().getHours() < 12 ? "Good morning" : "Good afternoon";
   const today = new Date().toLocaleDateString("en-NZ", {

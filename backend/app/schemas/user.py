@@ -45,7 +45,8 @@ class ResponseUser(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
-
+    is_researcher: Optional[bool] = False
+    
     model_config = {"from_attributes": True}
 
 

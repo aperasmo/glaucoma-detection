@@ -30,6 +30,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: "Research",
+    items: [
+      { label: "Evaluation",  path: "/research/evaluation", icon: "🔬", roles: ["researcher"] },
+      { label: "LLM Results", path: "/research/results",    icon: "📊", roles: ["admin"] },
+    ],
+  },  
+  {
     label: "Admin",
     items: [
       { label: "User Management",   path: "/users",          icon: "/assets/icons/user-management.svg", roles: ["admin", "doctor", "nurse"] },
@@ -102,7 +109,10 @@ function Layout({ title, actions, children }) {
         {/* Nav Groups */}
         <div className="flex-1 overflow-y-auto px-2.5 py-3">
           {NAV_GROUPS.map(group => {
-            const visible = group.items.filter(i => i.roles.includes(user?.role));
+            const visible = group.items.filter(i =>
+              i.roles.includes(user?.role) ||
+              (i.roles.includes("researcher") && user?.is_researcher === true)
+            );
 
             if (!visible.length) return null;
 

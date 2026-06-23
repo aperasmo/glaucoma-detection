@@ -25,6 +25,9 @@ import ReportHighRisk from "./pages/ReportHighRisk";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { SettingsProvider } from "./context/SettingsContext";
 
+import ResearchEvaluation from "./pages/ResearchEvaluation";
+import ResearchResults from "./pages/ResearchResults";
+
 function ProtectedRoute() {
   const { token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
@@ -56,6 +59,8 @@ const router = createBrowserRouter([
       { path: "/analytics",              element: <Analytics /> },
       { path: "/models",                 element: <ModelPerformance /> },
       { path: "/reports",                element: <Reports /> },
+      { path: "/research/evaluation", element: <ResearchEvaluation /> },
+      { path: "/research/results",    element: <ResearchResults /> },
       { path: "/reports/high-risk",        element: <ReportHighRisk /> },
       { path: "/profile",                element: <UserProfile /> },
     ],

@@ -55,7 +55,7 @@ Eye screened: {eye_side.capitalize()} eye
 AI confidence score: {confidence_score:.1%}
 {ohts_info}
 
-Write a concise, professional referral letter (maximum 150 words), do not hallucinate we only base it on the provided information from a general 
+Write a concise, professional referral letter (maximum 150 words), do not hallucinate and fabricate, we only base it on the provided information from a general 
 ophthalmologist to a glaucoma specialist. The letter should:
 1. State that the patient was flagged by an AI screening system
 2. Mention the confidence score and eye side
@@ -102,6 +102,7 @@ def generate_gpt4o_vision(
     # Generate referral letter using GPT-4o Vision.
     # Sends the fundus image along with clinical data.
     # Returns the generated letter text.
+    # Returns dict with letter text and token usage.
 
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -133,7 +134,12 @@ def generate_gpt4o_vision(
         max_tokens=300,
     )
 
-    return response.choices[0].message.content
+    return {
+        "letter": response.choices[0].message.content,
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
+    }
 
 
 def generate_gpt4o_mini(
@@ -147,6 +153,7 @@ def generate_gpt4o_mini(
     # Generate referral letter using GPT-4o-mini.
     # Same prompt as GPT-4o for fair comparison.
     # Lower cost, faster response - good for comparison baseline.
+    # Returns dict with letter text and token usage.
 
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -178,7 +185,12 @@ def generate_gpt4o_mini(
         max_tokens=300,
     )
 
-    return response.choices[0].message.content
+    return {
+        "letter": response.choices[0].message.content,
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
+    }
 
 
 def generate_llama_vision(
@@ -188,43 +200,60 @@ def generate_llama_vision(
     confidence_score: float,
     ohts_score: Optional[int] = None,
     ohts_tier: Optional[str] = None,
-) -> str:
-    # Generate referral letter using LLaMa Vision via Groq API.
-    # Uses same prompt structure as GPT-4o for fair comparison.
-    # Groq provides fast inference for LLaMa models.
+) -> dict:
+    # Generate referral letter using openai/gpt-oss-120b via Groq API.
+    #
+    # NOTE: This function previously used meta-llama/llama-4-scout-17b-16e-instruct
+    # (a vision model). Switched away from it for two confirmed reasons:
+    #   1. Groq deprecated llama-4-scout-17b-16e-instruct on 17 June 2026,
+    #      recommending migration to openai/gpt-oss-120b.
+    #   2. During Paper 2 LLM comparison testing, llama-4-scout produced
+    #      incoherent/garbled output on 2 of 6 real test cases (Scenario 3) -
+    #      consistent with documented Groq-side reliability incidents for
+    #      that specific model around the same period.
+    #
+    # gpt-oss-120b is TEXT-ONLY (no vision support) - confirmed via Groq's
+    # and OpenAI's own model documentation. This is fine for this use case:
+    # reviewing real generated referral letters from the other 3 LLMs shows
+    # none of them actually describe visual features of the fundus image
+    # itself (no mention of optic disc appearance, cupping, vessel patterns,
+    # etc.) - every letter just restates the clinical figures already
+    # present in the text prompt (confidence score, OHTS score, eye side).
+    # The image is therefore dropped from this specific call; all clinical
+    # context is still passed via the same text prompt used by the other
+    # 3 LLMs so the comparison remains fair on content.
+    #
+    # image_path is kept as a parameter for interface consistency with the
+    # other 3 generator functions (and so call sites don't need special-
+    # casing), but is intentionally unused here.
+    # Returns dict with letter text and token usage.
 
     from groq import Groq
 
     client = Groq(api_key=settings.GROQ_API_KEY)
 
-    image_base64 = encode_image_to_base64(image_path)
     prompt = build_clinical_prompt(
         patient_name, eye_side, confidence_score, ohts_score, ohts_tier
     )
 
     response = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        model="openai/gpt-oss-120b",
         messages=[
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_base64}",
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt,
-                    },
-                ],
+                "content": prompt,
             }
         ],
-        max_tokens=300,
+        max_tokens=700,
+        reasoning_effort="low",
     )
 
-    return response.choices[0].message.content
+    return {
+        "letter": response.choices[0].message.content,
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
+    }
 
 
 def generate_gemini_vision(
@@ -234,10 +263,40 @@ def generate_gemini_vision(
     confidence_score: float,
     ohts_score: Optional[int] = None,
     ohts_tier: Optional[str] = None,
-) -> str:
+) -> dict:
     # Generate referral letter using Google Gemini Vision API.
-    # Uses gemini-2.0-flash - current stable vision model.
-    # Same prompt structure as GPT-4o for fair multi-LLM comparison.
+    #
+    # Switched from gemini-2.5-flash to gemini-3.5-flash on 21 June 2026.
+    # Reason: gemini-2.5-flash's free tier hit a confirmed hard daily quota
+    # ceiling (real API error showed limit=20 requests/day for this
+    # project+model combination, despite general published docs suggesting
+    # 250/day - the live error from our own account is the ground truth
+    # here). This made it impossible to complete the 35-case Paper 2 LLM
+    # comparison study in a single day on the free tier.
+    # gemini-3.5-flash confirmed working on a separate, non-exhausted quota
+    # pool via direct API testing - successful vision + text calls, clean
+    # FINISH REASON: STOP, no quota errors.
+    #
+    # Same prompt structure as GPT-4o/GPT-4o-mini for fair multi-LLM
+    # comparison. usage_metadata field names confirmed unchanged from
+    # gemini-2.5-flash's response shape (prompt_token_count,
+    # candidates_token_count, total_token_count) - no normalisation logic
+    # changes needed below.
+    #
+    # NOTE: gemini-3.5-flash is also a reasoning model - usage_metadata
+    # includes a separate thoughts_token_count field (confirmed via direct
+    # testing, e.g. 907 reasoning tokens vs 158 visible answer tokens on
+    # one real test case). Unlike gpt-oss-120b, reasoning and visible
+    # answer tokens did NOT compete for the same budget in testing -
+    # finish_reason was STOP (completed naturally) with default settings,
+    # no empty-content issue observed. No special reasoning_effort or
+    # max_tokens adjustment was needed for Gemini, unlike the fix required
+    # for the LLaMa/gpt-oss-120b function.
+    #
+    # Returns dict with letter text and token usage (prompt + completion
+    # only - thoughts_token_count is not currently captured/saved, since
+    # screening_results only has prompt_tokens/completion_tokens/
+    # total_tokens columns, matching the other 3 LLMs' shape).
 
     from google import genai
     from google.genai import types
@@ -248,19 +307,25 @@ def generate_gemini_vision(
         patient_name, eye_side, confidence_score, ohts_score, ohts_tier
     )
 
-    # Load image as bytes for Gemini
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
             types.Part.from_text(text=prompt),
         ],
     )
 
-    return response.text
+    usage = response.usage_metadata
+
+    return {
+        "letter": response.text,
+        "prompt_tokens": usage.prompt_token_count,
+        "completion_tokens": usage.candidates_token_count,
+        "total_tokens": usage.total_token_count,
+    }
 
 
 # Registry mapping LLM name to generator function
@@ -281,10 +346,12 @@ def generate_referral_letters(
     ohts_tier: Optional[str] = None,
     active_llms: list[str] = None,
     clinician_name: str = "Dr. [Clinician Name]",
-    clinician_title: str = "General Ophthalmologist",    
+    clinician_title: str = "General Ophthalmologist",
 ) -> dict:
     # Generate referral letters from all active LLMs.
-    # Returns dict of {llm_name: {"letter": text, "generation_time_ms": float}}
+    # Returns dict of {llm_name: {"letter": text, "generation_time_ms": float,
+    #                              "prompt_tokens": int, "completion_tokens": int,
+    #                              "total_tokens": int}}
     # Skips LLMs that are not configured - logs warning but does not fail.
 
     import time
@@ -292,7 +359,7 @@ def generate_referral_letters(
     if active_llms is None:
         active_llms = ["gpt4o", "gpt4o_mini", "llama", "gemini"]
 
-    results = {} # Store results for each LLM - letter text and generation time
+    results = {}  # Store results for each LLM - letter text, timing, and token usage
 
     for llm_name in active_llms:
         generator = LLM_GENERATORS.get(llm_name)
@@ -304,7 +371,7 @@ def generate_referral_letters(
             logger.info(f"Generating referral letter with {llm_name}...")
             start_time = time.time()
 
-            letter = generator(
+            generator_result = generator(
                 image_path=image_path,
                 patient_name=patient_name,
                 eye_side=eye_side,
@@ -312,7 +379,12 @@ def generate_referral_letters(
                 ohts_score=ohts_score,
                 ohts_tier=ohts_tier,
             )
-            letter = clean_referral_letter_body(letter) # Ensure only the letter body is kept, remove any LLM-generated signatures or closings.
+            # generator_result is now a dict: {"letter": ..., "prompt_tokens": ...,
+            # "completion_tokens": ..., "total_tokens": ...} - all 4 generator
+            # functions return this same shape now, including Gemini whose
+            # native field names are already normalised inside its own function.
+
+            letter = clean_referral_letter_body(generator_result["letter"])
             # Keep the LLM output as letter body only.
             # Final signatory is handled by ScreeningResult.signed_by and PDF rendering.
             letter = letter.replace("[Your Name]", clinician_name)
@@ -326,8 +398,16 @@ def generate_referral_letters(
             results[llm_name] = {
                 "letter": letter,
                 "generation_time_ms": generation_time_ms,
+                "prompt_tokens": generator_result["prompt_tokens"],
+                "completion_tokens": generator_result["completion_tokens"],
+                "total_tokens": generator_result["total_tokens"],
             }
-            logger.info(f"{llm_name} letter generated successfully in {generation_time_ms}ms.")
+            logger.info(
+                f"{llm_name} letter generated successfully in {generation_time_ms}ms. "
+                f"Tokens: prompt={generator_result['prompt_tokens']} "
+                f"completion={generator_result['completion_tokens']} "
+                f"total={generator_result['total_tokens']}"
+            )
 
         except NotImplementedError as e:
             logger.warning(f"{llm_name} not configured: {e}")

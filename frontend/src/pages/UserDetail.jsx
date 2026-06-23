@@ -212,7 +212,7 @@ async function handleResetPassword(e) {
               ].map(row => (
                 <div key={row.label} className="flex justify-between text-sm mb-3 pb-3 border-b border-white/7 last:border-0 last:mb-0 last:pb-0">
                   <span className="text-text3">{row.label}</span>
-                  <span className="text-text1 capitalize">{row.value || "-"}</span>
+                  <span className={`text-text1 ${row.label === "Email" ? "" : "capitalize"}`}>{row.value || "-"}</span>
                 </div>
               ))}
             </div>
