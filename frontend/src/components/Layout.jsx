@@ -32,8 +32,8 @@ const NAV_GROUPS = [
   {
     label: "Research",
     items: [
-      { label: "Evaluation",  path: "/research/evaluation", icon: "🔬", roles: ["researcher"] },
-      { label: "LLM Results", path: "/research/results",    icon: "📊", roles: ["admin"] },
+      { label: "Evaluation",  path: "/research/evaluation", icon: "/assets/icons/analytics.svg", roles: ["researcher"] },
+      { label: "LLM Results", path: "/research/results",    icon: "/assets/icons/reports.svg", roles: ["admin"] },
     ],
   },  
   {
@@ -74,6 +74,15 @@ function Layout({ title, actions, children }) {
   // This reads the current system setting, not the saved mode of a past screening.
   const { getSetting } = useSettings();
   const activeMode = getSetting("INFERENCE_MODE", "clinical");
+
+const [evaluationComplete, setEvaluationComplete] = useState(false);
+
+useEffect(() => {
+  if (!user?.is_researcher) return;
+  API.get("/evaluation/progress")
+    .then(res => setEvaluationComplete(res.data?.complete === true))
+    .catch(() => setEvaluationComplete(false));
+}, [user]);
 
 
   function handleLogout() {

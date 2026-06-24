@@ -44,14 +44,18 @@ function ResearchResults() {
   const [filterLlm, setFilterLlm]           = useState("all");
   const [search, setSearch]     = useState("");
 
+  const [isComplete, setIsComplete] = useState(false);
+
   useEffect(() => {
     Promise.all([
       API.get("/evaluation/results"),
       API.get("/evaluation/kappa"),
+      API.get("/evaluation/progress"),
     ])
-      .then(([resR, resK]) => {
+      .then(([resR, resK, resP]) => {
         setResults(resR.data);
         setKappa(resK.data);
+        setIsComplete(resP.data?.complete === true);
         setLoading(false);
       })
       .catch(() => {
@@ -229,8 +233,7 @@ function ResearchResults() {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-white/7 bg-white/[0.02]">
-              {/* {["Case ID", "Scenario", "LLM", "Label", "D1", "D2", "D3", "D4", "D5 (Allan)", "D5 (Mohammad)", "Combined"].map(h => ( */}
-              {["Case ID", "Scenario", "Label", "D1", "D2", "D3", "D4", "D5 (Allan)", "D5 (Mohammad)", "Combined"].map(h => (
+              {["Case ID", "Scenario", ...(isComplete ? ["LLM"] : []), "Label", "D1", "D2", "D3", "D4", "D5 (Allan)", "D5 (Mohammad)", "Combined"].map(h => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider whitespace-nowrap">
                   {h}
                 </th>
@@ -240,7 +243,7 @@ function ResearchResults() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-text3 text-sm">
+                <td colSpan={isComplete ? 11 : 10} className="px-4 py-8 text-center text-text3 text-sm">
                   No letters match the current filters.
                 </td>
               </tr>
@@ -260,9 +263,11 @@ function ResearchResults() {
                         {l.case_id?.slice(0, 8)}...
                       </td>
                       <td className="px-4 py-3 text-xs text-text2">{l.scenario}</td>
-                      {/* <td className="px-4 py-3 text-xs font-semibold text-text1">
-                        {LLM_DISPLAY[l.actual_llm] || l.actual_llm || "—"}
-                      </td> */}
+                      {isComplete && (
+                        <td className="px-4 py-3 text-xs font-semibold text-text1">
+                          {LLM_DISPLAY[l.actual_llm] || l.actual_llm || "—"}
+                        </td>
+                      )}
                       
                       <td className="px-4 py-3">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-surface3 border border-white/12 text-accent2 font-semibold">
@@ -285,7 +290,7 @@ function ResearchResults() {
                     </tr>
                     {isExpanded && (
                       <tr key={`${l.case_id}-expanded`} className="border-b border-white/[0.04]">
-                        <td colSpan={11} className="px-6 py-4 bg-surface2">
+                        <td colSpan={isComplete ? 11 : 10} className="px-6 py-4 bg-surface2">
                           <div className="text-xs text-text3 uppercase tracking-wider mb-2">Full letter</div>
                           <div className="text-sm text-text1 leading-relaxed whitespace-pre-wrap">
                             {l.referral_letter}
