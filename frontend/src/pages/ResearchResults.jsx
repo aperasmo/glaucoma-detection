@@ -83,7 +83,7 @@ function ResearchResults() {
 
   // Find max value per column for highlighting
   function maxOf(key) {
-    return Math.max(...LLM_ORDER.map(llm => summary[llm]?.[key] ?? 0));
+    return Math.max(...LLM_ORDER.map(llm => summary[llm]?.[key] ?? 0), 0);
   }
 
   function cellClass(value, max) {
@@ -102,7 +102,7 @@ function ResearchResults() {
 
   const totalScored  = progress?.scored ?? 0;
   const totalLetters = progress?.total ?? letters.length;
-  const scorersCount = kappa?.scorer_count ?? 0;
+  const scorersCount = results?.scorer_count ?? results?.scorers_complete ?? 0;
 
   return (
     <Layout title="LLM Evaluation Results">
@@ -159,35 +159,35 @@ function ResearchResults() {
                     <td className="px-4 py-3 text-sm font-semibold text-text1">
                       {LLM_DISPLAY[llm] || llm}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d1, maxOf("d1"))}`}>
-                      {s.d1 != null ? s.d1.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d1_mean, maxOf("d1_mean"))}`}>
+                      {s.d1_mean != null ? s.d1_mean.toFixed(3) : "—"}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d2, maxOf("d2"))}`}>
-                      {s.d2 != null ? s.d2.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d2_mean, maxOf("d2_mean"))}`}>
+                      {s.d2_mean != null ? s.d2_mean.toFixed(3) : "—"}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d3, maxOf("d3"))}`}>
-                      {s.d3 != null ? s.d3.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d3_mean, maxOf("d3_mean"))}`}>
+                      {s.d3_mean != null ? s.d3_mean.toFixed(3) : "—"}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d4, maxOf("d4"))}`}>
-                      {s.d4 != null ? s.d4.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d4_mean, maxOf("d4_mean"))}`}>
+                      {s.d4_mean != null ? s.d4_mean.toFixed(3) : "—"}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.auto_quality, maxOf("auto_quality"))}`}>
-                      {s.auto_quality != null ? s.auto_quality.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.auto_quality_mean, maxOf("auto_quality_mean"))}`}>
+                      {s.auto_quality_mean != null ? s.auto_quality_mean.toFixed(3) : "—"}
                     </td>
                     <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.d5_mean, maxOf("d5_mean"))}`}>
                       {s.d5_mean != null ? s.d5_mean.toFixed(3) : "—"}
                     </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.combined, maxOf("combined"))}`}>
-                      {s.combined != null ? s.combined.toFixed(3) : "—"}
+                    <td className={`px-4 py-3 text-xs font-mono ${cellClass(s.combined_quality_mean, maxOf("combined_quality_mean"))}`}>
+                      {s.combined_quality_mean != null ? s.combined_quality_mean.toFixed(3) : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs font-mono text-text2">
-                      {s.avg_response_time != null ? `${s.avg_response_time.toFixed(2)}s` : "—"}
+                      {s.avg_response_time_seconds != null ? `${s.avg_response_time_seconds.toFixed(2)}s` : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs font-mono text-text2">
-                      {s.avg_tokens != null ? (
-                        <span className={s.avg_tokens > 10000 ? "text-warn" : ""}>
-                          {s.avg_tokens.toLocaleString()}
-                          {s.avg_tokens > 10000 && " ⚠"}
+                      {s.avg_total_tokens != null ? (
+                        <span className={s.avg_total_tokens > 10000 ? "text-warn" : ""}>
+                          {s.avg_total_tokens.toLocaleString()}
+                          {s.avg_total_tokens > 10000 && " ⚠"}
                         </span>
                       ) : "—"}
                     </td>
@@ -201,6 +201,129 @@ function ResearchResults() {
           Green values indicate the highest score per column. ⚠ flags anomalously high token counts (GPT-4o-mini image token quirk - documented and expected).
         </div>
       </div>
+
+        {/* RANKINGS & ANALYSIS */}
+        <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mb-6">
+          <div className="px-5 py-3.5 border-b border-white/7">
+            <span className="text-sm font-semibold text-text1">Rankings and Analysis</span>
+          </div>
+          <div className="p-5">
+
+            {/* Overall Ranking Table */}
+            <div className="mb-6">
+              <div className="text-xs text-text3 uppercase tracking-wider mb-3">Overall ranking by combined score</div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-white/7 bg-white/[0.02]">
+                    {["Rank", "LLM", "Model", "Combined Score", "Verdict"].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { rank: 1, llm: "Gemini",        model: "gemini-3.5-flash",     score: "4.257", verdict: "Best overall quality",           color: "text-pos" },
+                    { rank: 2, llm: "GPT-4o-mini",   model: "gpt-4o-mini",     score: "4.071", verdict: "Strong quality, high cost",      color: "text-accent2" },
+                    { rank: 3, llm: "GPT-4o",        model: "gpt-4o",     score: "4.057", verdict: "Strong quality, best tone",      color: "text-accent2" },
+                    { rank: 4, llm: "LLaMa",         model: "openai/gpt-oss-120b",     score: "4.014", verdict: "Fastest, most efficient",        color: "text-text2" },
+                  ].map(row => (
+                    <tr key={row.rank} className="border-b border-white/[0.04]">
+                      <td className="px-4 py-3 text-sm font-bold font-mono text-text3">#{row.rank}</td>
+                      <td className={`px-4 py-3 text-sm font-semibold ${row.color}`}>{row.llm}</td>
+                      <td className={`px-4 py-3 text-sm font-semibold ${row.color}`}>{row.model}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-text1">{row.score}</td>
+                      <td className="px-4 py-3 text-xs text-text2">{row.verdict}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Strengths and Weaknesses */}
+            <div className="text-xs text-text3 uppercase tracking-wider mb-4">Strengths and weaknesses per LLM</div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {[
+                {
+                  llm: "GPT-4o",
+                  strengths: [
+                    "Perfect professional tone (35/35 rated professional by both scorers) - highest D5 score",
+                    "Fast response (2.70s) and low token usage (1,007)",
+                  ],
+                  weaknesses: [
+                    "Rarely includes an explicit screening disclaimer (only 2/35 letters, D3=0.057) - patient safety concern",
+                  ],
+                },
+                {
+                  llm: "GPT-4o-mini",
+                  strengths: [
+                    "High combined quality score (4.071), competitive with GPT-4o",
+                  ],
+                  weaknesses: [
+                    "Anomalously high token usage (22,605 avg) - a known image tokenisation quirk, not a quality issue but a significant cost concern for production deployment",
+                    "Same disclaimer weakness as GPT-4o (only 3/35 letters, D3=0.086)",
+                  ],
+                },
+                {
+                  llm: "LLaMa (gpt-oss-120b)",
+                  strengths: [
+                    "By far the fastest (0.69s avg) and most token-efficient (448 avg tokens) - strong case for cost-effective deployment",
+                  ],
+                  weaknesses: [
+                    "Lowest disclaimer rate of all 4 LLMs (only 1/35 letters, D3=0.029) - highest patient safety risk",
+                    "Lowest combined score overall (4.014)",
+                  ],
+                },
+                {
+                  llm: "Gemini 3.5 Flash",
+                  strengths: [
+                    "Highest combined score overall (4.257) - best quality across all dimensions",
+                    "Best disclaimer rate (12/35 letters, D3=0.343) - most clinically safe framing",
+                  ],
+                  weaknesses: [
+                    "Slowest response time (7.22s avg) - may affect user experience in high-volume clinics",
+                    "Occasionally misses the referral request (D2=0.943, 2/35 letters had no explicit referral ask)",
+                  ],
+                },
+              ].map(item => (
+                <div key={item.llm} className="bg-surface2 rounded-xl border border-white/7 p-4">
+                  <div className="text-sm font-semibold text-text1 mb-3">{item.llm}</div>
+                  {item.strengths.map((s, i) => (
+                    <div key={i} className="flex gap-2 mb-2">
+                      <span className="text-pos text-xs mt-0.5 flex-shrink-0">✓</span>
+                      <span className="text-xs text-text2 leading-relaxed">{s}</span>
+                    </div>
+                  ))}
+                  {item.weaknesses.map((w, i) => (
+                    <div key={i} className="flex gap-2 mb-2">
+                      <span className="text-neg text-xs mt-0.5 flex-shrink-0">✗</span>
+                      <span className="text-xs text-text2 leading-relaxed">{w}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Important Notes */}
+            <div className="flex flex-col gap-3">
+              <div className="px-4 py-3 bg-warn/10 border border-warn/20 rounded-lg">
+                <div className="text-xs font-semibold text-warn mb-1">D3 - Screening disclaimer (critical safety dimension)</div>
+                <div className="text-xs text-text2 leading-relaxed">
+                  All 4 LLMs score very low on D3, with Gemini performing best at only 34.3%. This suggests the referral letter prompt should be updated to explicitly require a disclaimer statement. Flagged as a prompt engineering improvement for future work.
+                </div>
+              </div>
+              <div className="px-4 py-3 bg-accent/10 border border-accent/20 rounded-lg">
+                <div className="text-xs font-semibold text-accent2 mb-1">Cohen's Kappa = 0.000 with 97.1% observed agreement</div>
+                <div className="text-xs text-text2 leading-relaxed">
+                  This seemingly contradictory result occurs when both scorers rate nearly everything the same way (almost all 1s), making the expected agreement by chance also very high. The kappa calculation penalises for this. This is a known limitation of Kappa when rater agreement is uniformly high - the observed agreement (97.1%) is the more meaningful metric here.
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
 
       {/* SECTION 3 - Individual letter browser */}
       <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mb-6">
