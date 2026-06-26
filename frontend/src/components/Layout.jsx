@@ -110,7 +110,7 @@ useEffect(() => {
             Screening System
           </div>
           <div className="text-[11px] text-sbText3 font-mono mt-1 text-center opacity-80">
-            v.{__APP_VERSION__}
+            ver.{__APP_VERSION__}
           </div>        
         </div>
       </div>

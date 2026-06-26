@@ -45,6 +45,7 @@ function ResearchResults() {
   const [search, setSearch]     = useState("");
 
   const [isComplete, setIsComplete] = useState(false);
+  const [progress, setProgress] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -55,6 +56,7 @@ function ResearchResults() {
       .then(([resR, resK, resP]) => {
         setResults(resR.data);
         setKappa(resK.data);
+        setProgress(resP.data);
         setIsComplete(resP.data?.complete === true);
         setLoading(false);
       })
@@ -98,8 +100,9 @@ function ResearchResults() {
     return matchScenario && matchLlm && matchSearch;
   });
 
-  const totalScored  = letters.filter(l => l.is_scored).length;
-  const scorersCount = results?.scorers_complete ?? 0;
+  const totalScored  = progress?.scored ?? 0;
+  const totalLetters = progress?.total ?? letters.length;
+  const scorersCount = kappa?.scorer_count ?? 0;
 
   return (
     <Layout title="LLM Evaluation Results">
@@ -108,7 +111,7 @@ function ResearchResults() {
       <div className="grid grid-cols-4 gap-3 mb-6">
         <StatCard
           label="Total letters scored"
-          value={`${totalScored} / ${letters.length}`}
+          value={`${totalScored} / ${totalLetters}`}
           sub="Across all scorers"
         />
         <StatCard
