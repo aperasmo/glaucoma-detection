@@ -9,7 +9,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Numeric, String, Text,Integer
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Numeric, String, Text,Integer,Boolean
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
@@ -113,6 +113,19 @@ class ScreeningResult(Base):
     prompt_tokens  = Column(Integer, nullable=True)
     completion_tokens = Column(Integer, nullable=True)
     total_tokens = Column(Integer, nullable=True)
+
+    # Model disagreement tracking - Clinical Mode only
+    # Populated when ensemble predicts normal but at least one individual
+    # model crossed its own sensitivity threshold (B0>=0.52, VGG16/V2>=0.47)
+    # has_model_disagreement: True if disagreement detected
+    # disagreement_model: which model disagreed e.g. "efficientnetv2"
+    # disagreement_confidence: that model's raw confidence score
+    # letter_type: "clinical" for regular GPT-4o letter, "disagreement" for
+    #              on-demand second opinion letter, NULL for non-letter records.
+    has_model_disagreement = Column(Boolean, nullable=True, default=False)
+    disagreement_model = Column(String(50), nullable=True)
+    disagreement_confidence = Column(Numeric(10, 4), nullable=True)
+    letter_type = Column(String(20), nullable=True)
 
     # Clinician name who signs the referral letter.
     # Populated from system settings REFERRING_CLINICIAN_NAME on generation.

@@ -197,14 +197,104 @@ async def run_inference_pipeline(
                 await save_result(db, screening_id, res, created_by)
 
         else:
-            # Clinical Mode - run all three for ensemble but only save ensemble
-            for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
-                res = run_single_model(model_name, image_path)
-                individual_results.append(res)
+                    # Clinical Mode - always run all 3 models + ensemble regardless
+                    # of DEFAULT_CNN_MODEL setting. We need all results to:
+                    #   1. Compute the ensemble average
+                    #   2. Have all individual results available for disagreement detection
+                    # DEFAULT_CNN_MODEL only determines WHICH result is saved as the
+                    # clinical reference and which model's prediction is shown to the
+                    # clinician - not what runs.
+                    for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
+                        res = run_single_model(model_name, image_path)
+                        individual_results.append(res)
 
-        # Step 4 - Compute and save ensemble result
+        # Step 4 - Compute ensemble and determine clinical reference result
         ensemble_result = run_ensemble(individual_results)
-        await save_result(db, screening_id, ensemble_result, created_by)
+
+        # Read DEFAULT_CNN_MODEL from settings to determine which result
+        # to save as the clinical reference in Clinical Mode.
+        # Research Mode always uses ensemble - this setting has no effect there.
+        default_cnn_model = "ensemble"
+        if active_mode == "clinical":
+            default_cnn_model = await get_setting(
+                db, "DEFAULT_CNN_MODEL", default="ensemble"
+            )
+
+        # Determine the clinical reference result based on the setting
+        if active_mode == "clinical" and default_cnn_model in SENSITIVITY_THRESHOLDS:
+            # Single model selected - find its result from individual_results
+            clinical_result = next(
+                (r for r in individual_results if r["model_used"] == default_cnn_model),
+                ensemble_result  # fallback to ensemble if model not found
+            )
+            logger.info(
+                f"[inference] Clinical reference: {default_cnn_model} "
+                f"(confidence={clinical_result['confidence_score']:.4f} "
+                f"prediction={clinical_result['prediction']}) | "
+                f"screening_id={screening_id}"
+            )
+        else:
+            # Ensemble is the clinical reference (default)
+            clinical_result = ensemble_result
+
+        # Save the clinical reference result
+        # model_used is set to the actual model name so the result page
+        # can show which model was used as the clinical reference
+        clinical_result_to_save = {
+            **clinical_result,
+            "model_used": "ensemble" if default_cnn_model == "ensemble" else default_cnn_model,
+        }
+        await save_result(db, screening_id, clinical_result_to_save, created_by)
+
+        has_disagreement = False
+        disagreement_model_name = None
+        disagreement_conf = None
+
+        # Disagreement detection - Clinical Mode only
+        # Compare the clinical reference model's prediction against all OTHER models.
+        # If any other model crossed its own sensitivity threshold but the clinical
+        # reference predicted normal, flag it as a disagreement.
+        # Uses SENSITIVITY_THRESHOLDS - locked evaluation results, not from DB.
+        if active_mode == "clinical" and clinical_result["prediction"] == "normal":
+            # Build list of all results to compare against the clinical reference
+            all_results = individual_results + [ensemble_result]
+            for res in all_results:
+                model_name = res["model_used"]
+                # Skip the clinical reference model itself
+                if model_name == default_cnn_model:
+                    continue
+                model_threshold = SENSITIVITY_THRESHOLDS.get(model_name, 0.50)
+                if res["confidence_score"] >= model_threshold:
+                    if disagreement_conf is None or res["confidence_score"] > disagreement_conf:
+                        has_disagreement = True
+                        disagreement_model_name = model_name
+                        disagreement_conf = res["confidence_score"]
+                    logger.info(
+                        f"[disagreement] {model_name} predicted glaucoma "
+                        f"({res['confidence_score']:.4f} >= {model_threshold}) "
+                        f"while {default_cnn_model} predicted normal "
+                        f"({clinical_result['confidence_score']:.4f})"
+                    )
+
+        # Save disagreement data onto the ensemble result record
+        if has_disagreement:
+            result = await db.execute(
+                select(ScreeningResult).where(
+                    ScreeningResult.screening_id == screening_id,
+                    ScreeningResult.model_used == clinical_result_to_save["model_used"],
+                    ScreeningResult.llm_used.is_(None),
+                    ScreeningResult.letter_type.is_(None),
+                )
+            )
+            ensemble_record = result.scalar_one_or_none()
+            if ensemble_record:
+                ensemble_record.has_model_disagreement = True
+                ensemble_record.disagreement_model = disagreement_model_name
+                ensemble_record.disagreement_confidence = disagreement_conf
+                logger.info(
+                    f"[disagreement] Flagged on ensemble record | "
+                    f"model={disagreement_model_name} conf={disagreement_conf:.4f}"
+                )
 
         # Fetch OHTS tiers from system settings
         tiers = await get_ohts_tiers(db)
@@ -226,7 +316,9 @@ async def run_inference_pipeline(
             result = await db.execute(
                 select(ScreeningResult).where(
                     ScreeningResult.screening_id == screening_id,
-                    ScreeningResult.model_used == "ensemble",
+                    ScreeningResult.model_used == clinical_result_to_save["model_used"],
+                    ScreeningResult.llm_used.is_(None),
+                    ScreeningResult.letter_type.is_(None),
                 )
             )
             ensemble_record = result.scalar_one_or_none()
@@ -363,7 +455,9 @@ async def run_inference_pipeline(
 
 
         # Step 6 - Generate referral letter if prediction is glaucoma        
-        if ensemble_result["prediction"] == "glaucoma":
+        # Generate referral letter based on the clinical reference result
+        # (which may be ensemble or a single model depending on settings)
+        if clinical_result["prediction"] == "glaucoma":
             patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
 
             clinician_name = await get_setting(
@@ -378,13 +472,21 @@ async def run_inference_pipeline(
             )
             signed_by = f"{clinician_name}\n{clinician_title}"
 
-            active_llms = ["gpt4o"] if active_mode == "clinical" else ["gpt4o", "gpt4o_mini", "llama", "gemini"]
+            # Read DEFAULT_CLINICAL_LLM from settings
+            # Research Mode always uses all 4 LLMs regardless of this setting
+            if active_mode == "clinical":
+                default_llm = await get_setting(
+                    db, "DEFAULT_CLINICAL_LLM", default="gpt4o"
+                )
+                active_llms = [default_llm]
+            else:
+                active_llms = ["gpt4o", "gpt4o_mini", "llama", "gemini"]
 
             letters = generate_referral_letters(
                 image_path=image_path,
                 patient_name=patient_name,
                 eye_side=screening.eye_side,
-                confidence_score=ensemble_result["confidence_score"],
+                confidence_score=clinical_result["confidence_score"],
                 ohts_score=ohts_result["ohts_score"] if ohts_result else None,
                 ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
                 active_llms=active_llms,
@@ -396,7 +498,7 @@ async def run_inference_pipeline(
                 # Clinical Mode - create a separate record for GPT-4o letter.
                 # Ensemble record stays clean with llm_used = NULL.
                 # This ensures llm_used IS NULL filter always finds the clinical result.
-                if "gpt4o" in letters:
+                if default_llm  in letters:
                     llm_record = ScreeningResult(
                         screening_id=screening_id,
                         model_used="ensemble",
@@ -405,7 +507,7 @@ async def run_inference_pipeline(
                         threshold_used=ensemble_result["threshold_used"],
                         referral_letter=letters["gpt4o"]["letter"],
                         signed_by=signed_by,
-                        llm_used="gpt4o",
+                        llm_used=default_llm,
                         generation_time_ms=letters["gpt4o"]["generation_time_ms"],
                         prompt_tokens=letters["gpt4o"]["prompt_tokens"],
                         completion_tokens=letters["gpt4o"]["completion_tokens"],
@@ -424,9 +526,9 @@ async def run_inference_pipeline(
                     llm_record = ScreeningResult(
                         screening_id=screening_id,
                         model_used="ensemble",
-                        prediction=ensemble_result["prediction"],
-                        confidence_score=ensemble_result["confidence_score"],
-                        threshold_used=ensemble_result["threshold_used"],
+                        prediction=clinical_result["prediction"],
+                        confidence_score=clinical_result["confidence_score"],
+                        threshold_used=clinical_result["threshold_used"],
                         referral_letter=result_data["letter"],
                         signed_by=signed_by,
                         llm_used=llm_name,
@@ -446,7 +548,9 @@ async def run_inference_pipeline(
         # Step 7 - Send high-risk notification email
         # Notify if glaucoma predicted regardless of OHTS availability.
         # If OHTS is available, also check tier matches threshold.
-        if ensemble_result["prediction"] == "glaucoma":
+        # Generate referral letter based on the clinical reference result
+        # (which may be ensemble or a single model depending on settings)
+        if clinical_result["prediction"] == "glaucoma":
             notification_email = await get_setting(
                 db, "NOTIFICATION_EMAIL",
                 default="aiglaucomascreeningsystem@gmail.com"
@@ -474,7 +578,7 @@ async def run_inference_pipeline(
                     patient_name=patient_name,
                     patient_code=patient.patient_code if patient else "Unknown",
                     eye_side=screening.eye_side,
-                    confidence_score=ensemble_result["confidence_score"],
+                    confidence_score=clinical_result["confidence_score"],
                     ohts_score=ohts_result["ohts_score"] if ohts_result else None,
                     ohts_tier=ohts_result["ohts_tier"] if ohts_result else None,
                     screening_id=str(screening_id),
@@ -498,8 +602,9 @@ async def run_inference_pipeline(
 
         logger.info(
             f"Screening {screening_id} complete. "
-            f"Prediction: {ensemble_result['prediction']} "
-            f"Score: {ensemble_result['confidence_score']:.4f}"
+            f"Clinical reference: {default_cnn_model} | "
+            f"Prediction: {clinical_result['prediction']} | "
+            f"Score: {clinical_result['confidence_score']:.4f}"
         )
 
 

@@ -71,7 +71,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Delete one scenario's seeded data (DB rows, moved images, CSV rows) to allow a clean re-run."
     )
-    parser.add_argument("--scenario", type=int, required=True, choices=[1, 2, 3, 4, 5, 6])
+    parser.add_argument("--scenario", type=int, required=True, choices=[1, 2, 3, 4, 5, 6, 7])
     return parser.parse_args()
 
 

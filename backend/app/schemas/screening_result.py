@@ -32,7 +32,13 @@ class ScreeningResultResponse(BaseModel):
     cdr: Optional[float] = None
     disc_radius: Optional[float] = None
     cup_radius: Optional[float] = None
-
+    # Model disagreement fields - populated on ensemble result in Clinical Mode
+    # when at least one individual model crossed its sensitivity threshold
+    # while ensemble predicted normal
+    has_model_disagreement: Optional[bool] = None
+    disagreement_model: Optional[str] = None
+    disagreement_confidence: Optional[float] = None
+    letter_type: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

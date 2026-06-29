@@ -401,6 +401,9 @@ async def get_cohen_kappa(
             "expected_agreement": round(p_e, 4),
             "scorer_a": scorer_a,
             "scorer_b": scorer_b,
+            "scorers_complete": len([sid for sid in scorer_ids  # count scorers who finished all 140
+                if sum(1 for s in all_scores if str(s.scorer_user_id) == sid) == 140]),
+            "total_scorers": len(scorer_ids),
         }
 
     except HTTPException:

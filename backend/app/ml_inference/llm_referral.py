@@ -35,6 +35,15 @@ def build_clinical_prompt(
     # Build a structured clinical prompt for referral letter generation.
     # Instructs the LLM to act as a clinical assistant, not a diagnostician.
     # The system is a screening tool - letter reflects that framing.
+    #
+    # PROMPT VERSION 2 - updated to explicitly require a screening disclaimer
+    # sentence (D3 in the LLM evaluation rubric). Version 1 only said "do NOT
+    # make a definitive diagnosis" as a negative instruction, which most LLMs
+    # interpreted as "omit a diagnosis" rather than "explicitly state this is
+    # screening only." Version 2 adds a positive requirement to include a
+    # specific disclaimer sentence, directly addressing the D3 weakness
+    # identified across all 4 LLMs in the  evaluation (GPT-4o: 0.057,
+    # GPT-4o-mini: 0.086, LLaMa: 0.029, Gemini: 0.343).
 
     ohts_info = ""
     if ohts_score is not None and ohts_tier is not None:
@@ -48,7 +57,7 @@ def build_clinical_prompt(
 
     return f"""
 You are a clinical assistant helping a general ophthalmologist prepare a referral letter 
-for a patient who has been flagged as glaucoma-suspicious by an AI screening system.
+for a patient who has been flagged as glaucoma-suspicious by an glaucoma AI screening system.
 
 Patient: {patient_name}
 Eye screened: {eye_side.capitalize()} eye
@@ -63,11 +72,11 @@ ophthalmologist to a glaucoma specialist. The letter should:
 4. Request specialist review and further evaluation
 5. Use standard clinical terminology
 6. NOT make a definitive diagnosis - this is a screening referral only
+7. Include an explicit sentence stating that this referral is based on an AI screening result and does not constitute a definitive clinical diagnosis - this sentence is mandatory
 
 Write only the body of the letter starting with "Dear Colleague,".
 Do not include any closing phrase, signature, clinician name, title, contact information, or placeholders such as [Your Name].
 """
-
 def clean_referral_letter_body(letter: str) -> str:
     if not letter:
         return ""
@@ -89,7 +98,6 @@ def clean_referral_letter_body(letter: str) -> str:
     )
 
     return cleaned.strip()
-
 
 def generate_gpt4o_vision(
     image_path: str,

@@ -111,12 +111,12 @@ async def main():
             "patient_code": entry["patient_code"],
             "filename": matched_case["filename"],
             "confidence": conf,
-            "needs_llms": matched_case["scenario"] in {1, 2, 3, 4},  # scenarios 5,6 never need letters
+            "needs_llms": matched_case["scenario"] in {1, 2, 3, 4, 7},  # scenarios 5,6 never need letters; 7 does (FP cases)
             "has_llms": entry["llms"],
         })
 
     # Expected counts per scenario, from the locked study design
-    expected_counts = {1: 7, 2: 10, 3: 6, 4: 12, 5: 12, 6: 13}
+    expected_counts = {1: 7, 2: 10, 3: 6, 4: 12, 5: 12, 6: 13, 7: 10}
 
     print("=" * 70)
     print("LLM COMPARISON STUDY - STATUS CHECK (live from database)")
@@ -126,10 +126,10 @@ async def main():
     total_letters_done = 0
     total_letters_expected = 0
 
-    for scenario in range(1, 7):
+    for scenario in range(1, 8):
         cases = scenario_status.get(scenario, [])
         expected = expected_counts[scenario]
-        needs_llms = scenario in {1, 2, 3, 4}
+        needs_llms = scenario in {1, 2, 3, 4, 7}
 
         print(f"\nScenario {scenario}: {len(cases)}/{expected} cases seeded")
 
