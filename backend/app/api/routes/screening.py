@@ -304,7 +304,7 @@ async def generate_disagreement_letter(
         constitute a definitive diagnosis.
         8. Avoid inventing symptoms, examination findings, treatment recommendations, or
         confirmed disease.
-
+        9. Add a header "Conflicting AI Screening Result - Specialist Review Requested", before the "Dear Colleague," 
         Write only the body of the letter starting with "Dear Colleague,".
         Do not include a closing phrase, signature, clinician name, title, contact information,
         or placeholders such as [Your Name].

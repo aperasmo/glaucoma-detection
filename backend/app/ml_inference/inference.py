@@ -153,7 +153,9 @@ async def run_inference_pipeline(
         # Use explicit mode when admin seeding passes one.
         # Otherwise use the current system setting for normal screening flow.
         active_mode = mode or await get_inference_mode(db)
-
+        # Initialize default_cnn_model - used in final log regardless of mode
+        # Research Mode always uses ensemble, Clinical Mode reads from settings below
+        default_cnn_model = "ensemble"
         if active_mode not in {"clinical", "research"}:
             logger.warning(
                 "Invalid inference mode '%s'. Falling back to clinical.",
