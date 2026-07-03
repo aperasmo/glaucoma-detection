@@ -228,7 +228,7 @@ async def get_progress(
         return {
             "scorer": current_user.user_code,
             "scored": len(scores),
-            "total": 140,
+            "total": load_evaluation_data()["meta"]["total_letters"],
             "complete": len(scores) == 140,
         }
     except Exception as e:
