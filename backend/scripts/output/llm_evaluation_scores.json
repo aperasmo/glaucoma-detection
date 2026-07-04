@@ -189,7 +189,7 @@
       "ai_confidence_score": 0.9457,
       "ohts_score": 9,
       "ohts_tier": "critical",
-      "referral_letter": "Dear Colleague,\n\nI am referring Patient2, who has been flagged as glaucoma-suspicious by an AI screening system. The left eye was screened with a confidence score of 94.6%. Additionally, the patient’s OHTS 5-year risk score is 9, placing them in the critical tier. \n\nGiven these findings, I request your expert review and further evaluation to determine the need for intervention or additional diagnostics. \n\nPlease note that this referral is based on an AI screening result and does not constitute a definitive clinical diagnosis. \n\nThank you for your attention to this matter.",
+      "referral_letter": "Dear Colleague,\n\nI am referring Patient2, who has been flagged as glaucoma-suspicious by an AI screening system. The left eye was screened with a confidence score of 94.60%. Additionally, the patient’s OHTS 5-year risk score is 9, placing them in the critical tier. \n\nGiven these findings, I request your expert review and further evaluation to determine the need for intervention or additional diagnostics. \n\nPlease note that this referral is based on an AI screening result and does not constitute a definitive clinical diagnosis. \n\nThank you for your attention to this matter.",
       "auto_completeness_score": 4,
       "d1_clinical_finding": 1,
       "d2_referral_request": 1,
