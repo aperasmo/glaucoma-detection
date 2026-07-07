@@ -110,19 +110,28 @@ export function getScreeningPredictionLabel(prediction) {
     : "No glaucoma signs detected";
 }
 
-export function PredictionBadge({ prediction }) {
+export function PredictionBadge({ prediction, hasDisagreement = false }) {
   const isGlaucoma = prediction?.toLowerCase() === "glaucoma";
+  // Amber badge when normal but model disagreement detected.
+  // hasDisagreement is only passed from Clinical Mode - Research Mode is unaffected.
+  const isDisagreement = !isGlaucoma && hasDisagreement;
+
+  const badgeClass = isGlaucoma
+    ? "bg-neg/10 text-neg border-neg/30"
+    : isDisagreement
+      ? "bg-warn/10 text-warn border-warn/30"
+      : "bg-pos/10 text-pos border-pos/30";
+
+  const label = isGlaucoma
+    ? "Possible glaucoma signs detected"
+    : isDisagreement
+      ? "No glaucoma signs detected — model disagreement detected"
+      : "No glaucoma signs detected";
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${
-        isGlaucoma
-          ? "bg-neg/10 text-neg border-neg/30"
-          : "bg-pos/10 text-pos border-pos/30"
-      }`}
-    >
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${badgeClass}`}>
       <span className="w-2 h-2 rounded-full bg-current" />
-      {getScreeningPredictionLabel(prediction)}
+      {label}
     </span>
   );
 }
@@ -269,7 +278,7 @@ export function ImagePair({ data, result, selectedModelLabel }) {
   );
 }
 
-export function SelectedModelDetail({ data, result, label }) {
+  export function SelectedModelDetail({ data, result, label, hasDisagreement = false }) {
   const confidence = Number(result?.confidence_score || 0);
   const confidencePct = (confidence * 100).toFixed(1);
   const isGlaucoma = result?.prediction?.toLowerCase() === "glaucoma";
@@ -285,7 +294,7 @@ export function SelectedModelDetail({ data, result, label }) {
             </span>
           )}
         </div>
-        {result && <PredictionBadge prediction={result.prediction} />}
+        {result && <PredictionBadge prediction={result.prediction} hasDisagreement={hasDisagreement} />}
       </div>
 
       <div className="p-4">

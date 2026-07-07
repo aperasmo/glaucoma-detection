@@ -45,25 +45,52 @@ function ResearchResults() {
   const [search, setSearch]     = useState("");
 
   const [isComplete, setIsComplete] = useState(false);
-  const [progress, setProgress] = useState(null);
+  
 
   useEffect(() => {
-    Promise.all([
-      API.get("/evaluation/results"),
-      API.get("/evaluation/kappa"),
-      API.get("/evaluation/progress"),
-    ])
-      .then(([resR, resK, resP]) => {
-        setResults(resR.data);
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        // Kappa is always safe to load because it contains only study-level progress.
+        const resK = await API.get("/evaluation/kappa");
+
+        if (!isMounted) return;
+
         setKappa(resK.data);
-        setProgress(resP.data);
-        setIsComplete(resP.data?.complete === true);
+
+        const evaluationComplete = resK.data?.status === "final";
+        setIsComplete(evaluationComplete);
+
+        // Keep LLM identities and results hidden until the blinded evaluation is complete.
+        if (!evaluationComplete) {
+          setResults(null);
+          setLoading(false);
+          return;
+        }
+
+        const resR = await API.get("/evaluation/results");
+
+        if (!isMounted) return;
+
+        setResults(resR.data);
         setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load results. Admin access required.");
+      } catch (err) {
+        if (!isMounted) return;
+
+        setError(
+          err?.response?.data?.detail ||
+          "Failed to load evaluation results. Admin access is required."
+        );
         setLoading(false);
-      });
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (loading) return (
@@ -75,6 +102,53 @@ function ResearchResults() {
   if (error) return (
     <Layout title="LLM Evaluation Results">
       <p className="text-neg text-sm">{error}</p>
+    </Layout>
+  );
+
+  if (!isComplete) return (
+    <Layout title="LLM Evaluation Results">
+      <div className="bg-surface border border-white/7 rounded-xl p-6 max-w-2xl">
+        <div className="text-base font-semibold text-text1">
+          Results remain blinded
+        </div>
+
+        <p className="mt-2 text-sm text-text2 leading-relaxed">
+          LLM identities, rankings, and detailed results will be available after
+          at least {kappa?.minimum_scorers ?? 3} researchers have completed all{" "}
+          {kappa?.total_letters ?? 0} evaluation letters.
+        </p>
+
+        <div className="grid grid-cols-3 gap-3 mt-5">
+          <StatCard
+            label="Completed researchers"
+            value={kappa?.completed_scorer_count ?? 0}
+            sub={`Completed all ${kappa?.total_letters ?? 0} letters`}
+            valueClass={
+              (kappa?.completed_scorer_count ?? 0) > 0
+                ? "text-pos"
+                : "text-warn"
+            }
+          />
+
+          <StatCard
+            label="Evaluation letters"
+            value={kappa?.total_letters ?? 0}
+            sub="Each completed researcher scores every letter"
+            valueClass="text-text1"
+          />
+
+          <StatCard
+            label="Fleiss' Kappa"
+            value="Pending"
+            sub="Calculated after completion"
+            valueClass="text-text3"
+          />
+        </div>
+
+        <p className="mt-5 text-xs text-text3">
+          {kappa?.message || "Awaiting completed researcher ratings."}
+        </p>
+      </div>
     </Layout>
   );
 
@@ -100,40 +174,91 @@ function ResearchResults() {
     return matchScenario && matchLlm && matchSearch;
   });
 
-  const totalScored  = progress?.scored ?? 0;
-  const totalLetters = progress?.total ?? letters.length;
-  const scorersCount = results?.scorer_count ?? results?.scorers_complete ?? 0;
+  const totalLetters = kappa?.total_letters ?? letters.length;
+  const fullyRatedLetters = kappa?.fully_rated_letter_count ?? 0;
+  const completedScorers = kappa?.completed_scorer_count ?? 0;
+  const includedScorers = kappa?.included_scorer_count ?? completedScorers;
+
+  // Collect all unique scorer keys across all letters for dynamic D5 column headers.
+  const allScorerKeys = Array.from(
+    new Set(letters.flatMap(l => Object.keys(l.d5_scores_by_scorer || {})))
+  );
+
+    const rankedLlms = LLM_ORDER
+    .map((llm) => {
+      const stats = summary[llm];
+
+      if (!stats || stats.combined_quality_mean == null) {
+        return null;
+      }
+
+      return {
+        key: llm,
+        name: LLM_DISPLAY[llm] || llm,
+        combinedQuality: stats.combined_quality_mean,
+        autoQuality: stats.auto_quality_mean,
+        d5Mean: stats.d5_mean,
+        averageResponseTime: stats.avg_response_time_seconds,
+        averageTokens: stats.avg_total_tokens,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.combinedQuality - a.combinedQuality);
 
   return (
     <Layout title="LLM Evaluation Results">
 
-      {/* SECTION 1 - Summary cards */}
+      {/* SECTION 1 - Final evaluation summary */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         <StatCard
-          label="Total letters scored"
-          value={`${totalScored} / ${totalLetters}`}
-          sub="Across all scorers"
+          label="Fully rated letters"
+          value={`${fullyRatedLetters} / ${totalLetters}`}
+          sub="Common rating set used for Fleiss' Kappa"
+          valueClass={
+            fullyRatedLetters === totalLetters ? "text-pos" : "text-warn"
+          }
         />
+
         <StatCard
-          label="Scorers completed"
-          value={`${scorersCount} / 2`}
-          sub="Allan and Mohammad"
-          valueClass={scorersCount === 2 ? "text-pos" : "text-warn"}
+          label="Completed researchers"
+          value={completedScorers}
+          sub={`${includedScorers} included in reliability analysis`}
+          valueClass="text-pos"
         />
+
         <StatCard
-          label="Cohen's Kappa"
-          value={kappa?.kappa != null ? kappa.kappa.toFixed(3) : "Pending"}
-          sub={kappa?.interpretation || "Awaiting both scorers"}
-          valueClass={kappa?.kappa != null ? "text-accent2" : "text-text3"}
+          label="Fleiss' Kappa"
+          value={kappa?.kappa != null ? kappa.kappa.toFixed(3) : "—"}
+          sub={kappa?.interpretation || "Not available"}
+          valueClass="text-accent2"
         />
+
         <StatCard
           label="Observed agreement"
-          value={kappa?.observed_agreement != null
-            ? `${(kappa.observed_agreement * 100).toFixed(1)}%`
-            : "—"}
-          sub={kappa?.paired_count != null ? `${kappa.paired_count} paired scores` : ""}
+          value={
+            kappa?.observed_agreement != null
+              ? `${(kappa.observed_agreement * 100).toFixed(1)}%`
+              : "—"
+          }
+          sub={`${fullyRatedLetters} letters · ${includedScorers} raters`}
+          valueClass="text-text1"
         />
       </div>
+
+      {kappa?.kappa != null && kappa.kappa < 0 && (
+        <div className="mb-6 px-4 py-3 bg-warn/10 border border-warn/20 rounded-lg">
+          <div className="text-xs font-semibold text-warn mb-1">
+            Reliability interpretation note
+          </div>
+
+          <p className="text-xs text-text2 leading-relaxed">
+            The negative Fleiss&apos; Kappa occurred alongside high observed agreement
+            because D5 ratings were heavily concentrated in one response category.
+            Kappa should therefore be interpreted alongside observed agreement and
+            rating distribution.
+          </p>
+        </div>
+      )}
 
       {/* SECTION 2 - Per-LLM table */}
       <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mb-6">
@@ -202,125 +327,136 @@ function ResearchResults() {
         </div>
       </div>
 
-        {/* RANKINGS & ANALYSIS */}
+        {/* SECTION 2B - Dynamic ranking and study interpretation */}
         <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mb-6">
           <div className="px-5 py-3.5 border-b border-white/7">
-            <span className="text-sm font-semibold text-text1">Rankings and Analysis</span>
+            <span className="text-sm font-semibold text-text1">
+              Rankings and Study Interpretation
+            </span>
           </div>
-          <div className="p-5">
 
-            {/* Overall Ranking Table */}
-            <div className="mb-6">
-              <div className="text-xs text-text3 uppercase tracking-wider mb-3">Overall ranking by combined score</div>
+          <div className="p-5">
+            <div className="text-xs text-text3 uppercase tracking-wider mb-3">
+              Overall ranking by combined quality score
+            </div>
+
+            <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-white/7 bg-white/[0.02]">
-                    {["Rank", "LLM", "Model", "Combined Score", "Verdict"].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider">
-                        {h}
+                    {[
+                      "Rank",
+                      "LLM",
+                      "Combined score",
+                      "Auto quality",
+                      "D5 mean",
+                      "Avg time",
+                      "Avg tokens",
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider whitespace-nowrap"
+                      >
+                        {heading}
                       </th>
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
-                  {[
-                    { rank: 1, llm: "Gemini",        model: "gemini-3.5-flash",     score: "4.257", verdict: "Best overall quality",           color: "text-pos" },
-                    { rank: 2, llm: "GPT-4o-mini",   model: "gpt-4o-mini",     score: "4.071", verdict: "Strong quality, high cost",      color: "text-accent2" },
-                    { rank: 3, llm: "GPT-4o",        model: "gpt-4o",     score: "4.057", verdict: "Strong quality, best tone",      color: "text-accent2" },
-                    { rank: 4, llm: "LLaMa",         model: "openai/gpt-oss-120b",     score: "4.014", verdict: "Fastest, most efficient",        color: "text-text2" },
-                  ].map(row => (
-                    <tr key={row.rank} className="border-b border-white/[0.04]">
-                      <td className="px-4 py-3 text-sm font-bold font-mono text-text3">#{row.rank}</td>
-                      <td className={`px-4 py-3 text-sm font-semibold ${row.color}`}>{row.llm}</td>
-                      <td className={`px-4 py-3 text-sm font-semibold ${row.color}`}>{row.model}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-text1">{row.score}</td>
-                      <td className="px-4 py-3 text-xs text-text2">{row.verdict}</td>
-                    </tr>
-                  ))}
+                  {rankedLlms.map((row, index) => {
+                    const rank = index + 1;
+                    const rankClass =
+                      rank === 1
+                        ? "text-pos"
+                        : rank === 2
+                          ? "text-accent2"
+                          : "text-text1";
+
+                    return (
+                      <tr
+                        key={row.key}
+                        className="border-b border-white/[0.04] hover:bg-accent/[0.04]"
+                      >
+                        <td className="px-4 py-3 text-sm font-bold font-mono text-text3">
+                          #{rank}
+                        </td>
+
+                        <td className={`px-4 py-3 text-sm font-semibold ${rankClass}`}>
+                          {row.name}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-mono text-text1">
+                          {row.combinedQuality.toFixed(3)}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-mono text-text2">
+                          {row.autoQuality != null ? row.autoQuality.toFixed(3) : "—"}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-mono text-text2">
+                          {row.d5Mean != null ? row.d5Mean.toFixed(3) : "—"}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-mono text-text2">
+                          {row.averageResponseTime != null
+                            ? `${row.averageResponseTime.toFixed(2)}s`
+                            : "—"}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-mono text-text2">
+                          {row.averageTokens != null
+                            ? row.averageTokens.toLocaleString()
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Strengths and Weaknesses */}
-            <div className="text-xs text-text3 uppercase tracking-wider mb-4">Strengths and weaknesses per LLM</div>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {[
-                {
-                  llm: "GPT-4o",
-                  strengths: [
-                    "Perfect professional tone (35/35 rated professional by both scorers) - highest D5 score",
-                    "Fast response (2.70s) and low token usage (1,007)",
-                  ],
-                  weaknesses: [
-                    "Rarely includes an explicit screening disclaimer (only 2/35 letters, D3=0.057) - patient safety concern",
-                  ],
-                },
-                {
-                  llm: "GPT-4o-mini",
-                  strengths: [
-                    "High combined quality score (4.071), competitive with GPT-4o",
-                  ],
-                  weaknesses: [
-                    "Anomalously high token usage (22,605 avg) - a known image tokenisation quirk, not a quality issue but a significant cost concern for production deployment",
-                    "Same disclaimer weakness as GPT-4o (only 3/35 letters, D3=0.086)",
-                  ],
-                },
-                {
-                  llm: "LLaMa (gpt-oss-120b)",
-                  strengths: [
-                    "By far the fastest (0.69s avg) and most token-efficient (448 avg tokens) - strong case for cost-effective deployment",
-                  ],
-                  weaknesses: [
-                    "Lowest disclaimer rate of all 4 LLMs (only 1/35 letters, D3=0.029) - highest patient safety risk",
-                    "Lowest combined score overall (4.014)",
-                  ],
-                },
-                {
-                  llm: "Gemini 3.5 Flash",
-                  strengths: [
-                    "Highest combined score overall (4.257) - best quality across all dimensions",
-                    "Best disclaimer rate (12/35 letters, D3=0.343) - most clinically safe framing",
-                  ],
-                  weaknesses: [
-                    "Slowest response time (7.22s avg) - may affect user experience in high-volume clinics",
-                    "Occasionally misses the referral request (D2=0.943, 2/35 letters had no explicit referral ask)",
-                  ],
-                },
-              ].map(item => (
-                <div key={item.llm} className="bg-surface2 rounded-xl border border-white/7 p-4">
-                  <div className="text-sm font-semibold text-text1 mb-3">{item.llm}</div>
-                  {item.strengths.map((s, i) => (
-                    <div key={i} className="flex gap-2 mb-2">
-                      <span className="text-pos text-xs mt-0.5 flex-shrink-0">✓</span>
-                      <span className="text-xs text-text2 leading-relaxed">{s}</span>
-                    </div>
-                  ))}
-                  {item.weaknesses.map((w, i) => (
-                    <div key={i} className="flex gap-2 mb-2">
-                      <span className="text-neg text-xs mt-0.5 flex-shrink-0">✗</span>
-                      <span className="text-xs text-text2 leading-relaxed">{w}</span>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="bg-surface2 rounded-xl border border-white/7 p-4">
+                <div className="text-xs font-semibold text-text1 mb-2">
+                  Ranking basis
                 </div>
-              ))}
-            </div>
 
-            {/* Important Notes */}
-            <div className="flex flex-col gap-3">
-              <div className="px-4 py-3 bg-warn/10 border border-warn/20 rounded-lg">
-                <div className="text-xs font-semibold text-warn mb-1">D3 - Screening disclaimer (critical safety dimension)</div>
-                <div className="text-xs text-text2 leading-relaxed">
-                  All 4 LLMs score very low on D3, with Gemini performing best at only 34.3%. This suggests the referral letter prompt should be updated to explicitly require a disclaimer statement. Flagged as a prompt engineering improvement for future work.
-                </div>
+                <p className="text-xs text-text2 leading-relaxed">
+                  Rankings are ordered by combined quality score. This is calculated
+                  as the automated D1-D4 quality score plus the mean D5 professional
+                  tone score across completed researchers. Response time and token
+                  usage are reported separately and do not affect the ranking.
+                </p>
               </div>
-              <div className="px-4 py-3 bg-accent/10 border border-accent/20 rounded-lg">
-                <div className="text-xs font-semibold text-accent2 mb-1">Cohen's Kappa = 0.000 with 97.1% observed agreement</div>
-                <div className="text-xs text-text2 leading-relaxed">
-                  This seemingly contradictory result occurs when both scorers rate nearly everything the same way (almost all 1s), making the expected agreement by chance also very high. The kappa calculation penalises for this. This is a known limitation of Kappa when rater agreement is uniformly high - the observed agreement (97.1%) is the more meaningful metric here.
+
+              <div className="bg-surface2 rounded-xl border border-white/7 p-4">
+                <div className="text-xs font-semibold text-text1 mb-2">
+                  Reliability context
                 </div>
+
+                <p className="text-xs text-text2 leading-relaxed">
+                  Fleiss&apos; Kappa evaluates agreement among the completed researcher
+                  cohort for D5 professional-tone ratings. It should be interpreted
+                  alongside observed agreement and the distribution of Yes and No
+                  ratings.
+                </p>
               </div>
             </div>
 
+            {kappa?.kappa != null && kappa.kappa < 0 && (
+              <div className="mt-4 px-4 py-3 bg-warn/10 border border-warn/20 rounded-lg">
+                <div className="text-xs font-semibold text-warn mb-1">
+                  Kappa interpretation note
+                </div>
+
+                <div className="text-xs text-text2 leading-relaxed">
+                  A negative Fleiss&apos; Kappa should not be interpreted in isolation.
+                  Review it together with observed agreement and the rating
+                  distribution, particularly when most ratings fall into one category.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -341,7 +477,7 @@ function ResearchResults() {
             className="bg-surface2 border border-white/12 rounded-lg px-3 py-1.5 text-xs text-text2 outline-none cursor-pointer font-sans"
           >
             <option value="all">All scenarios</option>
-            {[1, 2, 3, 4].map(s => (
+            {[1, 2, 3, 4, 7].map(s => (
               <option key={s} value={String(s)}>Scenario {s}</option>
             ))}
           </select>
@@ -359,7 +495,9 @@ function ResearchResults() {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-white/7 bg-white/[0.02]">
-              {["Case ID", "Scenario", ...(isComplete ? ["LLM"] : []), "Label", "D1", "D2", "D3", "D4", "D5 (Allan)", "D5 (Mohammad)", "Combined"].map(h => (
+              {["Case ID", "Scenario", ...(isComplete ? ["LLM"] : []), "Label", "D1", "D2", "D3", "D4",
+                ...allScorerKeys.map((_, i) => `D5 (Rater ${i + 1})`),
+                "Combined"].map(h => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-text3 uppercase tracking-wider whitespace-nowrap">
                   {h}
                 </th>
@@ -369,7 +507,7 @@ function ResearchResults() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={isComplete ? 11 : 10} className="px-4 py-8 text-center text-text3 text-sm">
+                <td colSpan={8 + (isComplete ? 1 : 0) + allScorerKeys.length} className="px-6 py-4 bg-surface2">
                   No letters match the current filters.
                 </td>
               </tr>
@@ -404,19 +542,18 @@ function ResearchResults() {
                       <td className="px-4 py-3 text-xs font-mono text-text2">{l.d2_referral_request ?? "—"}</td>
                       <td className="px-4 py-3 text-xs font-mono text-text2">{l.d3_screening_disclaimer ?? "—"}</td>
                       <td className="px-4 py-3 text-xs font-mono text-text2">{l.d4_no_hallucination ?? "—"}</td>
-                      <td className="px-4 py-3 text-xs font-mono text-text2">
-                        {scorerKeys[0] != null ? scores[scorerKeys[0]] ?? "—" : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-text2">
-                        {scorerKeys[1] != null ? scores[scorerKeys[1]] ?? "—" : "—"}
-                      </td>
+                        {allScorerKeys.map(key => (
+                        <td key={key} className="px-4 py-3 text-xs font-mono text-text2">
+                          {scores[key] ?? "—"}
+                        </td>
+                      ))}
                       <td className="px-4 py-3 text-xs font-mono text-text1 font-semibold">
                         {l.combined_quality_score != null ? l.combined_quality_score.toFixed(2) : "—"}
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr key={`${l.case_id}-expanded`} className="border-b border-white/[0.04]">
-                        <td colSpan={isComplete ? 11 : 10} className="px-6 py-4 bg-surface2">
+                        <td colSpan={8 + (isComplete ? 1 : 0) + allScorerKeys.length} className="px-4 py-8 text-center text-text3 text-sm">
                           <div className="text-xs text-text3 uppercase tracking-wider mb-2">Full letter</div>
                           <div className="text-sm text-text1 leading-relaxed whitespace-pre-wrap">
                             {l.referral_letter}
@@ -438,11 +575,11 @@ function ResearchResults() {
       {/* SECTION 4 - Notes */}
       <div className="bg-surface border border-white/7 rounded-xl p-5 text-xs text-text3 leading-relaxed">
         <div className="font-semibold text-text2 mb-2">Scoring notes</div>
-        D5 scores shown are the mean of both scorer ratings.
-        Cohen's Kappa measures inter-rater agreement on D5.
-        Auto scores (D1-D4) were calculated algorithmically.
-        Response time and token usage are captured from live API calls.
-        GPT-4o-mini token counts are anomalously high due to a known image token processing quirk - this is consistent across all 35 cases and does not affect quality scores.
+        D5 scores shown are the mean across {includedScorers} completed researcher ratings.
+        Fleiss&apos; Kappa measures inter-rater agreement on D5 professional-tone ratings.
+        Auto scores D1-D4 were calculated algorithmically.
+        Combined quality equals automated quality plus the mean D5 score.
+        Response time and token usage are operational metrics and do not affect quality scores.
       </div>
 
     </Layout>

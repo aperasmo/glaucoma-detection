@@ -13,6 +13,7 @@ const SCENARIO_LABELS = {
   2: "Low confidence + OHTS Critical",
   3: "High confidence + OHTS Low",
   4: "High confidence + No OHTS",
+  7: "False Positive - model predicted glaucoma, ground truth normal",
 };
 
 function AutoScoreRow({ label, value }) {

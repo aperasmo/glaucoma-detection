@@ -124,6 +124,8 @@ const [general, setGeneral] = useState({
 const [thresholds, setThresholds] = useState({
   HIGH_RISK_THRESHOLD: "0.60",
   SENSITIVITY_THRESHOLD: "0.47",
+  BORDERLINE_LOW: "0.15",
+  BORDERLINE_HIGH: "0.18",
 });
 
   // Block navigation when dirty
@@ -161,9 +163,12 @@ const [thresholds, setThresholds] = useState({
           NOTIFICATION_EMAIL:     map.NOTIFICATION_EMAIL || "",
           NOTIFICATION_THRESHOLD: map.NOTIFICATION_THRESHOLD || "critical,possible",
         });
+        const borderlineParts = (map.BORDERLINE_THRESHOLD || "0.35;0.50").split(";");
         setThresholds({
           HIGH_RISK_THRESHOLD: map.HIGH_RISK_THRESHOLD || "0.60",
           SENSITIVITY_THRESHOLD: map.SENSITIVITY_THRESHOLD || "0.47",
+          BORDERLINE_LOW: borderlineParts[0] || "0.35",
+          BORDERLINE_HIGH: borderlineParts[1] || "0.50",
         });
         setLoading(false);
       })
@@ -186,16 +191,33 @@ const [thresholds, setThresholds] = useState({
 
 
   // Inference mode - saves immediately, never dirty
-  async function saveSetting(key, value) {
+  // async function saveSetting(key, value) {
+  //   try {
+  //     await API.put(`/settings/${key}`, { set_value: value, status: "A" });
+  //     await refreshSettings();
+  //     setSettings(prev => ({ ...prev, [key]: value }));
+  //   } catch {
+  //     setError("Failed to save inference mode.");
+  //   }
+  // }
+
+// Immediate-save settings (Inference Mode, CNN Model, LLM selector).
+  // Uses POST upsert so new settings are created safely on first save.
+  // Never marks isDirty - changes take effect immediately.
+  async function saveSetting(key, value, setName = key, category = "General") {
     try {
-      await API.put(`/settings/${key}`, { set_value: value, status: "A" });
+      await API.post("/settings/", {
+        set_code: key,
+        set_value: value,
+        set_name: setName,
+        category: category,
+      });
       await refreshSettings();
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch {
-      setError("Failed to save inference mode.");
+      setError("Failed to save setting. Please try again.");
     }
   }
-
   // Save all settings using POST upsert
 async function saveAll() {
   setSaving(true);
@@ -229,6 +251,7 @@ async function saveAll() {
       { set_code: "CLINIC_ADDRESS",            set_value: general.CLINIC_ADDRESS,            category: "General", set_name: "Clinic Address" },
       { set_code: "CLINIC_PHONE",              set_value: general.CLINIC_PHONE,              category: "General", set_name: "Clinic Phone" },
       { set_code: "CLINIC_EMAIL",              set_value: general.CLINIC_EMAIL,              category: "General", set_name: "Clinic Email" },
+      { set_code: "BORDERLINE_THRESHOLD", set_value: `${thresholds.BORDERLINE_LOW};${thresholds.BORDERLINE_HIGH}`, category: "ML", set_name: "Borderline Confidence Threshold" },
     ];
 
     try {
@@ -490,6 +513,222 @@ function updateThresholds(key, value) {
                   </p>
                 </div>
 
+          {/* CNN MODEL SELECTOR */}
+          <SectionDivider label="Default CNN Model" />
+          <div className="mb-5">
+            <p className="text-xs text-text3 mb-3 leading-relaxed">
+              Select the default CNN model used for clinical screening. Ensemble is recommended for highest accuracy.
+              Only Admin can change this setting. Changes take effect immediately.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                {
+                  value: "ensemble",
+                  label: "Ensemble",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="11" cy="11" r="8" stroke="#7C6AF7" strokeWidth="1.8" opacity="0.9"/>
+                      <circle cx="21" cy="11" r="8" stroke="#7C6AF7" strokeWidth="1.8" opacity="0.9"/>
+                      <circle cx="16" cy="21" r="8" stroke="#7C6AF7" strokeWidth="1.8" opacity="0.9"/>
+                      <circle cx="16" cy="15" r="3" fill="#7C6AF7"/>
+                    </svg>
+                  ),
+                  best: "Highest AUC 0.9270 · Best F1 0.732",
+                  weakness: "Requires all 3 models to run simultaneously",
+                },
+                {
+                  value: "efficientnetb0",
+                  label: "EfficientNetB0",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="4" y="3" width="24" height="5" rx="2" stroke="#10B981" strokeWidth="1.6"/>
+                      <rect x="6" y="11" width="20" height="5" rx="2" stroke="#10B981" strokeWidth="1.6"/>
+                      <rect x="9" y="19" width="14" height="5" rx="2" stroke="#10B981" strokeWidth="1.6"/>
+                      <rect x="12" y="27" width="8" height="3" rx="1.5" fill="#10B981"/>
+                    </svg>
+                  ),
+                  best: "Best Grad-CAM++ interpretability",
+                  weakness: "Lowest specificity at 76.4%",
+                },
+                {
+                  value: "vgg16",
+                  label: "VGG16",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="4" y="3" width="24" height="6" rx="2" fill="#F59E0B" opacity="0.3" stroke="#F59E0B" strokeWidth="1.6"/>
+                      <rect x="4" y="12" width="24" height="6" rx="2" fill="#F59E0B" opacity="0.55" stroke="#F59E0B" strokeWidth="1.6"/>
+                      <rect x="4" y="21" width="24" height="6" rx="2" fill="#F59E0B" stroke="#F59E0B" strokeWidth="1.6"/>
+                    </svg>
+                  ),
+                  best: "Highest individual AUC 0.9198",
+                  weakness: "Heaviest architecture - 138M parameters",
+                },
+                {
+                  value: "efficientnetv2",
+                  label: "EfficientNetV2",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="4" y="3" width="24" height="5" rx="2" stroke="#06B6D4" strokeWidth="1.6"/>
+                      <rect x="6" y="11" width="20" height="5" rx="2" stroke="#06B6D4" strokeWidth="1.6"/>
+                      <rect x="9" y="19" width="14" height="5" rx="2" stroke="#06B6D4" strokeWidth="1.6"/>
+                      <rect x="12" y="27" width="8" height="3" rx="1.5" fill="#06B6D4"/>
+                      <text x="26" y="9" fontSize="6" fontWeight="700" textAnchor="middle" fill="#06B6D4" fontFamily="sans-serif">V2</text>
+                    </svg>
+                  ),
+                  best: "Highest specificity 89.7% at Youden threshold",
+                  weakness: "Lowest individual AUC 0.9091",
+                },
+              ].map(model => {
+                const isActive = (settings.DEFAULT_CNN_MODEL || "ensemble") === model.value;
+                return (
+                  <div
+                    key={model.value}
+                    onClick={() => saveSetting(
+                      "DEFAULT_CNN_MODEL",
+                      model.value,
+                      "Default CNN Model",
+                      "ML"
+                    )}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      isActive
+                        ? "border-accent bg-accent/10"
+                        : "border-white/7 bg-surface2 hover:border-white/20"
+                    }`}
+                  >
+                    <div className={`text-sm font-semibold mb-1 flex items-center gap-2 ${
+                      isActive ? "text-accent2" : "text-text1"
+                    }`}>
+                      {model.icon}
+                      {model.label}
+                      {isActive && (
+                        <span className="text-xs bg-accent/20 text-accent2 px-2 py-0.5 rounded-full">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-pos mb-1">
+                      ✓ {model.best}
+                    </div>
+                    <div className="text-xs text-text3">
+                      ✗ {model.weakness}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-text3 mt-3">
+              ℹ CNN model selection saves immediately — no need to click Save All.
+            </p>
+          </div>
+
+          {/* LLM SELECTOR */}
+          <SectionDivider label="Default Clinical LLM" />
+          <div className="mb-5">
+            <p className="text-xs text-text3 mb-3 leading-relaxed">
+              Select the default LLM used to generate referral letters in Clinical Mode.
+              GPT-4o is recommended for best clinical quality.
+              Only Admin can change this setting. Changes take effect immediately.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                {
+                  value: "gpt4o",
+                  label: "GPT-4o",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="1.8"/>
+                      <path d="M16,6 C20,6 23,9.5 23,14 C23,17 21,19.5 18,21 L16,22 L14,21 C11,19.5 9,17 9,14 C9,9.5 12,6 16,6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                      <circle cx="16" cy="14" r="3" fill="currentColor"/>
+                    </svg>
+                  ),
+                  iconColor: "text-text1",
+                  best: "Most capable multimodal - best clinical reasoning",
+                  weakness: "Highest cost per request",
+                },
+                {
+                  value: "gpt4o_mini",
+                  label: "GPT-4o Mini",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="1.8"/>
+                      <path d="M16,6 C20,6 23,9.5 23,14 C23,17 21,19.5 18,21 L16,22 L14,21 C11,19.5 9,17 9,14 C9,9.5 12,6 16,6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                      <circle cx="16" cy="14" r="3" fill="currentColor"/>
+                      <text x="20" y="23" fontSize="7" fontWeight="500" fill="currentColor" fontFamily="sans-serif">mini</text>
+                    </svg>
+                  ),
+                  iconColor: "text-text1",
+                  best: "Cheaper and faster than GPT-4o",
+                  weakness: "Less capable on complex clinical reasoning",
+                },
+                {
+                  value: "gemini",
+                  label: "Gemini 3.5 Flash",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="16" cy="16" r="14" stroke="#4285F4" strokeWidth="1.8"/>
+                      <path d="M16,5 C17.5,10.5 21.5,14.5 27,16 C21.5,17.5 17.5,21.5 16,27 C14.5,21.5 10.5,17.5 5,16 C10.5,14.5 14.5,10.5 16,5Z" fill="#4285F4"/>
+                    </svg>
+                  ),
+                  iconColor: "",
+                  best: "Strong vision capability with large context window",
+                  weakness: "Daily quota limits on free tier",
+                },
+                {
+                  value: "llama",
+                  label: "LLaMA (gpt-oss-120b)",
+                  icon: (
+                    <svg viewBox="0 0 32 32" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="16" cy="16" r="14" stroke="#0082FB" strokeWidth="1.8"/>
+                      <text x="16" y="18" fontSize="9" fontWeight="600" textAnchor="middle" fill="#0082FB" fontFamily="sans-serif">Llama</text>
+                    </svg>
+                  ),
+                  iconColor: "",
+                  best: "Fastest inference via Groq",
+                  weakness: "Not clinically trained",
+                },
+              ].map(llm => {
+                const isActive = (settings.DEFAULT_CLINICAL_LLM || "gpt4o") === llm.value;
+                return (
+                  <div
+                    key={llm.value}
+                    onClick={() => saveSetting(
+                      "DEFAULT_CLINICAL_LLM",
+                      llm.value,
+                      "Default Clinical LLM",
+                      "ML"
+                    )}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      isActive
+                        ? "border-accent bg-accent/10"
+                        : "border-white/7 bg-surface2 hover:border-white/20"
+                    }`}
+                  >
+                    <div className={`text-sm font-semibold mb-1 flex items-center gap-2 ${
+                      isActive ? "text-accent2" : "text-text1"
+                    }`}>
+                      <span className={llm.iconColor}>{llm.icon}</span>
+                      {llm.label}
+                      {isActive && (
+                        <span className="text-xs bg-accent/20 text-accent2 px-2 py-0.5 rounded-full">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-pos mb-1">
+                      ✓ {llm.best}
+                    </div>
+                    <div className="text-xs text-text3">
+                      ✗ {llm.weakness}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-text3 mt-3">
+              ℹ LLM selection saves immediately — no need to click Save All.
+            </p>
+          </div>
+
                 <SectionDivider label="Threshold Settings" />
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <FormField
@@ -513,6 +752,36 @@ function updateThresholds(key, value) {
                     />
                   </FormField>
                 </div>
+                <SectionDivider label="Borderline Confidence Range" />
+                <div className="mb-4">
+                  <p className="text-xs text-text3 mb-3 leading-relaxed">
+                    Normal predictions within this confidence range are flagged for clinical review.
+                    Values are in decimal — e.g. 0.35 = 35%. Saved as low;high pair.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      label="Borderline From (%)"
+                      hint="Lower bound — e.g. 0.35 for 35%."
+                    >
+                      <input type="number" step="0.01" min="0" max="1"
+                        className={isDemo ? inputDisabledClass : inputClass}
+                        value={thresholds.BORDERLINE_LOW}
+                        onChange={e => updateThresholds("BORDERLINE_LOW", e.target.value)}
+                      />
+                    </FormField>
+                    <FormField
+                      label="Borderline To (%)"
+                      hint="Upper bound — e.g. 0.50 for 50%."
+                    >
+                      <input type="number" step="0.01" min="0" max="1"
+                        className={isDemo ? inputDisabledClass : inputClass}
+                        value={thresholds.BORDERLINE_HIGH}
+                        onChange={e => updateThresholds("BORDERLINE_HIGH", e.target.value)}
+                      />
+                    </FormField>
+                  </div>
+                </div>
+
               </>
             )}
           </div>

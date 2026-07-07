@@ -64,7 +64,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
-
+    MISTRAL_API_KEY: str = ""
+    
     # --- Test images directory ---
     TEST_IMAGES_DIR: str = "test_images"
     TEST_IMAGES_DONE_DIR: str = "test_images/done"

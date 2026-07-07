@@ -34,7 +34,11 @@ function ScreeningResult() {
   const [isPrintingPdf, setIsPrintingPdf] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [actionError, setActionError] = useState("");
-
+  // Disagreement letter state - Clinical Mode only.
+  // Tracks the second opinion letter content, loading state, and completion.
+  const [disagreementLetter, setDisagreementLetter] = useState(null);
+  const [isRequestingDisagreement, setIsRequestingDisagreement] = useState(false);
+  const [disagreementLetterDone, setDisagreementLetterDone] = useState(false);
   const { getSetting } = useSettings();
 
   useEffect(() => {
@@ -57,6 +61,16 @@ function ScreeningResult() {
           resultData?.results?.find(
             item => item.referral_letter != null && item.llm_used !== null
           );
+
+          // Check if a disagreement letter already exists on this screening record.
+          // letter_type === "disagreement" is set by the backend at generation time.
+          const existingDisagreementLetter = resultData?.results?.find(
+            item => item.letter_type === "disagreement" && item.referral_letter != null
+          );
+          if (existingDisagreementLetter) {
+            setDisagreementLetter(existingDisagreementLetter.referral_letter);
+            setDisagreementLetterDone(true);
+          }
 
         if (gpt4oReferral?.signed_by) {
           setSignedBy(normaliseSignatoryText(gpt4oReferral.signed_by));
@@ -109,16 +123,39 @@ function ScreeningResult() {
   // It does not use the current global INFERENCE_MODE setting.
   const inferenceMode = data?.inference_mode || "clinical";
 
+  // Single letter slot - picks up standard referral or disagreement letter.
+  // These two states never coexist on the same screening.
   const primaryReferral =
-    getReferralResult(results, "gpt4o") ||
-    results.find(item => item.referral_letter != null && item.llm_used !== null) ||
-    null;
+  getReferralResult(results, "gpt4o") ||
+  results.find(item => item.referral_letter != null && item.llm_used !== null) ||
+  null; 
 
   const effectiveSignedBy = normaliseSignatoryText(
     primaryReferral?.signed_by || signedBy || ""
   );
 
   const canExportReferral = Boolean(primaryReferral?.referral_letter);
+
+  // Requests a second opinion letter from the backend when model disagreement
+  // is detected. Called only from Clinical Mode. Research Mode is unaffected.
+  async function handleRequestDisagreementLetter() {
+    if (isRequestingDisagreement || disagreementLetterDone) return;
+    setIsRequestingDisagreement(true);
+    setActionError("");
+    try {
+      // Generate the disagreement letter on the backend.
+      await API.post(`/screenings/${screeningId}/disagreement-letter`);
+      // Refetch full result so primaryReferral picks up the new letter immediately.
+      // No need to manage disagreementLetter state separately.
+      const resultRes = await API.get(`/results/${screeningId}/full`);
+      setData(resultRes.data);
+      setDisagreementLetterDone(true);
+    } catch {
+      setActionError("Unable to generate second opinion letter. Please try again.");
+    } finally {
+      setIsRequestingDisagreement(false);
+    }
+  }
 
   async function handleSaveSignatory() {
     const nextSignedBy = normaliseSignatoryText(signatoryInput);
@@ -237,6 +274,11 @@ function ScreeningResult() {
     handleDownloadReferralPdf,
     actionError,
     navigate,
+    // Disagreement letter props - Clinical Mode only. Research Mode ignores these.
+    disagreementLetter,
+    isRequestingDisagreement,
+    disagreementLetterDone,
+    handleRequestDisagreementLetter,
   };
 
   if (loading) {
