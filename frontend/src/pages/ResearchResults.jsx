@@ -11,7 +11,7 @@ const LLM_ORDER = ["gpt4o", "gpt4o_mini", "llama", "gemini"];
 const LLM_DISPLAY = {
   gpt4o:     "GPT-4o",
   gpt4o_mini:"GPT-4o-mini",
-  llama:     "LLaMa",
+  llama:     "GPT-OSS 120B",
   gemini:    "Gemini",
 };
 
@@ -327,25 +327,29 @@ function ResearchResults() {
         </div>
       </div>
 
-        {/* SECTION 2B - Dynamic ranking and study interpretation */}
+        {/* SECTION 2B - Comparative summary and study interpretation */}
         <div className="bg-surface border border-white/7 rounded-xl overflow-hidden mb-6">
           <div className="px-5 py-3.5 border-b border-white/7">
             <span className="text-sm font-semibold text-text1">
-              Rankings and Study Interpretation
+              Comparative Summary
             </span>
           </div>
 
           <div className="p-5">
             <div className="text-xs text-text3 uppercase tracking-wider mb-3">
-              Overall ranking by combined quality score
+              Sorted by combined quality score
             </div>
+
+            <p className="text-xs text-text3 mb-4 leading-relaxed">
+              Reported descriptively for comparison purposes. Not a ranking, clinical endorsement, or claim of superiority.
+            </p>
+
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-white/7 bg-white/[0.02]">
                     {[
-                      "Rank",
                       "LLM",
                       "Combined score",
                       "Auto quality",
@@ -364,25 +368,13 @@ function ResearchResults() {
                 </thead>
 
                 <tbody>
-                  {rankedLlms.map((row, index) => {
-                    const rank = index + 1;
-                    const rankClass =
-                      rank === 1
-                        ? "text-pos"
-                        : rank === 2
-                          ? "text-accent2"
-                          : "text-text1";
-
+                  {rankedLlms.map((row) => {
                     return (
                       <tr
                         key={row.key}
                         className="border-b border-white/[0.04] hover:bg-accent/[0.04]"
                       >
-                        <td className="px-4 py-3 text-sm font-bold font-mono text-text3">
-                          #{rank}
-                        </td>
-
-                        <td className={`px-4 py-3 text-sm font-semibold ${rankClass}`}>
+                        <td className="px-4 py-3 text-sm font-semibold text-text1">
                           {row.name}
                         </td>
 
@@ -419,14 +411,14 @@ function ResearchResults() {
             <div className="grid grid-cols-2 gap-4 mt-6">
               <div className="bg-surface2 rounded-xl border border-white/7 p-4">
                 <div className="text-xs font-semibold text-text1 mb-2">
-                  Ranking basis
+                  Sorting basis
                 </div>
 
                 <p className="text-xs text-text2 leading-relaxed">
-                  Rankings are ordered by combined quality score. This is calculated
+                  This table is sorted by combined quality score. This is calculated
                   as the automated D1-D4 quality score plus the mean D5 professional
                   tone score across completed researchers. Response time and token
-                  usage are reported separately and do not affect the ranking.
+                  usage are reported separately and do not affect the sort order.
                 </p>
               </div>
 
