@@ -182,3 +182,46 @@ This is an automated alert from Glaucoma AI Screening System.
             notification_email,
             message.as_string(),
         )        
+
+# --- Append below send_account_locked_notification() in backend/app/utils/notifications.py ---
+# Keep everything above it exactly as is.
+
+
+def send_feedback_notification(
+    alert_email: str,
+    name: str,
+    email: str,
+    feedback_type: str,
+    subject: str,
+    description: str,
+    timestamp: str,
+) -> None:
+    # Send feedback email to the configured alert address.
+    # Matches the same SMTP_SSL pattern as the other notification functions.
+
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    msg = MIMEMultipart()
+    msg["Subject"] = f"[GlaucomaAI Feedback] {feedback_type} - {subject}"
+    msg["From"] = settings.SMTP_SENDER
+    msg["To"] = alert_email
+
+    body = f"""GlaucomaAI Feedback Submission
+    ==============================
+    Timestamp:   {timestamp}
+    From:        {name}
+    Email:       {email}
+    Type:        {feedback_type}
+    Subject:     {subject}
+
+    Description:
+    {description}
+    """
+
+    msg.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.sendmail(settings.SMTP_SENDER, alert_email, msg.as_string())

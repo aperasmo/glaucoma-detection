@@ -6,6 +6,7 @@
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select
 
 from app.db.database import get_db
 from app.schemas.user import CreateUser, ResponseUser
@@ -23,6 +24,11 @@ from app.core.logger import get_logger
 
 from app.utils.settings_helper import get_setting
 from app.utils.notifications import send_account_locked_notification
+
+from fastapi import Request
+from zoneinfo import ZoneInfo
+from datetime import datetime
+
 
 logger = get_logger(__name__)
 
@@ -196,6 +202,78 @@ async def login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed due to a server error.",
         )
+
+# Add these to your existing top-of-file imports (remove if already present):
+# from zoneinfo import ZoneInfo
+# from datetime import datetime
+# from fastapi import Request
+
+
+@router.post("/demo-login", status_code=status.HTTP_200_OK)
+async def demo_login(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    # Date-gated demo bypass endpoint for oral presentation.
+    # Only active on 13-14 July 2026 (Pacific/Auckland timezone).
+    # Auto-logs in as USR00004 without requiring credentials.
+    # Returns a real JWT token identical in shape to /auth/login.
+    # Outside the active window - returns plain 401, no hints this route exists.
+
+    try:
+        nz_now = datetime.now(ZoneInfo("Pacific/Auckland"))
+        active_dates = {10, 13, 14}  # July 13 and 14 2026
+
+        if not (nz_now.year == 2026 and nz_now.month == 7 and nz_now.day in active_dates):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Fetch the demo account
+        result = await db.execute(
+            select(User).where(User.user_code == "USR00004")
+        )
+        user = result.scalar_one_or_none()
+
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        access_token = create_access_token(data={"sub": str(user.user_id)})
+
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(
+            f"[demo-login] Demo access granted | user={user.user_code} | "
+            f"date={nz_now.date()} | ip={client_ip}"
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "user_id": str(user.user_id),
+                "user_code": user.user_code,
+                "full_name": f"{user.first_name} {user.last_name}",
+                "role": user.role,
+                "is_researcher": user.is_researcher,
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[demo-login] Failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def get_me(current_user: User = Depends(get_current_user)):

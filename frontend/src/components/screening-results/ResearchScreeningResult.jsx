@@ -289,7 +289,7 @@ function ResearchScreeningResult(props) {
                       className="w-2 h-2 rounded-full"
                       style={{ background: item.dot }}
                     />
-                    <span className="text-sm font-semibold text-text1">
+                    <span className="text-md font-semibold text-text1">
                       {item.label}
                     </span>
                   </div>
@@ -297,7 +297,7 @@ function ResearchScreeningResult(props) {
                   {item.result ? (
                     <>
                       <div className="text-xs text-pos mb-2">Generated</div>
-                      <div className="text-xs text-text3">
+                      <div className="text-xs text-text1 mb-2">
                         {item.result.generation_time_ms
                           ? `${Number(item.result.generation_time_ms).toFixed(0)/1000} secs.`
                           : "Generation time not recorded"}
@@ -312,7 +312,7 @@ function ResearchScreeningResult(props) {
 
                 <div className="border-t border-white/7 bg-surface2 p-4">
                   {item.result ? (
-                    <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap min-h-[260px] max-h-[420px] overflow-y-auto pr-1">
+                    <div className="text-sm text-text1 leading-relaxed whitespace-pre-wrap min-h-[260px] max-h-[420px] overflow-y-auto pr-1">
                       {item.result.referral_letter}
                     </div>
                   ) : (

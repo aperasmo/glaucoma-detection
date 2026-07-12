@@ -96,7 +96,18 @@ function Dashboard() {
   //   });
   // }
 
-  const greeting = new Date().getHours() < 12 ? "Good morning" : "Good afternoon";
+  //const greeting = new Date().getHours() < 12 ? "Good morning" : "Good afternoons";
+
+  const hour = new Date().getHours();
+
+  const greeting =
+    hour < 12
+      ? "Good morning"
+      : hour < 18
+        ? "Good afternoon"
+        : "Good evening";
+
+
   const today = new Date().toLocaleDateString("en-NZ", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
     timeZone: "Pacific/Auckland",
@@ -114,7 +125,7 @@ function Dashboard() {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-text1 mb-0.5">
-          {greeting}, {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}.
+          {greeting}, {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}...
         </h2>
         <p className="text-xs text-text3">{today}</p>
       </div>

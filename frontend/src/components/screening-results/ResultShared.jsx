@@ -13,7 +13,7 @@ export const MODEL_OPTIONS = [
 export const LLM_OPTIONS = [
   { key: "gpt4o", label: "GPT-4o", dot: "#10a37f" },
   { key: "gpt4o_mini", label: "GPT-4o Mini", dot: "#10a37f" },
-  { key: "llama", label: "LLaMA", dot: "#ff6b35" },
+  { key: "llama", label: "GPT-OSS 120B", dot: "#ff6b35" },
   { key: "gemini", label: "Gemini", dot: "#4285f4" },
 ];
 

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import Activate from "./pages/Activate";
 import Login from "./pages/Login";
+import DemoLogin from "./pages/DemoLogin";
 import Dashboard from "./pages/Dashboard";
 import PatientList from "./pages/PatientList";
 import NewPatient from "./pages/NewPatient";
@@ -44,6 +45,7 @@ function AdminRoute() {
 
 const router = createBrowserRouter([
   { path: "/", element: <Login /> },
+  { path: "/yoobeemse907capstone", element: <DemoLogin /> },
   { path: "/activate",               element: <Activate  /> },
   {
     element: <ProtectedRouteWrapper />,

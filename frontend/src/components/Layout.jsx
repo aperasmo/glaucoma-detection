@@ -77,6 +77,51 @@ function Layout({ title, actions, children }) {
 
 const [evaluationComplete, setEvaluationComplete] = useState(false);
 
+// Feedback modal state
+const [showFeedback, setShowFeedback] = useState(false); 
+const [feedback, setFeedback] = useState({ 
+  name: user?.full_name || "",
+  email: "",
+  type: "General Feedback",
+  subject: "",
+  description: "",
+});
+const [feedbackSending, setFeedbackSending] = useState(false);
+const [feedbackSent, setFeedbackSent] = useState(false);
+const [feedbackError, setFeedbackError] = useState(null);
+
+function openFeedback() {
+  setFeedback({
+    name: user?.full_name || "",
+    email: "",
+    type: "General Feedback",
+    subject: "",
+    description: "",
+  });
+  setFeedbackSent(false);
+  setFeedbackError(null);
+  setShowFeedback(true);
+}
+
+async function submitFeedback() {
+  if (!feedback.subject.trim() || !feedback.description.trim()) {
+    setFeedbackError("Subject and description are required.");
+    return;
+  }
+  setFeedbackSending(true);
+  setFeedbackError(null);
+  try {
+    await API.post("/feedback/", feedback);
+    setFeedbackSent(true);
+    setTimeout(() => setShowFeedback(false), 2000);
+  } catch {
+    setFeedbackError("Failed to send feedback. Please try again.");
+  } finally {
+    setFeedbackSending(false);
+  }
+}
+
+
 useEffect(() => {
   if (!user?.is_researcher) return;
   API.get("/evaluation/progress")
@@ -84,18 +129,6 @@ useEffect(() => {
     .catch(() => setEvaluationComplete(false));
 }, [user]);
 
-  // Sidebar collapse state - persisted so it stays put across reloads.
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("sidebarCollapsed") === "true"
-  );
-
-  function toggleCollapsed() {
-    setCollapsed(prev => {
-      const next = !prev;
-      localStorage.setItem("sidebarCollapsed", String(next));
-      return next;
-    });
-  }
 
   function handleLogout() {
     logout();
@@ -106,25 +139,121 @@ useEffect(() => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-text1 font-sans">
 
-      {/* SIDEBAR */}
-      <div className={`relative flex flex-col z-10 bg-sbBg border-r border-sbBorder transition-all duration-200 ease-in-out ${
-        collapsed ? "w-16 min-w-16" : "w-60 min-w-60"
-      }`}>
+    {/* FEEDBACK MODAL */}
+      {showFeedback && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-surface border border-white/12 rounded-xl w-full max-w-md mx-4 overflow-hidden">
 
-        {/* Collapse/expand toggle */}
-        <button
-          onClick={toggleCollapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-16 w-6 h-6 rounded-full bg-surface border border-border2 flex items-center justify-center text-text2 hover:text-text1 hover:bg-surface2 shadow-sm cursor-pointer z-20 transition-colors"
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"}
-            />
-          </svg>
-        </button>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-white/7 flex items-center justify-between">
+              <span className="text-sm font-semibold text-text1">Send Feedback</span>
+              <button
+                onClick={() => setShowFeedback(false)}
+                className="text-text3 hover:text-text2 bg-transparent border-0 cursor-pointer text-lg leading-none font-sans"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 flex flex-col gap-3">
+              {feedbackSent ? (
+                <div className="text-center py-6">
+                  <div className="text-2xl mb-2">✅</div>
+                  <div className="text-sm font-semibold text-pos mb-1">Feedback sent!</div>
+                  <div className="text-xs text-text3">Thank you. We will review your feedback shortly.</div>
+                </div>
+              ) : (
+                <>
+                  {/* Name - read only */}
+                  <div>
+                    <label className="block text-xs font-medium text-text2 mb-1.5">Name</label>
+                    <input
+                      value={feedback.name}
+                      readOnly
+                      className="w-full bg-surface3 border border-white/7 rounded-lg px-3 py-2.5 text-sm text-text3 outline-none cursor-not-allowed font-sans"
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-xs font-medium text-text2 mb-1.5">Email</label>
+                    <input
+                      type="email"
+                      value={feedback.email}
+                      onChange={e => setFeedback(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="your@email.com"
+                      className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans"
+                    />
+                  </div>
+
+                  {/* Type */}
+                  <div>
+                    <label className="block text-xs font-medium text-text2 mb-1.5">Type</label>
+                    <select
+                      value={feedback.type}
+                      onChange={e => setFeedback(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text2 outline-none cursor-pointer font-sans"
+                    >
+                      <option>General Feedback</option>
+                      <option>Bug Report</option>
+                      <option>Feature Request</option>
+                    </select>
+                  </div>
+
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-xs font-medium text-text2 mb-1.5">Subject</label>
+                    <input
+                      value={feedback.subject}
+                      onChange={e => setFeedback(prev => ({ ...prev, subject: e.target.value }))}
+                      placeholder="Brief summary of your feedback"
+                      className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-xs font-medium text-text2 mb-1.5">Description</label>
+                    <textarea
+                      value={feedback.description}
+                      onChange={e => setFeedback(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Tell us more..."
+                      rows={4}
+                      className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors font-sans resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  {feedbackError && (
+                    <div className="text-xs text-neg">{feedbackError}</div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex gap-2.5 justify-end pt-1">
+                    <button
+                      onClick={() => setShowFeedback(false)}
+                      className="px-4 py-2 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={submitFeedback}
+                      disabled={feedbackSending}
+                      className="px-4 py-2 text-xs font-medium text-white bg-accent hover:bg-accent2 disabled:bg-surface3 disabled:text-text3 rounded-lg border-0 transition-colors cursor-pointer font-sans"
+                    >
+                      {feedbackSending ? "Sending..." : "Send Feedback"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* SIDEBAR */}
+      <div className="w-60 min-w-60 bg-sbBg border-r border-sbBorder flex flex-col z-10">
 
       {/* Logo */}
       <div className="px-4 py-5 border-b border-sbBorder">
@@ -132,19 +261,15 @@ useEffect(() => {
           <img
             src={logoSrc}
             alt="Glaucoma AI"
-            className={`w-auto object-contain ${collapsed ? "h-6 max-w-[32px]" : "h-8 max-w-[190px]"}`}
+            className="h-8 w-auto max-w-[190px] object-contain"
           />
 
-          {!collapsed && (
-            <>
-              <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
-                Screening System
-              </div>
-              <div className="text-[11px] text-sbText3 font-mono mt-1 text-center opacity-80">
-                ver.{__APP_VERSION__}
-              </div>
-            </>
-          )}
+          <div className="text-[11px] text-sbText3 uppercase tracking-[0.22em] mt-2 text-center">
+            Screening System
+          </div>
+          <div className="text-[11px] text-sbText3 font-mono mt-1 text-center opacity-80">
+            ver.{__APP_VERSION__}
+          </div>        
         </div>
       </div>
 
@@ -160,13 +285,9 @@ useEffect(() => {
 
             return (
               <div key={group.label} className="mb-4">
-                {collapsed ? (
-                  <div className="h-px bg-sbBorder mx-2 mb-2" />
-                ) : (
-                  <div className="text-xs text-sbText3 uppercase tracking-widest px-2 mb-1.5">
-                    {group.label}
-                  </div>
-                )}
+                <div className="text-xs text-sbText3 uppercase tracking-widest px-2 mb-1.5">
+                  {group.label}
+                </div>
 
                 {visible.map(item => {
                   const isActive = location.pathname === item.path;
@@ -175,10 +296,7 @@ useEffect(() => {
                     <div
                       key={item.path}
                       onClick={() => navigate(item.path)}
-                      title={collapsed ? item.label : undefined}
-                      className={`relative flex items-center rounded-lg cursor-pointer text-sm mb-0.5 transition-all ${
-                        collapsed ? "justify-center px-0 py-2" : "gap-2.5 px-2.5 py-2"
-                      } ${
+                      className={`relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-sm mb-0.5 transition-all ${
                         isActive
                           ? "bg-sbActive text-sbActiveText font-medium"
                           : "text-sbText2 hover:bg-sbHover hover:text-sbText"
@@ -200,7 +318,7 @@ useEffect(() => {
                           aria-hidden="true"
                         />
 
-                      {!collapsed && item.label}
+                      {item.label}
                     </div>
                   );
                 })}
@@ -209,30 +327,36 @@ useEffect(() => {
           })}
         </div>
 
+        {/* Feedback link */}
+        <div className="px-3.5 pb-2">
+          <button
+            onClick={openFeedback}
+            className="w-full flex items-center gap-2 text-xs text-sbText3 hover:text-sbText2 bg-transparent border-0 cursor-pointer font-sans py-1.5 transition-colors"
+          >
+            <span className="text-sm">💬</span>
+            Send Feedback
+          </button>
+        </div>
+
         {/* User Footer */}
         <div className="px-2.5 py-3 border-t border-sbBorder">
           <div
             onClick={() => navigate("/profile")}
-            title={collapsed ? (user?.full_name ?? "Profile") : undefined}
-            className={`flex items-center rounded-lg cursor-pointer hover:bg-sbSurface2 transition-colors ${
-              collapsed ? "flex-col gap-1.5 p-2" : "gap-2.5 p-2"
-            }`}
+            className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-sbSurface2 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-white ring-1 ring-border2 shadow-sm flex-shrink-0">
               {getInitials(user)}
             </div>         
  
 
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-sbText truncate">
-                  {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}
-                </div>
-                <div className="text-xs text-sbText3 capitalize">
-                  {user?.role}
-                </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-sbText truncate">
+                {user?.full_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`}
               </div>
-            )}
+              <div className="text-xs text-sbText3 capitalize">
+                {user?.role}
+              </div>
+            </div>
 
             <button
               onClick={e => {

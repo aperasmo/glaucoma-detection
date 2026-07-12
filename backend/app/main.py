@@ -31,6 +31,7 @@ from app.api.routes.reports import router as reports_router # Reports routes - P
 
 from app.api.routes.model_performance import router as model_performance_router # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
 from app.api.routes.llm_evaluation import router as evaluation_router # 
+from app.api.routes.feedback import router as feedback_router
 
 
 # Module-level logger for main application events
@@ -89,6 +90,7 @@ app.include_router(admin_router) # Admin-only routes for system monitoring and m
 app.include_router(reports_router) # Reports routes - PDF exports and report endpoints
 app.include_router(model_performance_router) # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
 app.include_router(evaluation_router) # LLM evaluation
+app.include_router(feedback_router) # Feedback routes - handles feedback form submissions and sends them to the ops inbox
 
 # --- Health Check Endpoint ---
 # This is the first route we register.
