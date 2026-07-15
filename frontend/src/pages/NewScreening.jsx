@@ -53,6 +53,27 @@ function NewScreening() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [showSamplePicker, setShowSamplePicker] = useState(false);
+  const [selectedSample, setSelectedSample] = useState(null);
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [sampleImages] = useState(() => {
+    // Build the list of 20 sample fundus images and shuffle once on mount.
+    // Filenames stay internal only - never shown to the user (no labels).
+    const normals = Array.from({ length: 10 }, (_, i) =>
+      `/assets/sample-fundus/normal-${String(i + 1).padStart(2, "0")}.png`
+    );
+    const glaucomas = Array.from({ length: 10 }, (_, i) =>
+      `/assets/sample-fundus/glaucoma-${String(i + 1).padStart(2, "0")}.png`
+    );
+    const all = [...normals, ...glaucomas];
+    // Fisher-Yates shuffle so normal/glaucoma order is randomised, not grouped.
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
+    }
+    return all;
+  });
+
   const { getSetting } = useSettings();
   const activeMode = getSetting("INFERENCE_MODE", "clinical");    
 
@@ -82,6 +103,25 @@ function NewScreening() {
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
+
+  async function handleUseSample() {
+      if (!selectedSample) return;
+      setLoadingSample(true);
+      try {
+        const res = await fetch(selectedSample);
+        const blob = await res.blob();
+        const filename = selectedSample.split("/").pop();
+        const sampleFile = new File([blob], filename, { type: blob.type || "image/png" });
+        setFile(sampleFile);
+        setPreview(URL.createObjectURL(sampleFile));
+        setShowSamplePicker(false);
+        setSelectedSample(null);
+      } catch {
+        setError("Failed to load sample image. Please try again.");
+      } finally {
+        setLoadingSample(false);
+      }
+    }
 
   const filtered = patients.filter(p => {
     const name = `${p.first_name} ${p.last_name}`.toLowerCase();
@@ -201,7 +241,7 @@ function NewScreening() {
                 className="hidden"
               />
 
-              {preview ? (
+                {preview ? (
                 <div className="relative">
                   <img
                     src={preview}
@@ -217,18 +257,28 @@ function NewScreening() {
                   <p className="text-xs text-pos mt-2">✓ {file?.name}</p>
                 </div>
               ) : (
-                <div
-                  onClick={() => fileInputRef.current.click()}
-                  onDrop={handleDrop}
-                  onDragOver={e => e.preventDefault()}
-                  className="border-2 border-dashed border-white/12 rounded-xl p-8 text-center cursor-pointer hover:border-accent hover:bg-accent/[0.06] transition-all bg-surface2"
-                >
-                  <div className="text-3xl mb-2">📤</div>
-                  <div className="text-sm font-medium text-text1 mb-1">
-                    Drop fundus image here or click to upload
+                <>
+                  <div
+                    onClick={() => fileInputRef.current.click()}
+                    onDrop={handleDrop}
+                    onDragOver={e => e.preventDefault()}
+                    className="border-2 border-dashed border-white/12 rounded-xl p-8 text-center cursor-pointer hover:border-accent hover:bg-accent/[0.06] transition-all bg-surface2"
+                  >
+                    <div className="text-3xl mb-2">📤</div>
+                    <div className="text-sm font-medium text-text1 mb-1">
+                      Drop fundus image here or click to upload
+                    </div>
+                    <div className="text-xs text-text3">Supported: JPG, PNG · Max 10MB</div>
                   </div>
-                  <div className="text-xs text-text3">Supported: JPG, PNG · Max 10MB</div>
-                </div>
+
+                  {/* Sample image picker trigger - opens modal with 20 unlabelled samples */}
+                  <button
+                    onClick={() => setShowSamplePicker(true)}
+                    className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2.5 text-xs text-text2 border border-white/7 rounded-lg bg-surface2 hover:bg-surface3 hover:border-white/12 transition-colors cursor-pointer font-sans"
+                  >
+                    🖼 Or try a sample image ({sampleImages.length} available)
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -363,6 +413,81 @@ function NewScreening() {
         </div>
 
       </div>
+
+{/* SAMPLE IMAGE PICKER MODAL */}
+    {/* 20 unlabelled fundus images (10 normal, 10 glaucoma), shuffled on mount. */}
+    {/* No labels shown - keeps the demo blind, matches a genuine screening flow. */}
+    {showSamplePicker && (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-surface border border-white/12 rounded-xl w-full max-w-lg overflow-hidden">
+
+          <div className="px-5 py-4 border-b border-white/7 flex items-center justify-between">
+            <span className="text-sm font-semibold text-text1">Choose a sample image</span>
+            <button
+              onClick={() => { setShowSamplePicker(false); setSelectedSample(null); }}
+              className="text-text3 hover:text-text2 bg-transparent border-0 cursor-pointer text-lg leading-none font-sans"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-5">
+            <p className="text-xs text-text3 mb-3">
+              {sampleImages.length} sample fundus images available
+            </p>
+
+            <div className="grid grid-cols-5 gap-2 max-h-80 overflow-y-auto pr-1">
+              {sampleImages.map(src => {
+                const isSelected = selectedSample === src;
+                return (
+                  <div
+                    key={src}
+                    onClick={() => setSelectedSample(src)}
+                    className={`relative rounded-lg overflow-hidden cursor-pointer border-2 transition-all aspect-square ${
+                      isSelected ? "border-accent" : "border-transparent hover:border-white/20"
+                    }`}
+                  >
+                    <img
+                      src={src}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
+                        <span className="text-white text-[10px] leading-none">✓</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {error && (
+              <div className="mt-3 px-3 py-2 bg-neg/10 border border-neg/20 rounded-lg text-xs text-neg">
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2.5 mt-4">
+              <button
+                onClick={() => { setShowSamplePicker(false); setSelectedSample(null); }}
+                className="px-4 py-2 text-xs font-medium text-text2 border border-white/12 rounded-lg bg-transparent hover:bg-white/5 transition-colors cursor-pointer font-sans"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUseSample}
+                disabled={!selectedSample || loadingSample}
+                className="px-4 py-2 text-xs font-medium text-white bg-accent hover:bg-accent2 disabled:bg-surface3 disabled:text-text3 rounded-lg border-0 transition-colors cursor-pointer font-sans"
+              >
+                {loadingSample ? "Loading..." : "Use this image"}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    )}
 
     {/* Loading Overlay */}
     {loading && (
