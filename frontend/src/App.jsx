@@ -29,6 +29,8 @@ import { SettingsProvider } from "./context/SettingsContext";
 import ResearchEvaluation from "./pages/ResearchEvaluation";
 import ResearchResults from "./pages/ResearchResults";
 
+import PitchMode from "./pages/PitchMode";
+
 function ProtectedRoute() {
   const { token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
@@ -65,6 +67,7 @@ const router = createBrowserRouter([
       { path: "/research/results",    element: <ResearchResults /> },
       { path: "/reports/high-risk",        element: <ReportHighRisk /> },
       { path: "/profile",                element: <UserProfile /> },
+      { path: "/pitch", element: <PitchMode /> }
     ],
   },
 

@@ -17,7 +17,7 @@ function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
+  const [pitchMode, setPitchMode] = useState(false);
   const { currentTheme, themes } = useTheme();
   const isDarkTheme = themes[currentTheme]?.mode === "dark";
   const logoSrc = isDarkTheme
@@ -47,7 +47,7 @@ function Login() {
       });
 
       login(accessToken, userRes.data);
-      navigate("/dashboard");
+      navigate(pitchMode ? "/pitch" : "/dashboard");
       } catch (err) {
         const errorData = err.response?.data?.detail;
 
@@ -190,6 +190,23 @@ function Login() {
                 )}
               </div>
             )}
+            
+            {/* Pitch mode toggle */}
+            <div className="flex items-center gap-2 mb-5">
+              <input
+                type="checkbox"
+                id="pitchMode"
+                checked={pitchMode}
+                onChange={e => setPitchMode(e.target.checked)}
+                className="w-3.5 h-3.5 accent-[var(--accent)] cursor-pointer"
+              />
+              <label
+                htmlFor="pitchMode"
+                className="text-xs text-text3 cursor-pointer select-none"
+              >
+                Enter pitch mode after sign in
+              </label>
+            </div>
 
             {/* Submit */}
             <button
