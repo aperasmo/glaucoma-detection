@@ -191,7 +191,7 @@ function Login() {
               </div>
             )}
             
-            {/* Pitch mode toggle */}
+            {/* Pitch mode toggle
             <div className="flex items-center gap-2 mb-5">
               <input
                 type="checkbox"
@@ -206,7 +206,7 @@ function Login() {
               >
                 Enter pitch mode after sign in
               </label>
-            </div>
+            </div> */}
 
             {/* Submit */}
             <button
