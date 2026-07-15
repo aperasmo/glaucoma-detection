@@ -12,8 +12,8 @@ function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("aiglaucomascreeningsystem@gmail.com");
+  const [password, setPassword] = useState("TestAI@1234");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
