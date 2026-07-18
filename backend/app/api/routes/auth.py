@@ -198,7 +198,7 @@ async def demo_login(
     db: AsyncSession = Depends(get_db),
 ):
     # bypass login for the oral presentation - only works on 13-14 July 2026 (NZ time),
-    # auto logs in as USR00004. outside that window it just 401s like the route
+    # auto logs in as SYS00001. outside that window it just 401s like the route
     # doesn't exist, no hints given.
 
     try:
@@ -213,7 +213,7 @@ async def demo_login(
             )
 
         result = await db.execute(
-            select(User).where(User.user_code == "USR00004")
+            select(User).where(User.user_code == "SYS00001")
         )
         user = result.scalar_one_or_none()
 
