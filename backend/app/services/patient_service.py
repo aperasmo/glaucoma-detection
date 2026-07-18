@@ -1,14 +1,11 @@
-# backend/app/services/patient_service.py
-#
-# Business logic for patient management.
-# Handles patient creation, retrieval, update, and soft delete.
-# Kept separate from routes so logic can be reused and tested independently.
+# patient CRUD plus the joined query for the patient list page. kept out of
+# the routes file so it's easier to test on its own.
 
 import uuid
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_ # for complex queries
+from sqlalchemy import select, func, and_
 
 from app.models.patient import Patient
 from app.schemas.patient import CreatePatient, UpdatePatient
@@ -18,16 +15,14 @@ from app.models.screening_result import ScreeningResult
 from app.core.logger import get_logger
 
 async def generate_patient_code(db: AsyncSession) -> str:
-    # Generate the next sequential patient code e.g. PAT00001.
-    # Counts existing patients and increments by 1.
+    # just counts existing patients and bumps by one, e.g. PAT00001
     result = await db.execute(select(func.count()).select_from(Patient))
     count = result.scalar()
     return f"PAT{str(count + 1).zfill(5)}"
 
 
 async def get_patient_by_id(db: AsyncSession, patient_id: uuid.UUID):
-    # Fetch a single active patient by UUID.
-    # Returns None if not found or inactive.
+    # None if not found, or if the patient's been soft-deleted
     result = await db.execute(
         select(Patient).where(
             Patient.patient_id == patient_id,
@@ -51,25 +46,22 @@ async def get_patient_by_id(db: AsyncSession, patient_id: uuid.UUID):
 #    return result.scalars().all()
 
 async def get_all_patients(db: AsyncSession, skip: int = 0, limit: int = 50):
-    # Fetch all active patients with their latest screening event
-    # and the ensemble prediction result for Patient List display.
-    #
-    # Patient -> Screening -> ScreeningResult
-    # Uses LEFT JOIN so patients with no screening still appear.
-    # Complex query with window function to get latest screening per patient.
-    latest_screening_sq = ( #  Subquery to get latest screening per patient
+    # patient list page needs each patient's latest screening + ensemble result
+    # alongside them. Patient -> Screening -> ScreeningResult, left joined so
+    # patients with no screenings yet still show up.
+    latest_screening_sq = ( # rank screenings per patient so we can grab just the newest one
         select(
             Screening.screening_id.label("screening_id"),
             Screening.patient_id.label("patient_id"),
             Screening.eye_side.label("eye_side"),
             Screening.status.label("status"),
             Screening.created_at.label("screening_created_at"),
-            func.row_number() # Window function to rank screenings per patient by created_at
+            func.row_number()
             .over(
                 partition_by=Screening.patient_id,
                 order_by=Screening.created_at.desc(),
             )
-            .label("rn"), # We will filter for rn=1 in the outer query to get only the latest screening per patient
+            .label("rn"), # rn=1 is filtered for below - that's the latest one
         )
         .subquery()
     )
@@ -102,7 +94,7 @@ async def get_all_patients(db: AsyncSession, skip: int = 0, limit: int = 50):
             and_(
                 ScreeningResult.screening_id == latest_screening_sq.c.screening_id,
                 ScreeningResult.model_used == "ensemble",
-                ScreeningResult.llm_used.is_(None), # Ensure we only get the original ensemble result, not the LLM referral letter result
+                ScreeningResult.llm_used.is_(None), # otherwise this would also match the LLM referral letter rows
             ),
         )
         .where(Patient.is_active == True)
@@ -174,10 +166,7 @@ async def create_patient(
     patient_data: CreatePatient,
     created_by: uuid.UUID,
 ) -> Patient:
-    # Create a new patient record.
-    # Generates patient code automatically.
-    # Returns the created Patient object.
-
+    # code gets generated automatically, no need to pass one in
     patient_code = await generate_patient_code(db)
 
     new_patient = Patient(
@@ -209,15 +198,11 @@ async def update_patient(
     patient_data: UpdatePatient,
     updated_by: uuid.UUID,
 ) -> Patient:
-    # Update an existing patient record.
-    # Only updates fields that are provided - skips None values.
-    # Returns the updated Patient object.
-
     patient = await get_patient_by_id(db, patient_id)
     if not patient:
         raise ValueError("Patient not found.")
 
-    # Only update fields that were actually provided
+    # skip anything the caller didn't actually send
     update_data = patient_data.model_dump(exclude_none=True)
     for field, value in update_data.items():
         setattr(patient, field, value)
@@ -233,10 +218,7 @@ async def delete_patient(
     patient_id: uuid.UUID,
     updated_by: uuid.UUID,
 ) -> Patient:
-    # Soft delete a patient by setting is_active=False.
-    # Data is never permanently deleted - important for clinical audit trail.
-    # Returns the deactivated Patient object.
-
+    # soft delete only - we never hard-delete clinical records, need to keep the audit trail intact
     patient = await get_patient_by_id(db, patient_id)
     if not patient:
         raise ValueError("Patient not found.")

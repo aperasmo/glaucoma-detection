@@ -1,37 +1,20 @@
-# backend/scripts/check_llm_comparison_status.py
+# quick read-only status check for the LLM comparison study (paper 2).
+# queries the DB directly instead of the CSVs, since the CSVs have drifted
+# out of sync with the DB more than once after cleanup/retry cycles.
 #
-# PURPOSE (Paper 2 - LLM comparison research)
-# ---------------------------------------------------------------------------
-# Read-only status check. Queries the database directly (not the CSV files,
-# which can drift out of sync with the database after multiple cleanup/
-# retry cycles - confirmed happening more than once during this study) to
-# show exactly what's been seeded so far across all 6 scenarios:
+# for each of the 6 scenarios this prints: how many cases are seeded, which
+# ones have all 4 LLM letters, which are missing some, and a "what's left"
+# summary at the end. doesn't touch anything, so it's fine to run repeatedly
+# mid-run just to check progress.
 #
-#   - How many cases exist for each scenario
-#   - Which cases have a complete 4/4 LLM letter set
-#   - Which cases are missing one or more specific LLMs
-#   - A clear "what to do next" summary at the end
+# cases get matched to a scenario by confidence_score against SELECTED_CASES
+# (from seed_llm_comparison.py), not by reading the summary CSV - the DB is
+# the only thing this script trusts. confidence_score works well as a match
+# key because it's basically unique per image out to 4 decimal places, so
+# two different cases won't collide.
 #
-# This does NOT modify anything - safe to run anytime, as often as you
-# want, including mid-run to check progress.
-#
-# Cases are identified as belonging to a scenario by cross-referencing the
-# patient's OHTS profile (iop/cct/ohts target) and confidence_score against
-# the SELECTED_CASES list defined in seed_llm_comparison.py - NOT by
-# reading the summary CSV, since that file has been shown to drift from
-# the database after cleanup operations. The database itself is the only
-# source of truth this script trusts.
-#
-# Specifically, matching works by confidence_score (rounded) since that
-# value is a real, distinctive identifier carried from the original
-# discovery CSV into each case - two different real images essentially
-# never share the exact same confidence_score to 4 decimal places.
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN
-# -----------------------------------------------------------------------
+# run with:
 #   docker exec -it glaucoma_backend python -m scripts.check_llm_comparison_status
-# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -48,10 +31,8 @@ from app.models.screening import Screening
 from app.models.screening_result import ScreeningResult
 from app.models.patient import Patient
 
-# Import the same SELECTED_CASES list used by the seeding script, so this
-# status check always reflects whatever the 60-case plan currently is -
-# never hardcoded separately, never able to drift out of sync with the
-# actual seeding logic.
+# reuse the seeding script's own list so we never hardcode the case plan
+# separately and risk it drifting out of sync
 from scripts.seed_llm_comparison import SELECTED_CASES
 
 logger = get_logger(__name__)
@@ -60,15 +41,14 @@ ALL_LLMS = {"gpt4o", "gpt4o_mini", "llama", "gemini"}
 
 
 async def main():
-    # Build a lookup: confidence_score (rounded to 4dp) -> case info
+    # confidence_score (rounded to 4dp) -> case info
     case_by_confidence = {
         round(c["confidence_score"], 4): c for c in SELECTED_CASES
     }
 
     async with AsyncSessionLocal() as db:
-        # Fetch every research-mode screening with its ensemble confidence
-        # score and whatever screening_results rows it has (model_used +
-        # llm_used), in one query.
+        # grab every research-mode screening plus its ensemble confidence and
+        # whatever screening_results rows exist (model_used + llm_used) in one go
         result = await db.execute(
             select(
                 Screening.screening_id,
@@ -83,7 +63,7 @@ async def main():
         )
         rows = result.all()
 
-    # Group by screening_id
+    # group by screening_id
     by_screening = defaultdict(lambda: {"patient_code": None, "confidence": None, "llms": set()})
     for screening_id, patient_code, confidence_score, model_used, llm_used in rows:
         entry = by_screening[screening_id]
@@ -93,14 +73,14 @@ async def main():
         if llm_used is not None:
             entry["llms"].add(llm_used)
 
-    # Match each screening to a scenario via confidence_score
+    # match each screening back to a scenario via confidence_score
     scenario_status = defaultdict(list)
     unmatched = []
 
     for screening_id, entry in by_screening.items():
         conf = entry["confidence"]
         if conf is None:
-            continue  # screening exists but has no ensemble result yet - skip
+            continue  # screening exists but no ensemble result yet
         matched_case = case_by_confidence.get(conf)
         if not matched_case:
             unmatched.append((screening_id, entry["patient_code"], conf))
@@ -111,11 +91,11 @@ async def main():
             "patient_code": entry["patient_code"],
             "filename": matched_case["filename"],
             "confidence": conf,
-            "needs_llms": matched_case["scenario"] in {1, 2, 3, 4, 7},  # scenarios 5,6 never need letters; 7 does (FP cases)
+            "needs_llms": matched_case["scenario"] in {1, 2, 3, 4, 7},  # scenarios 5,6 skip letters; 7 needs them (FP cases)
             "has_llms": entry["llms"],
         })
 
-    # Expected counts per scenario, from the locked study design
+    # expected counts per scenario per the locked study design
     expected_counts = {1: 7, 2: 10, 3: 6, 4: 12, 5: 12, 6: 13, 7: 10}
 
     print("=" * 70)
@@ -134,7 +114,7 @@ async def main():
         print(f"\nScenario {scenario}: {len(cases)}/{expected} cases seeded")
 
         if not needs_llms:
-            # Scenarios 5 and 6 - just confirm case count, no letters expected
+            # scenarios 5 and 6 - just confirm case count, no letters expected here
             total_cases_done += len(cases)
             if len(cases) == expected:
                 print("  Status: COMPLETE (no LLM letters needed - normal prediction)")

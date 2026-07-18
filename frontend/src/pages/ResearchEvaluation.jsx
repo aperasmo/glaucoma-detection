@@ -1,8 +1,5 @@
-// src/pages/ResearchEvaluation.jsx
-// Blind LLM evaluation scoring page - Research feature for Paper 2.
-// Only accessible to users with is_researcher === true.
-// NEVER shows actual_llm - letters are identified by label only (A/B/C/D).
-
+// blind LLM scoring page for the researcher role only - letters are shown by label (A/B/C/D)
+// only, actual_llm should never surface here or it breaks the blinding
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -48,7 +45,7 @@ function ResearchEvaluation() {
         setLetters(list);
         setTotal(data.total || 0);
         setScoredCount(data.scored_count || 0);
-        // Jump to first unscored on load
+        // land on whatever's unscored so people don't waste time re-reviewing done letters
         const firstUnscored = list.findIndex(l => !l.is_scored);
         setCurrentIndex(firstUnscored === -1 ? 0 : firstUnscored);
         setLoading(false);
@@ -86,14 +83,14 @@ function ResearchEvaluation() {
         d5_professional_tone: score,
       });
 
-      // Update local state so no refetch needed
+      // patch it in locally instead of refetching the whole list
       const updated = letters.map((l, i) =>
         i === currentIndex ? { ...l, is_scored: true, d5_score: score } : l
       );
       setLetters(updated);
       setScoredCount(prev => current.is_scored ? prev : prev + 1);
 
-      // Auto-advance to next unscored
+      // keep the momentum going - jump straight to the next one that needs scoring
       const nextUnscored = updated.findIndex((l, i) => i > currentIndex && !l.is_scored);
       if (nextUnscored !== -1) {
         setTimeout(() => setCurrentIndex(nextUnscored), 400);

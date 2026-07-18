@@ -1,7 +1,6 @@
-# backend/app/services/report_assistant_llm_service.py
-# LLM intent extraction for the AI Report Assistant.
-# The LLM only converts a user prompt into a structured report request.
-# Database queries, patient lookup, filtering, and PDF generation remain backend-controlled.
+# the LLM here only turns a free-text prompt into a structured report
+# request - it never touches the DB directly. actual queries, patient
+# lookups, filtering and PDF generation all stay on the backend side.
 
 from __future__ import annotations
 

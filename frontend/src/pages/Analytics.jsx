@@ -1,7 +1,4 @@
-// src/pages/Analytics.jsx
-// Analytics Dashboard - Tailwind CSS implementation.
-// Connects to GET /screenings/stats and GET /screenings/analytics?days=30
-
+// pulls from /screenings/stats and /screenings/analytics
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -12,7 +9,6 @@ import {
   PieChart, Pie, Sector,
 } from "recharts";
 
-// Stat card with icon
 function StatCard({ label, value, sub, subColor, icon, iconBg }) {
   return (
     <div className="bg-surface border border-white/7 rounded-xl p-4 flex items-center gap-4">
@@ -28,7 +24,6 @@ function StatCard({ label, value, sub, subColor, icon, iconBg }) {
   );
 }
 
-// Result badge
 function ResultBadge({ prediction }) {
   const map = {
     glaucoma: "bg-neg/10 text-neg border-neg/20",
@@ -42,7 +37,6 @@ function ResultBadge({ prediction }) {
   );
 }
 
-// OHTS badge
 function OHTSBadge({ tier }) {
   const map = {
     critical: "bg-neg/10 text-neg border-neg/20",
@@ -56,7 +50,6 @@ function OHTSBadge({ tier }) {
   ) : <span className="text-text3 text-xs">—</span>;
 }
 
-// Risk bar
 function RiskBar({ score }) {
   if (!score) return <span className="text-text3 text-xs">—</span>;
   const pct = Math.round(parseFloat(score) * 100);
@@ -105,7 +98,6 @@ const CHART_COLORS = {
   text3:  "#4E6580",
 };
 
-// Custom donut label
 function DonutLabel({ cx, cy, label, sub }) {
   return (
     <>
@@ -199,12 +191,10 @@ function handleRangeTypeChange(value) {
     return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
   }
 
-  // Pagination for high risk table
   const highRisk = analytics?.high_risk_screenings || [];
   const totalPages = Math.ceil(highRisk.length / PER_PAGE);
   const paginatedRisk = highRisk.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
-  // Donut chart data
   const predictionData = [
     { name: "Normal",   value: stats?.normal_count        || 0, color: CHART_COLORS.pos },
     { name: "Glaucoma", value: stats?.glaucoma_positive   || 0, color: CHART_COLORS.neg },
@@ -220,26 +210,23 @@ function handleRangeTypeChange(value) {
   const totalStatus = statusData.reduce((a, b) => a + b.value, 0);
   const completePct = totalStatus > 0 ? Math.round((analytics?.status_distribution?.complete || 0) / totalStatus * 100) : 0;
 
-  // OHTS bar data
   const ohtsData = analytics ? [
     { name: "Low",      value: analytics.ohts_distribution?.low      || 0, color: CHART_COLORS.pos },
     { name: "Possible", value: analytics.ohts_distribution?.possible  || 0, color: CHART_COLORS.warn },
     { name: "Critical", value: analytics.ohts_distribution?.critical  || 0, color: CHART_COLORS.neg },
   ] : [];
 
-  // Model usage bar data
   const modelData = analytics ? [
     { name: "Clinical Mode",  value: analytics.model_usage?.clinical_mode  || 0 },
     { name: "Research Mode",  value: analytics.model_usage?.research_mode  || 0 },
   ] : [];
 
-  // Screenings over time
   const timeData = (analytics?.screenings_over_time || []).map(d => ({
     ...d,
     date: formatShortDate(d.date),
   }));
 
-  // Top bar actions
+  // date range picker + custom range inputs, shown in the top bar
     const actions = (
     <div className="flex items-center gap-2">
         <select

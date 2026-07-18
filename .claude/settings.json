@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E '\\\\.\\(jsx?|tsx?|py|css|html\\)$')",
+      "Bash(python -m py_compile backend/app/ml_inference/gradcam.py)",
+      "Bash(python -m py_compile backend/app/models/__init__.py backend/app/models/llm_evaluation_score.py backend/app/models/patient.py backend/app/models/report_history.py backend/app/models/screening.py backend/app/models/screening_result.py backend/app/models/system_settings.py backend/app/models/user.py backend/app/models/user_tokens.py)",
+      "Bash(python -m py_compile backend/scripts/seed_llm_comparison.py)",
+      "Bash(python -m py_compile backend/app/ml_inference/inference.py)",
+      "Bash(python -m py_compile backend/app/schemas/patient.py backend/app/schemas/screening.py backend/app/schemas/screening_result.py backend/app/schemas/system_settings.py backend/app/schemas/user.py)",
+      "Bash(python -m py_compile backend/scripts/discover_test_set_confidence.py)",
+      "Bash(python -m py_compile backend/scripts/check_llm_comparison_status.py backend/scripts/cleanup_scenario.py backend/scripts/export_llm_comparison.py backend/scripts/extract_scenario7_letters.py backend/scripts/mistral_d5_rater.py backend/scripts/retry_gemini_letter.py)",
+      "Bash(python -m py_compile backend/scripts/score_llm_comparison.py)",
+      "Bash(python -m py_compile backend/app/ml_inference/llm_referral.py)",
+      "Bash(ls \"d:\\\\APE\\\\YOOBEE\\\\Capstone\")",
+      "Read(//d/APE/YOOBEE/Capstone/**)",
+      "Bash(find \"d:/APE/YOOBEE/Capstone\" -maxdepth 2 -iname \"*ai-git-assistant*\" 2>/dev/null; echo \"---search d root---\"; find \"d:/\" -maxdepth 3 -iname \"*ai-git-assistant*\" 2>/dev/null)",
+      "Read(//d//**)",
+      "Bash(ls \"d:/APE/Portfolio-Project/ai-git-assistant\")",
+      "Read(//d/APE/Portfolio-Project/ai-git-assistant/**)",
+      "Read(//d/APE/Portfolio-Project/**)",
+      "Read(//d/APE/**)",
+      "Bash(find /d -maxdepth 2 -iname \"*ai-git-assistant*\")",
+      "Bash(cd /d/APE/Portfolio-Project/ai-git-assistant-app && find . -maxdepth 1 -iname \"license*\"; echo \"done\")",
+      "Read(//d/APE/Portfolio-Project/ai-git-assistant-app/**)",
+      "Bash(cd /d/APE/Portfolio-Project/ai-git-assistant && ls src/ src/components/ 2>&1 | head -60)"
+    ]
+  }
+}

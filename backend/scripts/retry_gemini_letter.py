@@ -1,30 +1,19 @@
-# backend/scripts/retry_gemini_letter.py
+# fills in a missing Gemini letter for a screening that already has its
+# GPT-4o, GPT-4o-mini, and LLaMa letters - usually needed when Gemini hit a
+# 429/503 during the original seeding run.
 #
-# PURPOSE
-# ---------------------------------------------------------------------------
-# Targeted retry script for generating a missing Gemini referral letter
-# for an existing screening that already has GPT-4o, GPT-4o-mini, and LLaMa
-# letters but is missing Gemini (typically due to a 429/503 error during
-# the original seeding run).
+# doesn't re-run inference, doesn't touch patient/screening rows, doesn't
+# move images. just: look up the existing screening + ensemble result,
+# call Gemini with the same prompt the seeding pipeline uses, save it as a
+# new ScreeningResult (llm_used="gemini"), and append it to the raw CSV.
 #
-# This does NOT re-run inference, does NOT create a new patient/screening,
-# and does NOT move any images. It only:
-#   1. Looks up the existing screening + ensemble result from the DB
-#   2. Calls Gemini directly using the same prompt as the seeding pipeline
-#   3. Saves the letter as a new ScreeningResult row with llm_used="gemini"
-#   4. Appends the letter to llm_comparison_letters_raw.csv
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN
-# -----------------------------------------------------------------------
+# run with:
 #   docker exec -it glaucoma_backend python -m scripts.retry_gemini_letter \
 #       --screening-id 44e98325-2143-4537-92a9-18f7e71d5df8 \
 #       --scenario 4
 #
-# --scenario is used only for the CSV append (to record the correct
-# scenario number in the output CSV). It does not affect which screening
-# is processed.
-# ---------------------------------------------------------------------------
+# --scenario only matters for the CSV row (which scenario to label it
+# under) - it doesn't change which screening gets processed.
 
 import os
 import sys
@@ -82,7 +71,6 @@ async def main():
         print(f"[retry_gemini] Starting Gemini retry for screening_id={screening_id} scenario={scenario}")
 
         async with AsyncSessionLocal() as db:
-            # Fetch screening
             result = await db.execute(
                 select(Screening).where(Screening.screening_id == screening_id)
             )
@@ -90,7 +78,6 @@ async def main():
             if not screening:
                 raise RuntimeError(f"Screening {screening_id} not found in DB.")
 
-            # Fetch patient
             result = await db.execute(
                 select(Patient).where(Patient.patient_id == screening.patient_id)
             )
@@ -98,7 +85,7 @@ async def main():
             if not patient:
                 raise RuntimeError(f"Patient not found for screening {screening_id}.")
 
-            # Fetch ensemble result for clinical context
+            # need the ensemble result for clinical context (OHTS, confidence, etc)
             result = await db.execute(
                 select(ScreeningResult).where(
                     ScreeningResult.screening_id == screening_id,
@@ -110,7 +97,7 @@ async def main():
             if not ensemble:
                 raise RuntimeError(f"Ensemble result not found for screening {screening_id}.")
 
-            # Confirm Gemini letter doesn't already exist
+            # bail if a Gemini letter already exists for this screening
             result = await db.execute(
                 select(ScreeningResult).where(
                     ScreeningResult.screening_id == screening_id,
@@ -122,7 +109,7 @@ async def main():
                 print(f"[retry_gemini] Gemini letter already exists for this screening. Nothing to do.")
                 return
 
-            # Confirm prediction is glaucoma (no letter needed for normal)
+            # normal predictions don't get a referral letter
             if ensemble.prediction != "glaucoma":
                 raise RuntimeError(
                     f"Ensemble prediction is '{ensemble.prediction}' - "
@@ -136,7 +123,7 @@ async def main():
 
             print(f"[retry_gemini] Patient: {patient_name} | Confidence: {confidence_score:.4f} | OHTS: {ohts_score} ({ohts_tier})")
 
-            # Build the same prompt used during seeding
+            # same prompt-building logic as the seeding pipeline
             prompt = build_clinical_prompt(
                 patient_name=patient_name,
                 eye_side=screening.eye_side,
@@ -145,7 +132,6 @@ async def main():
                 ohts_tier=ohts_tier,
             )
 
-            # Call Gemini directly
             print(f"[retry_gemini] Calling gemini-3.5-flash...")
             import time
             from google import genai
@@ -153,7 +139,6 @@ async def main():
 
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-            # Read image for vision input
             with open(screening.image_path, "rb") as f:
                 image_bytes = f.read()
 
@@ -175,20 +160,17 @@ async def main():
 
             print(f"[retry_gemini] Letter generated in {generation_time_ms}ms | tokens={usage.total_token_count}")
 
-            # Get clinician details
             from app.utils.settings_helper import get_setting
             clinician_name = await get_setting(db, "REFERRING_CLINICIAN_NAME", default="Dr. [Clinician Name]")
             clinician_title = await get_setting(db, "REFERRING_CLINICIAN_TITLE", default="General Ophthalmologist")
             signed_by = f"{clinician_name}\n{clinician_title}"
 
-            # Get system user
             from app.models.user import User
             result = await db.execute(select(User).where(User.user_code == "SYS00001"))
             system_user = result.scalar_one_or_none()
             if not system_user:
                 raise RuntimeError("SYS00001 user not found.")
 
-            # Save the Gemini letter as a new ScreeningResult row
             new_record = ScreeningResult(
                 screening_id=screening_id,
                 model_used="ensemble",
@@ -213,7 +195,7 @@ async def main():
 
             print(f"[retry_gemini] Letter saved to DB successfully.")
 
-        # Append to llm_comparison_letters_raw.csv
+        # append the new letter to the raw CSV too
         keywords = ["ai screening", "screening system", "flagged", "confidence score", "%",
                     "suspicious", "suggestive of", "raises concern", "specialist review",
                     "further evaluation", "not a definitive diagnosis", "screening referral"]

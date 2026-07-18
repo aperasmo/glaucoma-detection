@@ -1,9 +1,5 @@
-# backend/app/ml_inference/preprocessing.py
-#
-# Image preprocessing for ML inference.
-# Must match the exact preprocessing used during model training.
-# Any deviation from this pipeline will degrade model performance.
-# Pipeline: CLAHE enhancement -> BGR to RGB -> Resize -> Backbone normalisation
+# image preprocessing for inference - has to match training exactly or
+# model performance drops. pipeline: CLAHE -> BGR to RGB -> resize -> backbone normalisation
 
 import cv2
 import numpy as np
@@ -13,7 +9,7 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Input sizes per model - must match training configuration
+# has to match what each model was trained with
 MODEL_INPUT_SIZES = {
     "efficientnetb0": (224, 224),
     "vgg16": (224, 224),

@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import API from "../api/index";
 
@@ -11,7 +10,7 @@ export function AuthProvider({ children }) {
   );
   const [loading, setLoading] = useState(true);
 
-  // Restore user from token on page refresh
+  // if there's a token from a previous session, try to pull the user back up
   useEffect(() => {
     const saved = sessionStorage.getItem("token");
     if (saved) {
@@ -44,7 +43,7 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  // Do not render anything until user is restored
+  // avoid flashing the login screen while we're still checking the token
   if (loading) return null;
 
   return (

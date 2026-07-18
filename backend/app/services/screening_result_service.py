@@ -1,7 +1,4 @@
-# backend/app/services/screening_result_service.py
-#
-# Business logic for retrieving screening results.
-# Results are written by the inference pipeline - this service reads them.
+# the inference pipeline writes screening results, this module just reads them back
 
 
 import uuid
@@ -21,8 +18,7 @@ async def get_results_by_screening(
     db: AsyncSession,
     screening_id: uuid.UUID,
 ) -> list[ScreeningResult]:
-    # Fetch all results for a single screening.
-    # Returns all model results - frontend filters by mode.
+    # returns every model's result - it's up to the frontend to filter by mode
     result = await db.execute(
         select(ScreeningResult)
         .where(ScreeningResult.screening_id == screening_id)
@@ -35,8 +31,7 @@ async def get_ensemble_result(
     db: AsyncSession,
     screening_id: uuid.UUID,
 ) -> ScreeningResult:
-    # Fetch only the ensemble result for a screening.
-    # Used in Clinical Mode - ensemble is the authoritative output.
+    # Clinical Mode only cares about the ensemble output, not the individual models
     result = await db.execute(
         select(ScreeningResult).where(
             ScreeningResult.screening_id == screening_id,
@@ -51,9 +46,8 @@ async def get_screening_with_results(
     db: AsyncSession,
     screening_id: uuid.UUID,
 ) -> dict:
-    # Fetch a screening record together with all its results and patient details.
-    # Used for the full clinical results page and referral letter print header.
-
+    # pulls together screening + results + patient info for the full results
+    # page and the referral letter print header
     from app.models.patient import Patient
 
     screening_result = await db.execute(
@@ -68,10 +62,10 @@ async def get_screening_with_results(
 
     screening, patient = row
 
-    results = await get_results_by_screening(db, screening_id) # Get/Load all results for this screening, including which model produced each result. Frontend can filter by mode (clinical/research) as needed.
+    results = await get_results_by_screening(db, screening_id)
 
-    # # DEBUG: Compare ORM value vs direct database value.
-    # # Keep this while debugging /results/{screening_id}/full.
+    # # DEBUG: comparing ORM value vs the raw DB value - leaving this here
+    # # in case /results/{screening_id}/full acts up again
     # orm_inference_mode = getattr(screening, "inference_mode", None)
 
     # db_mode_result = await db.execute(
@@ -102,7 +96,7 @@ async def get_screening_with_results(
         "patient_gender": patient.gender,
         "eye_side": screening.eye_side,
         "status": screening.status,
-        "inference_mode": getattr(screening, "inference_mode", None) or "clinical", # Backwards compatibility for old screenings without this field
+        "inference_mode": getattr(screening, "inference_mode", None) or "clinical", # older screenings predate this column
         #"inference_mode": db_inference_mode or orm_inference_mode or "clinical",
         "image_path": screening.image_path,
         "created_at": screening.created_at,

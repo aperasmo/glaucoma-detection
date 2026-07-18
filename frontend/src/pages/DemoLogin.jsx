@@ -1,13 +1,8 @@
-// src/pages/DemoLogin.jsx
-// Presentation-only auto-login route for the MSE907 oral (13-14 July 2026).
-// Path: /yoobeemse907capstone
+// auto-login route just for the MSE907 oral demo (13-14 July 2026), lives at /yoobeemse907capstone
 //
-// This page does NOT decide who gets in. It calls POST /auth/demo-login,
-// and the backend is what enforces the date window and issues (or refuses)
-// a real token. If the window has closed, this behaves exactly like a
-// failed login, then quietly falls back to the normal /login screen.
-// There is no special messaging here that would reveal this route exists.
-
+// this page itself doesn't decide who gets in - it just calls POST /auth/demo-login and lets the
+// backend enforce the date window. if the window's closed it fails quietly and bounces to /login,
+// same as any other failed login, so nothing here gives away that this route exists.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -39,8 +34,8 @@ function DemoLogin() {
 
         setStatus("failed");
 
-        // No error detail shown. Outside the demo window, or on any
-        // other failure, this route should look like nothing happened.
+        // deliberately no error detail here - whether it's outside the demo window or
+        // something else broke, it should just look like nothing happened
         setTimeout(() => {
           if (!cancelled) navigate("/login", { replace: true });
         }, 800);

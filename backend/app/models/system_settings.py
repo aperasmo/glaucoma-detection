@@ -1,9 +1,5 @@
-# backend/app/models/system_settings.py
-#
-# SystemSettings table - stores all application-wide configuration.
-# Replaces hardcoded settings with database-driven values.
-# Admin can change settings via API without restarting the server.
-# Example entries:
+# app-wide config, stored in the DB instead of hardcoded so an admin can
+# change it through the API without a server restart. e.g.
 #   category=System, set_code=INFERENCE_MODE, set_value=clinical
 #   category=System, set_code=EMAIL_NOTIFICATIONS, set_value=true
 
@@ -18,28 +14,28 @@ class SystemSettings(Base):
     __tablename__ = "system_settings"
 
     # --- Primary Key ---
-    # Auto-incrementing integer - simple and appropriate for a settings table
+    # plain auto-increment int is fine here, no need for UUID on a settings table
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
 
     # --- Setting Identity ---
-    # category groups related settings e.g. "System", "ML", "Email"
+    # groups related settings, e.g. "System", "ML", "Email"
     category = Column(String(30), nullable=True, default="System")
 
-    # set_code is the unique key used to look up a setting e.g. "INFERENCE_MODE"
+    # the lookup key, e.g. "INFERENCE_MODE"
     set_code = Column(String(30), nullable=False, unique=True, index=True)
 
-    # set_name is the human-readable label e.g. "Inference Mode"
+    # human-readable label, e.g. "Inference Mode"
     set_name = Column(String(50), nullable=True)
 
-    # set_value stores the actual setting value as a string e.g. "clinical", "true"
-    # All values stored as strings - cast to correct type when reading
+    # everything's stored as a string here ("clinical", "true", etc.) and
+    # cast to the right type wherever it's read
     set_value = Column(String(500), nullable=True)
 
     # --- Remarks ---
     remark = Column(Text, nullable=True)
 
     # --- Status ---
-    # A=Active, I=Inactive - single character flag
+    # A/I flag - active or inactive
     status = Column(String(1), nullable=True, default="A")
 
     # --- Audit Trail: When ---

@@ -1,7 +1,4 @@
-# backend/app/schemas/system_settings.py
-#
-# Pydantic schemas for System Settings endpoints.
-# Defines what data the API accepts and returns for settings management.
+# request/response shapes for the system settings endpoints
 
 from datetime import datetime
 from typing import Optional
@@ -22,7 +19,6 @@ class SettingResponse(BaseModel):
 
 
 class UpdateSetting(BaseModel):
-    # Only set_value and status can be updated via API.
-    # set_code and category are immutable after creation.
+    # set_code and category are fixed once created - only the value/status can change
     set_value: Optional[str] = None
     status: Optional[str] = None

@@ -1,57 +1,49 @@
-# backend/app/main.py
-#
-# This is the main entry point for the GlaucomaAI FastAPI backend.
-# It creates the FastAPI app instance, registers middleware,
-# and includes all route groups.
-# Uvicorn points to this file when starting the server.
+# entry point for the GlaucomaAI FastAPI backend - builds the app, wires up
+# middleware and pulls in all the route groups. this is what uvicorn points at.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logger import setup_logger, get_logger
-from app.api.routes.auth import router as auth_router # Authentication routes - registration, activation, login
+from app.api.routes.auth import router as auth_router # registration, activation, login
 
-from app.api.routes.patient import router as patient_router # Patient management routes - CRUD operations
-from app.api.routes.screening import router as screening_router # Screening routes - image upload and management
+from app.api.routes.patient import router as patient_router # patient CRUD
+from app.api.routes.screening import router as screening_router # image upload + screening management
 
 from contextlib import asynccontextmanager
 from app.ml_inference.model_loader import load_all_models
 
-from app.core.scheduler import start_scheduler, stop_scheduler # APScheduler for background tasks
-from app.api.routes.screening_result import router as screening_result_router # Screening result routes - returns ML inference results to frontend
-from app.api.routes.user import router as user_router # User management routes - admin-only user CRUD operations
+from app.core.scheduler import start_scheduler, stop_scheduler # background jobs via APScheduler
+from app.api.routes.screening_result import router as screening_result_router # ML inference results for the frontend
+from app.api.routes.user import router as user_router # admin-only user CRUD
 
-from fastapi.staticfiles import StaticFiles # Serve uploaded images from the /uploads URL path. The actual files are stored in the uploads/ folder on disk.
-from app.api.routes.settings import router as settings_router # System settings routes - admin-only settings management
+from fastapi.staticfiles import StaticFiles # serves uploaded images from /uploads (files live in uploads/ on disk)
+from app.api.routes.settings import router as settings_router # admin-only system settings
 
-from app.api.routes.admin import router as admin_router # Admin-only routes for system monitoring and maintenance tasks
+from app.api.routes.admin import router as admin_router # admin monitoring/maintenance routes
 
-from app.api.routes.reports import router as reports_router # Reports routes - PDF exports and report endpoints
+from app.api.routes.reports import router as reports_router # PDF export endpoints
 
-from app.api.routes.model_performance import router as model_performance_router # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
-from app.api.routes.llm_evaluation import router as evaluation_router # 
+from app.api.routes.model_performance import router as model_performance_router # serves the frozen test-set eval metrics
+from app.api.routes.llm_evaluation import router as evaluation_router # LLM evaluation routes
 from app.api.routes.feedback import router as feedback_router
 
 
-# Module-level logger for main application events
 logger = get_logger(__name__)
 
-# --- Create the FastAPI app instance ---
-# The title and version are pulled from central settings object.
-# These appear in the auto-generated Swagger docs at /docs.
+# title/version come from the settings object and show up in the /docs swagger page
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialise centralised logging first - before any other startup step
+    # get logging set up before anything else touches the app
     setup_logger()
-    # Load all ML models into memory on server startup.
-    # Models stay loaded for the lifetime of the server process.
+    # load the ML models once at startup so they stay in memory for the whole process
     logger.info("Loading ML models... Please wait...")
     load_all_models()
     logger.info("ML models are now ready.")
     start_scheduler()
     yield
-    # Cleanup on shutdown if needed
+    # shutdown cleanup
     stop_scheduler()
     logger.info("Server shutting down.")
 
@@ -64,45 +56,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Serve uploaded images and Grad-CAM++ heatmaps as static files
-# Frontend accesses images at http://localhost:8000/uploads/...
+# serve uploaded images and Grad-CAM++ heatmaps as static files, e.g. http://localhost:8000/uploads/...
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# --- CORS Middleware ---
-# CORS (Cross-Origin Resource Sharing) controls which frontend URLs
-# are allowed to make requests to this API.
-# Without this, the React frontend will be blocked by the browser.
+# CORS - without this the browser blocks the React frontend from calling the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else settings.CORS_ORIGINS.split(","),     # List of allowed origins from settings
-    allow_credentials=True,                 # Allow cookies and auth headers to be sent across origins
-    allow_methods=["*"],                    # Allow all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],                    # Allow all headers (Authorization, Content-Type, etc.)
+    allow_origins=settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else settings.CORS_ORIGINS.split(","),     # allowed origins, from settings
+    allow_credentials=True,                 # let cookies/auth headers cross origins
+    allow_methods=["*"],                    # allow all HTTP methods
+    allow_headers=["*"],                    # allow all headers
 )
 
-app.include_router(auth_router) # Authentication routes - registration, activation, login
-app.include_router(patient_router) # Patient management routes - CRUD operations
-app.include_router (screening_router) # Screening routes - image upload and management
-app.include_router(screening_result_router) # Screening result routes - returns ML inference results to frontend
-app.include_router(user_router) # User management routes - admin-only user CRUD operations
-app.include_router(settings_router) # System settings routes - admin-only settings management
-app.include_router(admin_router) # Admin-only routes for system monitoring and maintenance tasks
-app.include_router(reports_router) # Reports routes - PDF exports and report endpoints
-app.include_router(model_performance_router) # Model performance endpoints - serves frozen test-set evaluation metrics to the frontend
+app.include_router(auth_router) # registration, activation, login
+app.include_router(patient_router) # patient CRUD
+app.include_router (screening_router) # image upload + screening management
+app.include_router(screening_result_router) # ML inference results for the frontend
+app.include_router(user_router) # admin-only user CRUD
+app.include_router(settings_router) # admin-only system settings
+app.include_router(admin_router) # admin monitoring/maintenance
+app.include_router(reports_router) # PDF exports
+app.include_router(model_performance_router) # frozen test-set eval metrics
 app.include_router(evaluation_router) # LLM evaluation
-app.include_router(feedback_router) # Feedback routes - handles feedback form submissions and sends them to the ops inbox
+app.include_router(feedback_router) # feedback form submissions -> ops inbox
 
-# --- Health Check Endpoint ---
-# This is the first route we register.
-# It confirms the API is running and returns basic app info.
-# Used by Docker health checks and monitoring tools later.
+# first route we register - just confirms the API is up, used by health checks later
 @app.get("/health", tags = ["System"])
 async def health_check():
-    """
-    Health check endpoint.
-    Returns app name, version, and status.
-    Call this to confirm the API is alive.
-    """    
+    """Basic liveness check - returns app name, version, status."""
     return{
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,

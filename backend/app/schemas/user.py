@@ -1,8 +1,5 @@
-# backend/app/schemas/user.py
-#
-# Pydantic schemas for User endpoints.
-# Defines what data the API accepts (input) and returns (output).
-# Separate from database models - controls what gets exposed to the outside world.
+# request/response shapes for the user endpoints - kept separate from the
+# DB model so we're explicit about what actually leaves the API
 
 from uuid import UUID
 from datetime import datetime
@@ -14,7 +11,7 @@ from app.utils.validators import validate_password_strength, validate_email_form
 
 
 class CreateUser(BaseModel):
-    # Required fields when admin creates a new user account.
+    # what an admin has to provide to create a new account
     first_name: str
     last_name: str
     email: EmailStr
@@ -36,7 +33,7 @@ class CreateUser(BaseModel):
 
 
 class ResponseUser(BaseModel):
-    # Safe user data returned in API responses - never includes password.
+    # what we send back - password never makes it in here
     user_id: UUID
     user_code: str
     first_name: str
@@ -51,7 +48,7 @@ class ResponseUser(BaseModel):
 
 
 class UpdateUser(BaseModel):
-    # Optional fields user can update after activation.
+    # fields a user can edit once their account is active
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     address: Optional[str] = None

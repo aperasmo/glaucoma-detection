@@ -1,5 +1,5 @@
-# Import all models here so SQLAlchemy can discover them.
-# Add new models here when created.
+# SQLAlchemy needs every model imported somewhere for it to find the tables,
+# so pull them all in here. Add new ones to this list as they show up.
 
 from app.models.user import User
 from app.models.patient import Patient

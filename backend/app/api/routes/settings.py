@@ -1,8 +1,4 @@
-# backend/app/api/routes/settings.py
-#
-# System settings endpoints.
-# Admin-only routes for reading and updating application settings.
-# Settings control inference mode, OHTS tiers, notifications, and more.
+# admin-only settings CRUD - covers inference mode, OHTS tiers, notifications, etc.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,8 +26,7 @@ async def list_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin")),
 ):
-    # List all system settings - admin only.
-    # Optionally filter by category e.g. ?category=ML
+    # pass ?category=ML to filter
     return await get_all_settings(db, category)
 
 

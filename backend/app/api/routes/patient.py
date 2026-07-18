@@ -1,13 +1,8 @@
-# backend/app/api/routes/patient.py
-#
-# Patient CRUD endpoints.
-# All routes are protected - valid JWT token required.
-# Role-based access control applied per endpoint.
-
+# patient CRUD - every route here needs a valid JWT, plus role checks per endpoint
 
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession # for async DB access
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, require_role
 from app.db.database import get_db
@@ -24,17 +19,14 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/patients", tags=["Patients"]) # all routes start with /patients
+router = APIRouter(prefix="/patients", tags=["Patients"])
 
 @router.post("/", response_model=ResponsePatient, status_code=status.HTTP_201_CREATED)
 async def register_patient(
     patient_data: CreatePatient,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role("admin","nurse")), # only admin and nurse can create patients
+    current_user: User = Depends(require_role("admin","nurse")), # admin/nurse only
 ):
-    # Create a new patient.
-    # Only admin and nurse can create patients.
-    # Returns the created patient data.
     try:
         return await create_patient(db, patient_data, current_user.user_id)
     except Exception as e:
@@ -48,9 +40,8 @@ async def list_patients(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Retrieve all active patients with pagination.
-    # Accessible to all authenticated roles.
-    return await get_all_patients(db, skip, limit)    # returns list of patients
+    # any authenticated role can list patients
+    return await get_all_patients(db, skip, limit)
 
 @router.get("/{patient_id}", response_model=ResponsePatient, status_code=status.HTTP_200_OK)
 async def get_patient(
@@ -58,8 +49,6 @@ async def get_patient(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Retrieve a single patient by UUID.
-    # Accessible to all authenticated roles.
     patient = await get_patient_by_id(db, patient_id)
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
@@ -72,8 +61,6 @@ async def modify_patient(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin", "nurse")),
 ):
-    # Update an existing patient record.
-    # Restricted to admin and nurse roles only.
     try:
         return await update_patient(db, patient_id, patient_data, current_user.user_id)
     except ValueError as e:
@@ -87,9 +74,7 @@ async def remove_patient(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin")),
 ):
-    # Soft delete a patient - sets is_active=False.
-    # Restricted to admin only.
-    # Data is never permanently deleted.
+    # soft delete only - flips is_active, never actually removes the row
     try:
         return await delete_patient(db, patient_id, current_user.user_id)
     except ValueError as e:

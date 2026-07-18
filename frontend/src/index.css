@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS custom properties - design system */
+/* design tokens */
 :root {
   --bg:         #0C1220;
   --surface:    #131D2E;
@@ -66,7 +66,7 @@
   --sb-bar-rgb: 59 158 255;
 }
 
-/* Base resets */
+/* reset */
 * {
   margin: 0;
   padding: 0;
@@ -80,7 +80,7 @@ body {
   overflow: hidden;
 }
 
-/* Scrollbar */
+/* skinny scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
 }
@@ -90,7 +90,7 @@ body {
   border-radius: 3px;
 }
 
-/* Loading overlay */
+/* full-screen loading overlay */
 .loading-overlay {
   position: fixed;
   inset: 0;

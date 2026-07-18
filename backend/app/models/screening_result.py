@@ -1,10 +1,6 @@
-# backend/app/models/screening_result.py
-#
-# ScreeningResult table - stores ML prediction results for each screening.
-# One screening can have multiple results (one per model + one ensemble).
-# In Clinical Mode only the ensemble result is shown.
-# In Research Mode all model results are shown side by side.
-# All changes are tracked via created_by/updated_by for audit trail.
+# ML prediction results, one row per model that ran plus one for the
+# ensemble. Clinical Mode only shows the ensemble row to the user; Research
+# Mode shows all of them side by side for comparison.
 
 import uuid
 from datetime import datetime
@@ -27,7 +23,6 @@ class ScreeningResult(Base):
     )
 
     # --- Foreign Key ---
-    # Links to the screening this result belongs to
     screening_id = Column(
         UUID(as_uuid=True),
         ForeignKey("screenings.screening_id", ondelete="RESTRICT"),
@@ -36,7 +31,6 @@ class ScreeningResult(Base):
     )
 
     # --- ML Model Info ---
-    # Which model produced this result
     model_used = Column(
         Enum(
             "efficientnetb0",
@@ -49,33 +43,29 @@ class ScreeningResult(Base):
     )
 
     # --- Prediction ---
-    # The binary classification result
     prediction = Column(
         Enum("glaucoma", "normal", name="prediction_types"),
         nullable=False,
     )
 
     # --- Scores ---
-    # confidence_score - probability output from the model (0.0 to 1.0)
-    # threshold_used   - the decision threshold applied (Youden's J optimised)
+    # confidence_score is the raw model output (0.0-1.0), threshold_used is
+    # the cutoff we applied to turn that into glaucoma/normal (Youden's J optimised)
     confidence_score = Column(Numeric(5, 4), nullable=False)
     threshold_used = Column(Numeric(5, 4), nullable=False)
 
     # --- Explainability ---
-    # Path to the Grad-CAM++ heatmap image stored on S3 or local storage
+    # Grad-CAM++ heatmap, S3 or local depending on env
     gradcam_path = Column(Text, nullable=True)
 
-    # Optic disc and cup segmentation results.
-    # Populated by segmentation module when built.
-    # Used for biomarker visualisation in the frontend.
-    cdr = Column(Numeric(4, 3), nullable=True)          # Cup-to-Disc Ratio e.g. 0.720
-    disc_radius = Column(Numeric(8, 2), nullable=True)  # Optic disc radius in pixels
-    cup_radius = Column(Numeric(8, 2), nullable=True)   # Optic cup radius in pixels
+    # disc/cup segmentation output - filled in once the segmentation module is
+    # wired up, used for the biomarker visuals on the frontend
+    cdr = Column(Numeric(4, 3), nullable=True)          # cup-to-disc ratio, e.g. 0.720
+    disc_radius = Column(Numeric(8, 2), nullable=True)  # optic disc radius, pixels
+    cup_radius = Column(Numeric(8, 2), nullable=True)   # optic cup radius, pixels
 
     # --- OHTS Risk Score ---
-    # Calculated from patient age, IOP, CCT, and CDR extracted from segmentation
-    # ohts_score - raw numeric score
-    # ohts_tier  - risk category derived from the score
+    # derived from patient age, IOP, CCT, and the CDR from segmentation above
     ohts_score = Column(Numeric(5, 2), nullable=True)
     ohts_tier = Column(
         Enum("low", "possible", "critical", name="ohts_tier_types"),
@@ -83,10 +73,9 @@ class ScreeningResult(Base):
     )
 
     # --- Referral Letter ---
-    # LLM-generated clinical referral letter text
     referral_letter = Column(Text, nullable=True)
 
-    # Which LLM generated the referral letter
+    # which LLM wrote the letter
     llm_used = Column(
         Enum(
             "gpt4o",
@@ -98,38 +87,35 @@ class ScreeningResult(Base):
         nullable=True,
     )
 
-    # Time taken by the LLM to generate the referral letter in milliseconds.
-    # Used for multi-LLM performance comparison in Research Mode.
+    # how long the LLM took to write the letter, in ms - feeds the multi-LLM
+    # comparison in Research Mode
     generation_time_ms = Column(Numeric(10, 2), nullable=True)
 
-    # Token usage tracking per LLM call - used for cost/quality comparison
-    # across providers (e.g. deciding whether to switch LLM providers based
-    # on cost-per-letter). Only populated for LLM referral letter records
-    # (llm_used IS NOT NULL) - always NULL on the clinical ensemble result
-    # and on the 3 individual model records.
-    # Field names normalised across providers - OpenAI/Groq return these
-    # names natively; Gemini's differently-named usage_metadata fields are
-    # mapped to match in llm_referral.py before being saved here.
+    # token counts per LLM call, mainly so we can compare cost/quality across
+    # providers later. only set on referral letter rows (llm_used not null) -
+    # stays NULL on the ensemble row and the 3 individual model rows.
+    # OpenAI/Groq return these field names natively; Gemini calls them
+    # something else in usage_metadata, so llm_referral.py remaps them to
+    # match before this gets saved.
     prompt_tokens  = Column(Integer, nullable=True)
     completion_tokens = Column(Integer, nullable=True)
     total_tokens = Column(Integer, nullable=True)
 
-    # Model disagreement tracking - Clinical Mode only
-    # Populated when ensemble predicts normal but at least one individual
-    # model crossed its own sensitivity threshold (B0>=0.52, VGG16/V2>=0.47)
-    # has_model_disagreement: True if disagreement detected
-    # disagreement_model: which model disagreed e.g. "efficientnetv2"
-    # disagreement_confidence: that model's raw confidence score
-    # letter_type: "clinical" for regular GPT-4o letter, "disagreement" for
-    #              on-demand second opinion letter, NULL for non-letter records.
+    # model disagreement tracking, Clinical Mode only - kicks in when the
+    # ensemble says normal but one of the individual models crossed its own
+    # sensitivity threshold (B0>=0.52, VGG16/V2>=0.47) anyway.
+    # disagreement_model holds which model flagged it (e.g. "efficientnetv2"),
+    # disagreement_confidence is that model's raw score, and letter_type is
+    # "clinical" for the normal GPT-4o letter vs "disagreement" for the
+    # on-demand second opinion (NULL if it's not a letter row at all).
     has_model_disagreement = Column(Boolean, nullable=True, default=False)
     disagreement_model = Column(String(50), nullable=True)
     disagreement_confidence = Column(Numeric(10, 4), nullable=True)
     letter_type = Column(String(20), nullable=True)
 
-    # Clinician name who signs the referral letter.
-    # Populated from system settings REFERRING_CLINICIAN_NAME on generation.
-    # Can be updated per letter before printing via PUT /results/{id}/sign
+    # who signs the referral letter - defaults from the REFERRING_CLINICIAN_NAME
+    # system setting when generated, but can be overridden per letter before
+    # printing via PUT /results/{id}/sign
     signed_by = Column(String(255), nullable=True)
 
     # --- Audit Trail: When ---

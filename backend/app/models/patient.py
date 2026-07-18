@@ -1,9 +1,6 @@
-# backend/app/models/patient.py
-#
-# Patient table - stores clinic patient records.
-# IOP and CCT are stored here for OHTS risk score calculation.
-# Gender is enforced at the database level using PostgreSQL Enum.
-# All changes are tracked via created_by/updated_by for audit trail.
+# clinic patient records. IOP and CCT live here because the OHTS risk score
+# calc needs them. gender is locked to a fixed set of values via a Postgres
+# enum, and created_by/updated_by give us an audit trail on edits.
 
 import uuid
 from datetime import datetime
@@ -26,7 +23,7 @@ class Patient(Base):
     )
 
     # --- Patient Code ---
-    # Human-readable identifier e.g. PAT0001
+    # human-readable id, e.g. PAT0001
     patient_code = Column(String(20), unique=True, nullable=False, index=True)
 
     # --- Name Fields ---
@@ -36,7 +33,7 @@ class Patient(Base):
     # --- Personal Info ---
     dob = Column(Date, nullable=True)
 
-    # Gender enforced at DB level
+    # fixed list of options, enforced by Postgres rather than app-level validation
     gender = Column(
         Enum(
             "male",
@@ -59,9 +56,8 @@ class Patient(Base):
     is_active = Column(Boolean, default=True, nullable=False)
 
     # --- Clinical Fields ---
-    # IOP - Intraocular Pressure in mmHg - used for OHTS risk score
-    # CCT - Central Corneal Thickness in micrometres - used for OHTS risk score
-    # Both are optional - OHTS score is skipped if either is missing
+    # IOP = intraocular pressure (mmHg), CCT = central corneal thickness (µm)
+    # both feed the OHTS risk score - if either is missing we just skip that calc
     iop = Column(Numeric(5, 2), nullable=True)
     cct = Column(Numeric(7, 2), nullable=True)
 

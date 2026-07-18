@@ -1,5 +1,3 @@
-# backend/app/api/routes/reports.py
-
 import re
 import httpx
 import base64
@@ -108,10 +106,10 @@ class ReportAssistantFilters(BaseModel):
     patient_name: str | None = None
     patient_query: str | None = None
 
-    # Legacy support
+    # kept around for older callers
     date_range: str | None = None
 
-    # Flexible date support
+    # newer, more flexible date fields
     date_phrase: str | None = None
     date_from: date | None = None
     date_to: date | None = None
@@ -488,7 +486,7 @@ def _date_range_start(date_range: str | None) -> date | None:
             yesterday = today - timedelta(days=1)
             return yesterday, yesterday, "Yesterday"
 
-        # Keep this as rolling 7 days because that is how the current report workflow behaves.
+        # rolling 7 days, not calendar week - matches how the report workflow already behaves
         if phrase == "this week":
             start = today - timedelta(days=7)
             return start, today, "This week"
@@ -617,10 +615,7 @@ def _display_date_label(start: date, end: date) -> str:
 
 
 def _parse_nz_date(value: str) -> date:
-    """
-    User-facing date format: dd/mm/yyyy.
-    Example: 01/05/2026
-    """
+    """Parses the NZ-style dd/mm/yyyy format users type in, e.g. 01/05/2026."""
     try:
         return datetime.strptime(value.strip(), "%d/%m/%Y").date()
     except ValueError:
@@ -652,7 +647,7 @@ def _resolve_date_filter(
     today = date.today()
     phrase = (filters.date_phrase or filters.date_range or "").strip().lower()
 
-    # Direct date fields from API, if supplied
+    # explicit date_from/date_to wins over a phrase like "last month"
     if filters.date_from or filters.date_to:
         start = filters.date_from
         end = filters.date_to or today
@@ -765,9 +760,7 @@ def _resolve_date_filter(
         start = date(year, month, 1)
         return start, today, f"Last {months} months"
 
-    # NZ date format:
-    # from 01/05/2026 to 31/05/2026
-    # between 01/05/2026 and 31/05/2026
+    # NZ date format, e.g. "from 01/05/2026 to 31/05/2026" or "between ... and ..."
     nz_range_match = re.search(
         r"(?:from|between)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(?:to|and)\s+(\d{1,2}/\d{1,2}/\d{4})",
         phrase,
@@ -785,8 +778,7 @@ def _resolve_date_filter(
 
         return start, end, _display_date_label(start, end)
 
-    # ISO support for developer/API safety:
-    # from 2026-05-01 to 2026-05-31
+    # also accept plain ISO dates for API callers, e.g. "from 2026-05-01 to 2026-05-31"
     iso_range_match = re.search(
         r"(?:from|between)\s+(\d{4}-\d{2}-\d{2})\s+(?:to|and)\s+(\d{4}-\d{2}-\d{2})",
         phrase,

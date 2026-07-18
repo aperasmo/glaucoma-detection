@@ -1,4 +1,3 @@
-// src/App.jsx
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
@@ -30,6 +29,10 @@ import ResearchEvaluation from "./pages/ResearchEvaluation";
 import ResearchResults from "./pages/ResearchResults";
 
 import PitchMode from "./pages/PitchMode";
+import MobileLanding from "./pages/MobileLanding";
+import MobileScreening from "./pages/MobileScreening";
+import MobileResult from "./pages/MobileResult";
+
 
 function ProtectedRoute() {
   const { token } = useAuth();
@@ -67,7 +70,10 @@ const router = createBrowserRouter([
       { path: "/research/results",    element: <ResearchResults /> },
       { path: "/reports/high-risk",        element: <ReportHighRisk /> },
       { path: "/profile",                element: <UserProfile /> },
-      { path: "/pitch", element: <PitchMode /> }
+      { path: "/pitch", element: <PitchMode /> },
+      { path: "/mobile", element: <MobileLanding /> },
+      { path: "/mobile/screening", element: <MobileScreening /> },
+      { path: "/mobile/result/:screeningId", element: <MobileResult /> },
     ],
   },
 

@@ -1,8 +1,4 @@
-// src/pages/Dashboard.jsx
-// Main dashboard - Tailwind CSS implementation.
-// Fixed: uses recentScreenings for both Recent Screenings and High Risk tables.
-// Removed unused patients state.
-
+// both the Recent Screenings and High Risk tables pull from recentScreenings
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";

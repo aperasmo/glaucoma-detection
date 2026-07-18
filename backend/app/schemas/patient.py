@@ -1,16 +1,14 @@
-# backend/app/schemas/patient.py
-#
-# Pydantic schemas for Patient endpoints.
-# Defines what data the API accepts (input) and returns (output).
+# request/response shapes for the patient endpoints - kept separate from
+# the ORM model so we control exactly what goes in and out of the API
 
-from uuid import UUID 
+from uuid import UUID
 from datetime import datetime, date
-from typing import Optional # for optional fields
+from typing import Optional
 
-from pydantic import BaseModel, EmailStr # for email validation
+from pydantic import BaseModel, EmailStr
 
 class CreatePatient(BaseModel):
-    # Required and optional fields when creating a new patient.
+    # what's needed (and what's optional) to register a new patient
     last_name: str
     first_name: str
     dob: Optional[date] = None
@@ -24,7 +22,7 @@ class CreatePatient(BaseModel):
     remarks: Optional[str] = None
 
 class ResponsePatient(BaseModel):
-    # Safe patient data returned in API responses.
+    # what we send back for a patient - no sensitive stuff here
     patient_id: UUID
     patient_code: str
     last_name: str
@@ -61,7 +59,7 @@ class LatestScreeningResponse(BaseModel):
 
 
 class ResponsePatient(BaseModel):
-    # Safe patient data returned in API responses.
+    # what we send back for a patient - no sensitive stuff here
     patient_id: UUID
     patient_code: str
     last_name: str
@@ -80,12 +78,12 @@ class ResponsePatient(BaseModel):
     created_by: Optional[UUID] = None
     latest_screening: Optional[LatestScreeningResponse] = None
 
-    model_config = {"from_attributes": True} # allows Pydantic to read from ORM models directly    
+    model_config = {"from_attributes": True}  # lets pydantic build this straight from the ORM object
     
 
 
 class UpdatePatient(BaseModel):
-    # All fields optional - update one or all at a time.
+    # everything optional so callers can PATCH just the fields they want to change
     last_name: Optional[str] = None
     first_name: Optional[str] = None
     dob: Optional[date] = None

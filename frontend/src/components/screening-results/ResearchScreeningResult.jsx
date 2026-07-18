@@ -1,6 +1,4 @@
-// frontend/src/components/screening-results/ResearchScreeningResult.jsx
-// Research view for Screening Result.
-// Shows model comparison and LLM referral comparison.
+// research view of the screening result - side-by-side model comparison and LLM referral comparison
 
 import { useEffect, useMemo, useState } from "react";
 import {

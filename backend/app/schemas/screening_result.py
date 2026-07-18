@@ -1,7 +1,4 @@
-# backend/app/schemas/screening_result.py
-#
-# Pydantic schemas for ScreeningResult endpoints.
-# Defines what data the API returns for ML inference results.
+# response shapes for the ML inference results
 
 from uuid import UUID
 from datetime import datetime
@@ -12,7 +9,6 @@ from pydantic import BaseModel
 
 
 class ScreeningResultResponse(BaseModel):
-    # Full screening result data returned in API responses.
     screening_results_id: UUID
     screening_id: UUID
     model_used: str
@@ -32,9 +28,8 @@ class ScreeningResultResponse(BaseModel):
     cdr: Optional[float] = None
     disc_radius: Optional[float] = None
     cup_radius: Optional[float] = None
-    # Model disagreement fields - populated on ensemble result in Clinical Mode
-    # when at least one individual model crossed its sensitivity threshold
-    # while ensemble predicted normal
+    # only set on the ensemble result in Clinical Mode, when some individual
+    # model crossed its sensitivity threshold even though the ensemble said normal
     has_model_disagreement: Optional[bool] = None
     disagreement_model: Optional[str] = None
     disagreement_confidence: Optional[float] = None
@@ -44,12 +39,12 @@ class ScreeningResultResponse(BaseModel):
 
 
 class ScreeningWithResults(BaseModel):
-    # Combined screening and results - used for the clinical results page.
+    # screening + its results together, used by the clinical results page
     screening_id: UUID
     patient_id: UUID
     eye_side: str
     status: str
-    inference_mode: str | None = None  # Backwards compatibility for old screenings without this field
+    inference_mode: str | None = None  # older screenings predate this field, hence optional
     image_path: str
     created_at: datetime
     patient_name: Optional[str] = None

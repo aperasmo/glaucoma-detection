@@ -1,17 +1,7 @@
-# backend/app/api/routes/model_performance.py
-#
-# Model performance endpoints.
-#
-# Purpose:
-#   Serves frozen test-set evaluation metrics to the frontend.
-#
-# Important:
-#   This is NOT live clinical performance.
-#   These values come from the held-out test set used during model evaluation.
-#
-# Data files expected:
-#   backend/app/data/model_performance/evaluation_results.json
-#   backend/app/data/model_performance/mcnemar_results.json
+# serves the frozen test-set eval metrics to the frontend. this is NOT live clinical
+# performance - it's from the held-out test set used during model evaluation.
+# reads from backend/app/data/model_performance/evaluation_results.json and
+# mcnemar_results.json
 
 import json
 from pathlib import Path
@@ -28,16 +18,8 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/models", tags=["Model Performance"])
 
 
-# -------------------------------------------------------------------------
-# PATH CONFIGURATION
-# -------------------------------------------------------------------------
-# This file is located at:
-#   backend/app/api/routes/model_performance.py
-#
-# parents[2] points to:
-#   backend/app
-#
-# Change PERFORMANCE_DIR if you later move the JSON files somewhere else.
+# parents[2] from routes/model_performance.py lands on backend/app - update this
+# if the JSON files ever move
 APP_DIR = Path(__file__).resolve().parents[2]
 PERFORMANCE_DIR = APP_DIR / "data" / "model_performance"
 
@@ -46,7 +28,6 @@ MCNEMAR_FILE = PERFORMANCE_DIR / "mcnemar_results.json"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON file and return a dictionary."""
     if not path.exists():
         logger.error("Model performance file missing: %s", path)
         raise HTTPException(
@@ -66,7 +47,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _safe_metric(value: Any) -> float | int | None:
-    """Return numeric values safely."""
+    # coerces to a number if possible, otherwise gives up quietly
     if value is None:
         return None
 
@@ -82,7 +63,7 @@ def _safe_metric(value: Any) -> float | int | None:
 
 
 def _build_model_row(model_key: str, model_data: dict[str, Any]) -> dict[str, Any]:
-    """Build one model comparison row using Youden threshold."""
+    # one row per model, all metrics taken at the Youden threshold
     youden = model_data.get("youden_threshold", {}) or {}
 
     return {
@@ -115,11 +96,8 @@ def _build_model_row(model_key: str, model_data: dict[str, Any]) -> dict[str, An
 async def get_model_performance(
     current_user: User = Depends(get_current_user),
 ):
-    """Return model performance metrics for the Model Performance page.
-
-    This endpoint intentionally reads static JSON files.
-    Do not compute model metrics from live clinical data here.
-    """
+    """Metrics for the Model Performance page - reads static JSON on purpose,
+    don't wire this up to live clinical data."""
     evaluation_data = _load_json(EVALUATION_FILE)
 
     mcnemar_data = {}

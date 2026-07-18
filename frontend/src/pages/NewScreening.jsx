@@ -1,8 +1,4 @@
-// src/pages/NewScreening.jsx
-// New screening page - Tailwind CSS implementation.
-// Step 1: Select patient. Step 2: Upload fundus image.
-// Step 3: Select eye side. Step 4: Model selection (Research Mode only).
-
+// screening flow: pick patient, upload fundus image, pick eye side, and (research mode only) pick a model
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -57,8 +53,7 @@ function NewScreening() {
   const [selectedSample, setSelectedSample] = useState(null);
   const [loadingSample, setLoadingSample] = useState(false);
   const [sampleImages] = useState(() => {
-    // Build the list of 20 sample fundus images and shuffle once on mount.
-    // Filenames stay internal only - never shown to the user (no labels).
+    // 20 sample images, shuffled once when the component mounts - filenames never get shown to the user
     const normals = Array.from({ length: 10 }, (_, i) =>
       `/assets/sample-fundus/normal-${String(i + 1).padStart(2, "0")}.png`
     );
@@ -66,7 +61,7 @@ function NewScreening() {
       `/assets/sample-fundus/glaucoma-${String(i + 1).padStart(2, "0")}.png`
     );
     const all = [...normals, ...glaucomas];
-    // Fisher-Yates shuffle so normal/glaucoma order is randomised, not grouped.
+    // fisher-yates so normal/glaucoma cases don't end up grouped together
     for (let i = all.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [all[i], all[j]] = [all[j], all[i]];
@@ -271,7 +266,7 @@ function NewScreening() {
                     <div className="text-xs text-text3">Supported: JPG, PNG · Max 10MB</div>
                   </div>
 
-                  {/* Sample image picker trigger - opens modal with 20 unlabelled samples */}
+                  {/* opens the modal with the unlabelled sample images */}
                   <button
                     onClick={() => setShowSamplePicker(true)}
                     className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2.5 text-xs text-text2 border border-white/7 rounded-lg bg-surface2 hover:bg-surface3 hover:border-white/12 transition-colors cursor-pointer font-sans"
@@ -414,9 +409,7 @@ function NewScreening() {
 
       </div>
 
-{/* SAMPLE IMAGE PICKER MODAL */}
-    {/* 20 unlabelled fundus images (10 normal, 10 glaucoma), shuffled on mount. */}
-    {/* No labels shown - keeps the demo blind, matches a genuine screening flow. */}
+{/* no labels shown here on purpose - keeps it blind, like a real screening would be */}
     {showSamplePicker && (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div className="bg-surface border border-white/12 rounded-xl w-full max-w-lg overflow-hidden">
@@ -489,7 +482,7 @@ function NewScreening() {
       </div>
     )}
 
-    {/* Loading Overlay */}
+    {/* full-screen spinner while inference runs */}
     {loading && (
       <div className="loading-overlay">
         <div className="loading-content">

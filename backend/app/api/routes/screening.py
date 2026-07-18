@@ -1,8 +1,5 @@
-# backend/app/api/routes/screening.py
-#
-# Screening endpoints - image upload and screening management.
-# Image upload triggers ML inference automatically as a background task.
-# All routes are protected - valid JWT token required.
+# screening endpoints - image upload + management. uploading kicks off ML inference
+# in the background. everything here needs a valid JWT.
 
 from uuid import UUID
 
@@ -50,10 +47,8 @@ async def upload_screening(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin", "nurse")),
 ):
-    # Upload a fundus image and create a new screening record.
-    # Image is validated and saved immediately.
-    # ML inference is triggered automatically as a background task.
-    # Restricted to admin and nurse roles.
+    # admin/nurse only - image gets validated and saved right away, inference
+    # happens after in the background
 
     from app.schemas.screening import CreateScreening
 
@@ -72,11 +67,10 @@ async def upload_screening(
             created_by=current_user.user_id,
         )
 
-        # Commit immediately so the background task can find the record
+        # commit now, otherwise the background task won't see the row yet
         await db.commit()
         await db.refresh(screening)
 
-        # Trigger ML inference in the background
         background_tasks.add_task(
             run_ml_inference,
             screening_id=screening.screening_id,
@@ -97,9 +91,7 @@ async def list_patient_screenings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Retrieve all screenings for a specific patient.
-    # Ordered by most recent first.
-    # Accessible to all authenticated roles.
+    # most recent first
     return await get_screenings_by_patient(db, patient_id)
 
 @router.get("/", response_model=list, status_code=status.HTTP_200_OK)
@@ -110,8 +102,7 @@ async def list_all_screenings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # List all screenings across all patients with pagination.
-    # Optionally filter by status e.g. ?status=complete
+    # pass ?status=complete etc. to filter
     from app.services.screening_service import get_all_screenings
     return await get_all_screenings(db, skip, limit, status)
 
@@ -122,8 +113,7 @@ async def recent_screenings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Return last N complete screenings with ensemble result data.
-    # Used for Dashboard recent screenings panel.
+    # feeds the recent screenings panel on the dashboard
     from app.services.screening_service import get_recent_screenings
     return await get_recent_screenings(db, limit)
 
@@ -133,8 +123,7 @@ async def dashboard_stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Return dashboard summary statistics.
-    # Powers the stats cards on the Dashboard page.
+    # powers the stat cards on the dashboard
     from app.services.screening_service import get_dashboard_stats
     return await get_dashboard_stats(db)
 
@@ -155,25 +144,16 @@ async def generate_disagreement_letter(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Generate a second opinion referral letter for a Clinical Mode screening
-    # where model disagreement was detected (ensemble said normal but at least
-    # one individual model crossed its own sensitivity threshold).
-    #
-    # Only available when:
-    #   - Screening exists and belongs to a real patient
-    #   - Ensemble predicted normal (disagreement only makes sense then)
-    #   - has_model_disagreement = True on the ensemble result record
-    #
-    # Letter is saved with letter_type="disagreement" so it can be
-    # distinguished from the regular clinical GPT-4o letter on redisplay.
-    # Uses DEFAULT_CLINICAL_LLM setting - same LLM as regular clinical letter.
-    # Only one disagreement letter per screening - returns existing one if
-    # already generated rather than creating duplicates.
+    # second-opinion letter for when the ensemble said normal but one of the
+    # individual models crossed its own sensitivity threshold anyway. only makes
+    # sense for an ensemble-normal result with has_model_disagreement set.
+    # gets tagged letter_type="disagreement" so the frontend can tell it apart
+    # from the regular clinical letter - and we only ever generate one per
+    # screening, repeat calls just return what's already there.
 
     try:
         print(f"[disagreement-letter] Request | screening_id={screening_id} | user={current_user.user_code}")
 
-        # Fetch screening
         result = await db.execute(
             select(Screening).where(Screening.screening_id == screening_id)
         )
@@ -184,7 +164,6 @@ async def generate_disagreement_letter(
                 detail="Screening not found.",
             )
 
-        # Fetch patient
         result = await db.execute(
             select(Patient).where(Patient.patient_id == screening.patient_id)
         )
@@ -195,7 +174,7 @@ async def generate_disagreement_letter(
                 detail="Patient not found.",
             )
 
-        # Fetch ensemble result - confirm disagreement flag is set
+        # need the ensemble record to check the disagreement flag
         result = await db.execute(
             select(ScreeningResult).where(
                 ScreeningResult.screening_id == screening_id,
@@ -216,8 +195,7 @@ async def generate_disagreement_letter(
                 detail="No model disagreement detected for this screening. Disagreement letter not applicable.",
             )
 
-        # Check if disagreement letter already exists - return it instead of
-        # regenerating to avoid duplicate LLM calls and duplicate DB records.
+        # already generated? just hand that back instead of burning another LLM call
         result = await db.execute(
             select(ScreeningResult).where(
                 ScreeningResult.screening_id == screening_id,
@@ -235,7 +213,6 @@ async def generate_disagreement_letter(
                 "already_existed": True,
             }
 
-        # Get clinician details from settings
         clinician_name = await get_setting(
             db, "REFERRING_CLINICIAN_NAME", default="Dr. [Clinician Name]"
         )
@@ -243,21 +220,18 @@ async def generate_disagreement_letter(
             db, "REFERRING_CLINICIAN_TITLE", default="General Ophthalmologist"
         )
 
-        # Get default LLM from settings
         default_llm = await get_setting(
             db, "DEFAULT_CLINICAL_LLM", default="gpt4o"
         )
 
-        # Get OHTS data from ensemble record
         ohts_score = int(ensemble_record.ohts_score) if ensemble_record.ohts_score else None
         ohts_tier = ensemble_record.ohts_tier
 
         patient_name = f"{patient.first_name} {patient.last_name}"
 
-        # Build disagreement-aware prompt - different from the standard clinical
-        # prompt because this case has a normal ensemble result with dissenting
-        # individual model(s). The letter should reflect the uncertainty rather
-        # than a straightforward glaucoma-suspicious referral
+        # can't reuse the standard clinical prompt here - this case is a normal
+        # ensemble result with a dissenting model, so the letter needs to read as
+        # "uncertain" rather than a straightforward glaucoma referral
         disagreement_prompt_override = f"""
         You are a clinical assistant helping a general ophthalmologist prepare a referral letter
         for a patient whose AI glaucoma screening produced a discordant, non-diagnostic result.
@@ -310,12 +284,9 @@ async def generate_disagreement_letter(
         or placeholders such as [Your Name].
         """
 
-        # Generate the letter using a direct LLM call with the custom
-        # disagreement-aware prompt - NOT generate_referral_letters() which
-        # uses the standard clinical prompt. The disagreement context
-        # (which model disagreed, at what confidence) must be explicitly
-        # included in the prompt so the letter reflects the uncertainty.
-        
+        # calling the LLM directly here instead of generate_referral_letters() -
+        # need the disagreement context baked into the prompt itself
+
 
         start_time = time.time()
         letter_text = None
@@ -383,7 +354,7 @@ async def generate_disagreement_letter(
 
         generation_time_ms = round((time.time() - start_time) * 1000, 2)
 
-        # Clean the letter body - strip any LLM-generated closing/signature
+        # strip whatever closing/signature the LLM tried to tack on
         from app.ml_inference.llm_referral import clean_referral_letter_body
         letter_text = clean_referral_letter_body(letter_text or "")
         letter_data = {
@@ -400,9 +371,6 @@ async def generate_disagreement_letter(
             )
         signed_by = f"{clinician_name}\n{clinician_title}"
 
-        # Save the disagreement letter as a new screening_result record
-        # letter_type="disagreement" distinguishes it from the regular clinical
-        # letter on redisplay - frontend checks this field
         new_record = ScreeningResult(
             screening_id=screening_id,
             model_used="ensemble",
@@ -458,8 +426,6 @@ async def get_screening(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Retrieve a single screening by UUID.
-    # Accessible to all authenticated roles.
     screening = await get_screening_by_id(db, screening_id)
     if not screening:
         raise HTTPException(
@@ -470,14 +436,9 @@ async def get_screening(
 
 
 async def run_ml_inference(screening_id: UUID, image_path: str, created_by: Optional[UUID] = None,):
-    # 1. Load the three models (EfficientNetB0, VGG16, EfficientNetV2)
-    # 2. Run inference and ensemble
-    # 3. Generate Grad-CAM++ heatmap
-    # 4. Calculate OHTS risk score
-    # 5. Generate LLM referral letter
-    # 6. Save results to screening_results table
-    # 7. Update screening status to complete
-
+    # runs the full pipeline: the three models + ensemble, Grad-CAM++, OHTS score,
+    # the LLM referral letter, then writes everything back and flips the screening
+    # to complete
 
     try:
         async with AsyncSessionLocal() as db:

@@ -1,8 +1,4 @@
-// src/pages/Activate.jsx
-// Account activation page - public route.
-// Called when user clicks activation email link.
-// Calls GET /auth/activate?token=xxx
-
+// public route hit when someone clicks the activation link in their email
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api/index";
@@ -34,7 +30,7 @@ useEffect(() => {
     })
     .catch(err => {
       const detail = err.response?.data?.detail || "";
-      // If already used - user was activated on first call, treat as success
+      // token was already consumed on an earlier call, so treat this as a success rather than an error
       if (detail.toLowerCase().includes("already been used") || detail.toLowerCase().includes("already used")) {
         setStatus("success");
         setMessage("Your account is active. You can sign in.");

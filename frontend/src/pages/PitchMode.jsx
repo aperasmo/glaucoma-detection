@@ -1,9 +1,5 @@
-// src/pages/PitchMode.jsx
-// Pitch Mode - full-screen guided walkthrough for demos and presentations.
-// Triggered from Login page via "Enter pitch mode after sign in" checkbox.
-// Six sequential steps. Click anywhere to advance. Step 6 redirects to dashboard.
-// Uses existing app theme tokens - feels native to the product.
-
+// full-screen guided walkthrough for demos, triggered from the Login page's pitch mode checkbox.
+// six steps, click (or space/arrow) to advance, last step drops you into the dashboard.
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../theme/ThemeProvider";
@@ -168,7 +164,7 @@ function PitchMode() {
                 transition: "opacity 0.25s ease",
               }}
             >
-              {/* Auto-height container so flexbox centres the whole slide as one unit */}
+              {/* height auto, so flexbox centres the whole slide as one block */}
               <div className={`${(current.id === 3 || current.id === 4) ? "w-full" : "w-full max-w-3xl"}`}>
 
           {/* Eyebrow */}

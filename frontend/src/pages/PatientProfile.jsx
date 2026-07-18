@@ -1,12 +1,8 @@
-// src/pages/PatientProfile.jsx
-// Patient detail page.
-// Left panel: patient info. Right panel: screening history + longitudinal risk chart.
+// left panel is patient info, right panel is screening history + the longitudinal risk chart
 //
-// Important implementation note:
-// /screenings/patient/{patientId} may only return the screening records.
-// To display prediction, confidence score, and the risk chart, this page enriches each
-// completed screening by calling /results/{screeningId}/full and attaching the primary result.
-
+// heads up: /screenings/patient/{patientId} only gives back the raw screening records, so to
+// show prediction/confidence/the chart we enrich each completed screening with a call to
+// /results/{screeningId}/full and attach the primary result
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -70,14 +66,14 @@ function toNumber(value) {
 function toPercent(score) {
   if (score === null || score === undefined) return null;
 
-  // Backend may return 0.635 or 63.5. This keeps both safe.
+  // backend sometimes sends 0.635, sometimes 63.5 - handle both
   return score <= 1 ? score * 100 : score;
 }
 
 function getPrimaryResultFromResults(results) {
   if (!Array.isArray(results)) return null;
 
-  // Prefer the clinical result: ensemble and not an LLM referral-letter row.
+  // ensemble row that isn't an LLM referral letter is the one we want
   return (
     results.find(r => r.model_used === "ensemble" && !r.llm_used) ||
     results.find(r => !r.llm_used) ||
@@ -121,8 +117,7 @@ function getScreeningPrediction(screening) {
   if (result?.prediction) return result.prediction;
   if (screening?.prediction) return screening.prediction;
 
-  // Do not show completed screenings as Pending.
-  // If result details have not been returned or fetched, show Complete instead.
+  // completed screenings shouldn't show as pending just because the result details haven't loaded yet
   if (screening?.status === "complete") return "complete";
 
   return screening?.status || "pending";
@@ -168,8 +163,7 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
     );
   }
 
-  // Chart layout constants.
-  // Adjust these values later if you want more or less chart padding.
+  // tweak these if the chart needs more/less padding
   const width = 720;
   const height = 260;
   const pad = { top: 24, right: 28, bottom: 42, left: 54 };
@@ -180,8 +174,7 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
     (a, b) => new Date(a.date) - new Date(b.date)
   );
 
-  // Group by calendar date so same-day left/right eye screenings do not look
-  // like separate time points.
+  // group by calendar date so same-day left/right eye screenings don't read as separate time points
     const getTimeValue = value => {
       const date = new Date(value);
       return Number.isNaN(date.getTime()) ? null : date.getTime();
@@ -224,8 +217,7 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
     const baseX = xForTime(point.date);
     const eyeSide = String(point.eye_side || "").toLowerCase();
 
-    // Small offset only when left and right eyes share the same timestamp.
-    // This prevents the markers from sitting directly on top of each other.
+    // nudge the marker sideways when both eyes share a timestamp, otherwise they'd overlap
     const sameTimestampCount = sortedPoints.filter(
       other => getTimeValue(other.date) === getTimeValue(point.date)
     ).length;
@@ -360,7 +352,7 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
             50% reference
           </text>
 
-          {/* Right-eye trend. Only connects right-eye points. */}
+          {/* right-eye line only connects right-eye points */}
           {rightEyePath && (
             <path
               d={rightEyePath}
@@ -372,7 +364,7 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
             />
           )}
 
-          {/* Left-eye trend. Only connects left-eye points. */}
+          {/* same deal for left eye */}
           {leftEyePath && (
             <path
               d={leftEyePath}
@@ -489,8 +481,8 @@ function LongitudinalRiskChart({ screenings, formatDate, onViewResult }) {
 }
 
 async function enrichScreeningWithResult(screening) {
-  // The patient profile endpoint may not include prediction/confidence data.
-  // This fetches the same full result data used by the Screening Result page.
+  // the profile endpoint doesn't always include prediction/confidence, so pull the same full
+  // result data the Screening Result page uses
   if (!screening?.screening_id || screening?.status !== "complete") {
     return screening;
   }
@@ -506,8 +498,8 @@ async function enrichScreeningWithResult(screening) {
       result: primaryResult,
     };
   } catch (error) {
-    // Do not break the patient profile if one result fails to load.
-    // The row will still show Complete, but score/chart data may be blank.
+    // one failed result shouldn't take down the whole page - row still shows Complete,
+    // just with blank score/chart data
     console.warn("Failed to enrich screening result", screening.screening_id, error);
     return screening;
   }
@@ -547,7 +539,7 @@ function PatientProfile() {
           baseScreenings.map(screening => enrichScreeningWithResult(screening))
         );
 
-        // Newest first for the table. The chart sorts its own copy oldest to newest.
+        // table wants newest first; the chart sorts its own copy oldest to newest separately
         const sortedScreenings = enrichedScreenings.sort(
           (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
         );

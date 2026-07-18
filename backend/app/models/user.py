@@ -1,9 +1,6 @@
-# backend/app/models/user.py
-#
-# User table - clinic staff who log into the system.
-# Roles are enforced at the database level using PostgreSQL Enum.
-# Passwords are never stored as plain text - only bcrypt hashes.
-# All changes are tracked via created_by/updated_by for audit trail.
+# clinic staff accounts. roles are locked to a fixed set via a Postgres enum,
+# passwords only ever get stored as bcrypt hashes, and created_by/updated_by
+# give us an audit trail.
 
 import uuid
 from datetime import datetime
@@ -18,7 +15,7 @@ class User(Base):
     __tablename__ = "users"
 
     # --- Primary Key ---
-    # UUID prevents ID enumeration attacks (cannot guess other users by incrementing)
+    # UUID so ids can't just be guessed by incrementing a counter
     user_id = Column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -27,8 +24,7 @@ class User(Base):
     )
 
     # --- User Code ---
-    # Human-readable identifier for the user e.g. USR0001
-    # unique=True ensures no duplicate codes
+    # human-readable id, e.g. USR0001
     user_code = Column(String(20), unique=True, nullable=False, index=True)
 
     # --- Name Fields ---
@@ -36,11 +32,10 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
 
     # --- Security ---
-    # Only the bcrypt hash is stored - never the real password
+    # bcrypt hash only, never the raw password
     hashed_password = Column(Text, nullable=False)
 
     # --- Role-Based Access Control ---
-    # PostgreSQL enforces valid values at the DB level
     # admin  - full access, user management, system settings
     # doctor - view results, generate referral letters, manage patients
     # nurse  - upload images, register patients, view basic results
@@ -58,15 +53,14 @@ class User(Base):
     mobile_number = Column(String(50), nullable=True)
 
     # --- Account Status ---
-    # is_active=False disables the account without deleting data
+    # flip to False to disable an account without deleting anything
     is_active = Column(Boolean, default=True, nullable=False)
 
-    # Login lockout tracking
+    # login lockout tracking
     failed_login_attempts = Column(Integer, nullable=False, default=0)
     is_locked = Column(Boolean, nullable=False, default=False)
 
     # --- Remarks ---
-    # Free text notes about the user account
     remarks = Column(Text, nullable=True)
 
     # --- Audit Trail: When ---
@@ -79,13 +73,12 @@ class User(Base):
     )
 
     # --- Audit Trail: Who ---
-    # Links to user_id of the staff who created or last modified this record
-    # nullable=True because the first admin account has no creator
+    # nullable because the very first admin account doesn't have a creator
     created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_by = Column(UUID(as_uuid=True), nullable=True)
 
     is_researcher = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
-        # Safe representation - never includes password
+        # deliberately leaves the password out
         return f"<User {self.user_code} {self.last_name}, {self.first_name} role={self.role}>"

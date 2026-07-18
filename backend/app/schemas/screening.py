@@ -1,7 +1,4 @@
-# backend/app/schemas/screening.py
-#
-# Pydantic schemas for Screening endpoints.
-# Defines what data the API accepts (input) and returns (output).
+# request/response shapes for the screening endpoints
 
 from uuid import UUID
 from datetime import datetime
@@ -11,7 +8,6 @@ from pydantic import BaseModel
 
 
 class CreateScreening(BaseModel):
-    # Required fields when creating a new screening.
     patient_id: UUID
     eye_side: str
     remarks: Optional[str] = None
@@ -21,14 +17,12 @@ class CreateScreening(BaseModel):
     @field_validator("eye_side")
     @classmethod
     def eye_side_must_be_valid(cls, value):
-        # Only left or right eye accepted.
         if value not in ["left", "right"]:
             raise ValueError("eye_side must be 'left' or 'right'.")
         return value
 
 
 class ScreeningResponse(BaseModel):
-    # Screening data returned in API responses.
     screening_id: UUID
     patient_id: UUID
     screened_by: UUID
@@ -43,7 +37,7 @@ class ScreeningResponse(BaseModel):
 
 
 class UpdateScreeningStatus(BaseModel):
-    # Used internally to update screening status during ML pipeline.
+    # internal use - the ML pipeline calls this to move status along
     status: str
 
     from pydantic import field_validator

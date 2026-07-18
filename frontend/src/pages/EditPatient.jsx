@@ -1,8 +1,4 @@
-// src/pages/EditPatient.jsx
-// Edit patient form - Tailwind CSS implementation.
-// Pre-fills form with existing patient data.
-// Connects to GET /patients/:id and PUT /patients/:id
-
+// pre-fills from GET /patients/:id, saves via PUT /patients/:id
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";

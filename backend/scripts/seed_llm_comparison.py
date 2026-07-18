@@ -1,121 +1,61 @@
-# backend/scripts/seed_llm_comparison.py
+# Follow-up to discover_test_set_confidence.py, for the Paper 2 LLM comparison work.
+# Seeds 60 hand-picked real test set images across 6 clinical scenarios, creates a
+# real Patient + Screening for each, runs the full inference pipeline (3 models +
+# ensemble + Grad-CAM++ + CDR) in research mode, and generates all 4 LLM referral
+# letters per case (GPT-4o, GPT-4o-mini, LLaMa, Gemini).
 #
-# PURPOSE (Paper 2 - LLM comparison research)
-# ---------------------------------------------------------------------------
-# This is the FOLLOW-UP script to discover_test_set_confidence.py.
-# It seeds 60 hand-picked, real test set images across 6 clinical scenarios,
-# creates a real Patient + Screening record for each, runs the FULL inference
-# pipeline (3 models + ensemble + Grad-CAM++ + CDR) in RESEARCH MODE, and
-# generates all 4 LLM referral letters per case (GPT-4o, GPT-4o-mini, LLaMa,
-# Gemini).
-#
-# RUNS ONE SCENARIO AT A TIME - SESSION-BASED, NOT ALL 60 AT ONCE.
-# Gemini's free-tier rate limit makes running all 60 cases (140 LLM calls)
-# in a single session unreliable. Instead, this script takes a single
-# --scenario argument and only processes that scenario's cases. Run it
-# once per scenario, across separate sessions/days, as your Gemini quota
-# allows:
-#
+# Important: run one scenario per session, not all 60 at once. Gemini's free-tier
+# rate limit chokes if you try to push all ~140 LLM calls through in one go, so this
+# takes a --scenario arg and only processes that scenario. Do them one at a time
+# across separate days as the quota resets, e.g.:
 #   docker exec -it glaucoma_backend python -m scripts.seed_llm_comparison --scenario 1
 #   docker exec -it glaucoma_backend python -m scripts.seed_llm_comparison --scenario 2
-#   ... and so on through --scenario 6
+# (scenarios 5 and 6 are normal predictions so they don't cost any LLM calls at all -
+# scenarios 1-4 are the glaucoma ones, roughly 4x cases-count calls each)
 #
-# Scenario sizes (n) and approx LLM call cost per session:
-#   Scenario 1 (n=7,  glaucoma)  -> up to 28 LLM calls (7 cases x 4 LLMs)
-#   Scenario 2 (n=10, glaucoma)  -> up to 40 LLM calls
-#   Scenario 3 (n=6,  glaucoma)  -> up to 24 LLM calls
-#   Scenario 4 (n=12, glaucoma)  -> up to 48 LLM calls
-#   Scenario 5 (n=12, normal)    -> 0 LLM calls (no referral letter for normal prediction)
-#   Scenario 6 (n=13, normal)    -> 0 LLM calls (no referral letter for normal prediction)
+# Once a case finishes successfully its source image gets moved (not copied) out of
+# test_images/glaucoma/ or test_images/normal/ into a scenario{N}_done/ subfolder
+# right there in the same parent dir, e.g. test_images/glaucoma/scenario1_done/....
+# That's just a visual marker of what's been processed - the DB (via the summary
+# CSV's screening_id column) is still the real record either way. If a case blows up
+# mid-inference its image deliberately stays put, so next time you can just glance at
+# what's still sitting in the bare folder to see what needs another attempt.
 #
-# IMAGE TRACKING - "done" SUBFOLDERS PER SCENARIO
-# After a case is successfully processed, its source image is moved (not
-# copied) from:
-#   test_images/glaucoma/<filename>  or  test_images/normal/<filename>
-# into a "scenario{N}_done" subfolder INSIDE THE SAME PARENT FOLDER it came
-# from, e.g.:
-#   test_images/glaucoma/scenario1_done/Im425_g_ACRIMA.jpg
-#   test_images/normal/scenario6_done/image_2839.jpg
-# This is purely a visual/file-based record of what has been processed for
-# that scenario - the database (via the summary CSV's screening_id column)
-# remains the authoritative record either way. If a case fails partway
-# through inference, its image is deliberately NOT moved, so you can see
-# at a glance (by what's still sitting in the bare glaucoma/ or normal/
-# folder) which cases for that scenario still need attention.
+# Worth remembering what's real here vs what's chosen, before touching anything:
+# confidence_score, prediction, Grad-CAM++, CDR are all genuine model output from
+# discover_test_set_confidence.py actually running the ensemble - nothing's made up.
+# The OHTS tier isn't faked either - we generate a plausible IOP/CCT/age profile and
+# run it through the actual get_ohts_result() (same function prod uses), checking it
+# really lands in the target tier before keeping it; if not we just try another
+# candidate. What we do choose is which image goes in which scenario bucket, based on
+# the real confidence_score from the discovery CSV (see SELECTED_CASES) - that's
+# selection, not fabrication.
 #
-# WHAT IS REAL vs WHAT IS CHOSEN (read this before changing anything):
-#   - confidence_score, prediction, Grad-CAM++, CDR -> 100% real model output.
-#     Nothing here is fabricated. These numbers came from
-#     discover_test_set_confidence.py actually running the real ensemble.
-#   - OHTS tier (Critical / Low / none) -> NOT fabricated either. We generate
-#     a realistic patient IOP/CCT/age profile within real clinical ranges,
-#     then run it through the SAME get_ohts_result() function the production
-#     system uses, and verify it actually lands in the target tier before
-#     accepting it. If a candidate profile doesn't land in the right tier,
-#     we try another realistic candidate - we never hand-pick numbers just
-#     to force a label.
-#   - Which image goes into which scenario bucket -> chosen by us based on
-#     the real confidence_score from the discovery CSV (see SELECTED_CASES
-#     below). This is selection, not fabrication - every number attached to
-#     every case is something the real system actually produced or verified.
+# Heads up: this script writes to the database for real. Creates actual Patient,
+# Screening, and ScreeningResult rows - obviously synthetic (NZ-style names) but they
+# sit right alongside normal demo data unless you point this at a separate Paper 2
+# DB copy. It doesn't care which DB it's pointed at, just uses whatever DATABASE_URL
+# the container has at the time.
 #
-# THIS SCRIPT DOES WRITE TO THE DATABASE.
-# Unlike discover_test_set_confidence.py, this script creates REAL Patient,
-# Screening, and ScreeningResult rows. These are clearly synthetic/research
-# patients (NZ-style realistic names, but obviously not real people) sitting
-# alongside your normal clinical demo data. If you want them separated from
-# your regular Postman/UI demo data, run this against the Paper 2 copy of
-# the backend instead of the main capstone database - that decision is up
-# to you, this script does not care which database it's pointed at, it just
-# uses whatever DATABASE_URL / Docker network the container is configured
-# with at the time you run it.
+# Also not idempotent by filename - running the same scenario twice makes MORE
+# patients/screenings/LLM calls for the same images, it won't just skip them. The
+# scenario{N}_done move is what protects you here: once an image's been moved there,
+# re-running that scenario finds nothing left in the bare folder and skips with a
+# warning. Don't manually move files back unless you mean to redo them.
 #
-# RE-RUN SAFETY
-# This script is NOT idempotent by filename - running the same scenario
-# twice will create MORE patients/screenings/LLM calls for those same
-# images, not skip them. Once an image has been moved into its
-# scenario{N}_done folder, running that --scenario again will simply find
-# no remaining source files for it in the bare glaucoma/normal folder and
-# skip with a warning - this is your natural guard against accidentally
-# re-running (and re-spending LLM budget on) a scenario you already
-# completed, AS LONG AS you don't manually move files back.
+# Source images live in backend/test_images/glaucoma|normal/*.jpg|png, and processed
+# ones end up under .../scenario{N}_done/. The summary CSV gets appended to (not
+# overwritten) at backend/scripts/output/llm_comparison_seed_summary.csv, so today's
+# scenario 1 run and tomorrow's scenario 2 run both land in the same file - columns
+# are scenario, filename, patient_code, screening_id, ground_truth, confidence_score,
+# ohts_target, ohts_score, ohts_tier, iop, cct, age_at_screening. That CSV is what you
+# use to look up which screening_id belongs to which case for the comparison tool.
 #
-# -----------------------------------------------------------------------
-# WHERE THINGS LIVE
-# -----------------------------------------------------------------------
-# Source images:
-#   backend/test_images/glaucoma/*.jpg|png
-#   backend/test_images/normal/*.jpg|png
-# Processed images move to:
-#   backend/test_images/glaucoma/scenario{N}_done/*.jpg|png
-#   backend/test_images/normal/scenario{N}_done/*.jpg|png
-#
-# Output summary CSV (APPENDED to across sessions, not overwritten - so
-# running scenario 1 today and scenario 2 tomorrow both end up in the same
-# file rather than the second run wiping out the first):
-#   backend/scripts/output/llm_comparison_seed_summary.csv
-#   Columns: scenario, filename, patient_code, screening_id, ground_truth,
-#            confidence_score, ohts_target, ohts_score, ohts_tier,
-#            iop, cct, age_at_screening
-#   This is your reference sheet for building the Paper 2 comparison tool -
-#   it tells you exactly which screening_id to pull for each scenario.
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN (inside the Docker container) - ONE SCENARIO PER SESSION
-# -----------------------------------------------------------------------
-#   docker exec -it glaucoma_backend python -m scripts.seed_llm_comparison --scenario 1
-#
-# -----------------------------------------------------------------------
-# HOW TO ADJUST THE CASE LIST OR PATIENT PROFILE RANGES
-# -----------------------------------------------------------------------
-# - To change which images are used: edit SELECTED_CASES below. Each entry
-#   needs filename, label (0=normal/1=glaucoma - must match which subfolder
-#   the file is actually in), dataset (for traceability only), and scenario.
-# - To change the realistic IOP/CCT/age ranges used when searching for a
-#   profile that lands in a target tier: edit REALISTIC_RANGES below.
-# - To change how many attempts the script makes to find a profile that
-#   lands in the target tier before giving up: edit MAX_PROFILE_ATTEMPTS.
-# ---------------------------------------------------------------------------
+# To change which images are used, edit SELECTED_CASES below - each entry needs
+# filename, label (0=normal/1=glaucoma, has to match the actual subfolder), dataset
+# (just for traceability), and scenario. IOP/CCT/age ranges are in REALISTIC_RANGES,
+# and MAX_PROFILE_ATTEMPTS controls how many random profiles it'll try before giving
+# up on hitting a target tier.
 
 import os
 import sys
@@ -139,24 +79,17 @@ from app.models.screening_result import ScreeningResult
 from app.ml_inference.model_loader import load_all_models
 from app.ml_inference.inference import run_inference_pipeline
 from app.ml_inference.ohts import get_ohts_result
-# NOTE: generate_patient_code is intentionally NOT imported from
-# app.services.patient_service here. That function uses COUNT(*) + 1,
-# which can collide with an existing patient_code if rows were ever
-# manually deleted directly in the database (bypassing the app's normal
-# soft-delete, which only sets is_active=False and never removes rows).
-# This exact collision happened once already during testing of this
-# script. Rather than touch the production patient_service.py (explicitly
-# out of scope - no DB/schema changes for this research script), we use
-# a script-local generator below that keeps the same COUNT(*) + 1 numbering
-# for readability, but appends the last 5 characters of the patient's own
-# UUID as a suffix, guaranteeing uniqueness no matter what gaps exist in
-# the count.
+# deliberately not importing generate_patient_code from patient_service here -
+# it uses COUNT(*) + 1, which collides with an existing code if rows were ever
+# manually deleted from the DB (bypassing the app's soft-delete). Actually hit
+# this collision once while testing. Didn't want to touch patient_service.py
+# for a research script, so there's a local generator below instead that keeps
+# the same COUNT(*) + 1 numbering but tacks on 5 chars of the patient's UUID
+# so it can't collide no matter what gaps exist in the count.
 
 logger = get_logger(__name__)
 
-# -----------------------------------------------------------------------
-# CONFIG - paths, same pattern as discover_test_set_confidence.py
-# -----------------------------------------------------------------------
+# same path setup pattern as discover_test_set_confidence.py
 TEST_IMAGES_ROOT = Path(settings.TEST_IMAGES_DIR)
 GLAUCOMA_SUBDIR = TEST_IMAGES_ROOT / "glaucoma"
 NORMAL_SUBDIR = TEST_IMAGES_ROOT / "normal"
@@ -165,17 +98,13 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_CSV_PATH = OUTPUT_DIR / "llm_comparison_seed_summary.csv"
 LLM_LETTERS_CSV_PATH = OUTPUT_DIR / "llm_comparison_letters_raw.csv"
 
-# Fixed seed for the placeholder SYSTEM user_id used as created_by.
-# Edit this if your SYS00001 user_id is different - check with:
-#   SELECT user_id FROM users WHERE user_code = 'SYS00001';
-SYSTEM_USER_ID = None  # set below in main() after looking it up from the DB
+# placeholder for the SYSTEM user_id used as created_by - filled in later in
+# main() once we look it up. If SYS00001's user_id ever changes you can check
+# it with: SELECT user_id FROM users WHERE user_code = 'SYS00001';
+SYSTEM_USER_ID = None
 
-# -----------------------------------------------------------------------
-# REALISTIC CLINICAL RANGES
-# Same ranges already used in admin.py's generate_nz_patient() for the
-# regular demo seed - kept consistent so nothing here is a "special case"
-# range invented just for this script.
-# -----------------------------------------------------------------------
+# same ranges admin.py's generate_nz_patient() uses for the regular demo seed -
+# kept consistent so this isn't some special range just invented for this script
 REALISTIC_RANGES = {
     "age_years": (40, 80),     # patient age range
     "iop": (18.0, 32.0),       # mmHg
@@ -184,13 +113,10 @@ REALISTIC_RANGES = {
 
 MAX_PROFILE_ATTEMPTS = 500  # how many random candidates to try before giving up on hitting a target tier
 
-# -----------------------------------------------------------------------
-# THE 60 SELECTED CASES
-# Pulled directly from backend/scripts/output/test_set_confidence_discovery.csv
-# confidence_score values shown here are the REAL ensemble output recorded
-# during the discovery pass - they are not re-derived, just carried over
-# for reference in the summary CSV.
-# -----------------------------------------------------------------------
+# the 60 cases, pulled straight from
+# backend/scripts/output/test_set_confidence_discovery.csv - confidence_score
+# here is the real ensemble output from the discovery pass, just carried over
+# for reference in the summary CSV, not recomputed
 SELECTED_CASES = [
     # --- Scenario 1: glaucoma TP, high-conf (85-95%), OHTS Critical, n=7 ---
     {"filename": "Im425_g_ACRIMA.jpg", "label": 1, "dataset": "ACRIMA", "scenario": 1, "confidence_score": 0.9497, "ohts_target": "critical"},
@@ -263,16 +189,14 @@ SELECTED_CASES = [
     {"filename": "image_2303.jpg", "label": 0, "dataset": "G1020", "scenario": 6, "confidence_score": 0.4748, "ohts_target": "low"},
     {"filename": "image_265.jpg", "label": 0, "dataset": "G1020", "scenario": 6, "confidence_score": 0.4747, "ohts_target": "low"},
     {"filename": "r3_N-71-L_left_half.png", "label": 0, "dataset": "RIM-ONE-DL", "scenario": 6, "confidence_score": 0.4740, "ohts_target": "low"},
-    # --- Scenario 7: FALSE POSITIVES - model predicted glaucoma but ground truth is normal, n=10 ---
-    # These are the most clinically dangerous cases - the system generated a referral letter
-    # for a patient who does NOT have glaucoma. Added for Assessment 3 / Paper 2 to evaluate
-    # how LLMs handle false alarm referrals. Covers a spread of confidence levels:
-    # 4 high-confidence FP (>=0.70) - model was very wrong with high certainty
-    # 3 mid-confidence FP (0.55-0.70) - model was moderately confident in its wrong prediction
-    # 3 borderline FP (<0.55) - model barely crossed the glaucoma threshold
-    # OHTS profiles assigned same as Scenarios 1-4 (Critical/Low/None) to allow
-    # cross-scenario comparison of LLM behaviour under different clinical contexts.
-    # All images from the locked 415-image test set, none previously used in Scenarios 1-6.
+    # Scenario 7: false positives - model said glaucoma but ground truth is normal, n=10.
+    # These are the scary ones clinically - a referral letter goes out for someone who
+    # doesn't actually have glaucoma. Added later for Assessment 3 / Paper 2 to see how
+    # the LLMs handle false-alarm referrals. Spread across confidence bands: 4 high-conf
+    # (>=0.70, model was very wrong and very sure), 3 mid-conf (0.55-0.70), 3 borderline
+    # (<0.55, barely tipped over the glaucoma threshold). OHTS profiles reuse the same
+    # critical/low/none split as scenarios 1-4 so LLM behaviour is comparable across
+    # scenarios. All from the locked 415-image test set, none reused from scenarios 1-6.
     {"filename": "r3_N-51-L_left_half.png", "label": 0, "dataset": "RIM-ONE-DL", "scenario": 7, "confidence_score": 0.9892, "ohts_target": "critical"},
     {"filename": "531.jpg",                  "label": 0, "dataset": "ORIGA",      "scenario": 7, "confidence_score": 0.8869, "ohts_target": "critical"},
     {"filename": "590.jpg",                  "label": 0, "dataset": "ORIGA",      "scenario": 7, "confidence_score": 0.8768, "ohts_target": "low"},
@@ -305,17 +229,14 @@ NZ_AREA_CODES = ["021", "022", "027"]
 
 
 def find_profile_for_target_tier(target_tier: str | None) -> dict:
-    # Searches for a realistic IOP/CCT/age combination that genuinely
-    # produces the target OHTS tier when run through the REAL get_ohts_result()
-    # function - the same function the production system uses.
-    #
-    # target_tier: "critical", "low", or None (meaning no OHTS - IOP/CCT left blank)
-    #
-    # Returns dict: {dob, iop, cct, ohts_score, ohts_tier} - ohts_score/tier
-    # will be None if target_tier is None (no OHTS case).
+    # hunts for a realistic IOP/CCT/age combo that actually lands in the target
+    # OHTS tier when run through the real get_ohts_result() (same one prod uses).
+    # target_tier is "critical", "low", or None (scenario 4 - no OHTS at all).
+    # returns {dob, iop, cct, ohts_score, ohts_tier}, with score/tier None when
+    # target_tier is None.
 
     if target_tier is None:
-        # Scenario 4 - genuinely missing data, not computed at all.
+        # scenario 4 - data's genuinely missing, not computed
         age_years = random.randint(*REALISTIC_RANGES["age_years"])
         dob = date.today() - timedelta(days=age_years * 365 + random.randint(0, 364))
         return {
@@ -332,9 +253,9 @@ def find_profile_for_target_tier(target_tier: str | None) -> dict:
         iop = round(random.uniform(*REALISTIC_RANGES["iop"]), 1)
         cct = round(random.uniform(*REALISTIC_RANGES["cct"]), 1)
 
-        # Use the REAL scoring function with default Kass et al. (2002) tiers.
-        # CDR/VCD are None here, matching current production behaviour where
-        # segmentation output is not yet fed into OHTS (locked design decision).
+        # real scoring function, default Kass et al. (2002) tiers. CDR/VCD stay
+        # None here since prod doesn't feed segmentation output into OHTS yet
+        # (that's a locked design decision, not an oversight)
         result = get_ohts_result(dob=dob, iop=iop, cct=cct, cdr=None, vcd=None, tiers=None)
 
         if result is not None and result["ohts_tier"] == target_tier:
@@ -353,13 +274,10 @@ def find_profile_for_target_tier(target_tier: str | None) -> dict:
 
 
 def generate_nz_patient_identity(scenario: int, case_number: int) -> dict:
-    # Generates structured, traceable patient identity for research cases.
-    # First name = Patient{N} (sequential within the scenario, 1-indexed).
-    # Last name  = Scenario{N} (matches the scenario number being processed).
-    # This makes every patient immediately identifiable in the DB and CSV
-    # without needing to cross-reference the summary CSV - e.g. the 3rd
-    # patient in Scenario 2 will always be "Patient3 Scenario2".
-    # Random NZ names removed for research clarity.
+    # first/last name are just "Patient{N} Scenario{N}" instead of random NZ
+    # names, so every patient is instantly identifiable in the DB/CSV without
+    # cross-referencing anything - the 3rd patient in scenario 2 is always
+    # "Patient3 Scenario2".
     first_name = f"Patient{case_number}"
     last_name = f"Scenario{scenario}"
     gender = random.choice(["male", "female"])
@@ -374,21 +292,20 @@ def generate_nz_patient_identity(scenario: int, case_number: int) -> dict:
 
 
 def resolve_image_path(filename: str, label: int) -> Path | None:
-    # Looks for the file only in the BARE glaucoma/ or normal/ folder, not
-    # inside any scenario{N}_done/ subfolder. If a previous session already
-    # moved this file into its done folder, this correctly returns None -
-    # which process_case() treats as "already processed, skip" rather than
-    # an error, so re-running a completed scenario is a safe no-op.
+    # only checks the bare glaucoma/ or normal/ folder, never the
+    # scenario{N}_done/ subfolders. if a previous run already moved the file
+    # there, this returns None, and process_case() reads that as "already
+    # done, skip" rather than an error - that's what makes re-running a
+    # finished scenario safe.
     subdir = GLAUCOMA_SUBDIR if label == 1 else NORMAL_SUBDIR
     candidate = subdir / filename
     return candidate if candidate.exists() else None
 
 
 def move_to_scenario_done(image_path: Path, label: int, scenario: int) -> None:
-    # Moves a successfully processed image into a scenario{N}_done subfolder
-    # INSIDE the same parent folder it came from (glaucoma/ stays under
-    # glaucoma/, normal/ stays under normal/). This is a visual/file-based
-    # processed-marker only - the database is still the source of truth.
+    # moves a finished image into scenario{N}_done/ under the same parent
+    # folder (glaucoma stays with glaucoma, normal stays with normal) - just a
+    # visual marker, the DB is still what actually matters
     subdir = GLAUCOMA_SUBDIR if label == 1 else NORMAL_SUBDIR
     done_dir = subdir / f"scenario{scenario}_done"
     done_dir.mkdir(parents=True, exist_ok=True)
@@ -400,9 +317,8 @@ def move_to_scenario_done(image_path: Path, label: int, scenario: int) -> None:
 
 
 async def get_system_user_id(db) -> uuid.UUID:
-    # Looks up the real SYS00001 user_id from the DB rather than hardcoding
-    # a guessed UUID - this stays correct even if the DB was reset and
-    # SYS00001 was recreated with a new UUID.
+    # look up SYS00001's real user_id instead of hardcoding a UUID guess - still
+    # works even if the DB got reset and SYS00001 was recreated with a new one
     from sqlalchemy import select
     from app.models.user import User
 
@@ -416,7 +332,7 @@ async def get_system_user_id(db) -> uuid.UUID:
 
 
 async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list, llm_letter_rows: list, case_number: int) -> str:
-    # Returns a status string: "processed", "skipped_already_done", or raises on real failure.
+    # returns "processed" or "skipped_already_done", or just raises if something real fails
     filename = case["filename"]
     label = case["label"]
     scenario = case["scenario"]
@@ -424,10 +340,9 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
 
     image_path = resolve_image_path(filename, label)
     if image_path is None:
-        # Could mean the file genuinely doesn't exist, OR it was already
-        # moved into scenario{N}_done/ by a previous run of this same
-        # scenario. Either way, there's nothing to process - log it clearly
-        # and move on rather than treating it as a hard failure.
+        # either the file genuinely doesn't exist, or it's already sitting in
+        # scenario{N}_done/ from a previous run - either way nothing to do here,
+        # just log which one it was and move on
         done_check = (GLAUCOMA_SUBDIR if label == 1 else NORMAL_SUBDIR) / f"scenario{scenario}_done" / filename
         if done_check.exists():
             logger.info(f"[seed_llm] SKIP - already processed in a previous session: {filename}")
@@ -439,11 +354,10 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
     identity = generate_nz_patient_identity(scenario, case_number)
 
     async with AsyncSessionLocal() as db:
-        # Step 1 - create patient
-        # Generate the UUID ourselves first (normally SQLAlchemy's column
-        # default=uuid.uuid4 would do this at flush time, but we need the
-        # UUID value available BEFORE insert to derive a collision-safe
-        # patient_code from it - see generate_safe_patient_code() above).
+        # create the patient. generating the UUID ourselves here instead of
+        # letting SQLAlchemy's default=uuid.uuid4 handle it at flush time,
+        # because we need the value up front to build the collision-safe
+        # patient_code (see generate_safe_patient_code below)
         new_patient_uuid = uuid.uuid4()
         patient_code = await generate_safe_patient_code(db, new_patient_uuid)
 
@@ -465,7 +379,7 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
         db.add(new_patient)
         await db.flush()
 
-        # Step 2 - create screening record, copy image into uploads/screenings
+        # now the screening record, and copy the image into uploads/screenings
         import shutil
         screening_id = uuid.uuid4()
         eye_side = random.choice(["left", "right"])
@@ -492,9 +406,9 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
             f"(score={profile['ohts_score']}) | image={filename}"
         )
 
-    # Step 3 - run full inference pipeline, FORCED Research Mode, regardless
-    # of the global INFERENCE_MODE setting - this is the whole point of the
-    # LLM comparison run, every case needs all 4 LLM letters.
+    # run the full pipeline, forced into research mode regardless of the global
+    # INFERENCE_MODE setting - the whole point of this run is getting all 4 LLM
+    # letters for every case
     async with AsyncSessionLocal() as db:
         await run_inference_pipeline(
             screening_id=screening_id,
@@ -504,11 +418,9 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
             mode="research",
         )
 
-    # Step 4 - only NOW that inference has fully succeeded, move the source
-    # image into its scenario_done folder. If inference raised an exception
-    # above, we never reach this line, so the image stays in the bare
-    # glaucoma/normal folder as a visible marker that this case still needs
-    # attention on the next run.
+    # only move the source image once inference has actually succeeded - if it
+    # threw above we never get here, so the image just stays put as a visible
+    # sign this case still needs another go
     move_to_scenario_done(image_path, label, scenario)
 
     summary_rows.append({
@@ -526,16 +438,15 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
         "age_at_screening": (date.today() - profile["dob"]).days // 365,
     })
 
-    # Step 5 - if this case generated LLM letters (glaucoma-positive cases
-    # only), fetch the actual saved records back from the DB and record
-    # per-LLM data for the comparison study - response time, token usage,
-    # and the concept-based completeness_score. This is read back from the
-    # DB rather than captured inline here because run_inference_pipeline()
-    # owns the actual save step - reading back after the fact keeps this
-    # script decoupled from that function's internals.
-    # Use actual model prediction, not ground truth - Scenario 7 (FP cases)
-    # have ground_truth=normal but the model predicts glaucoma and generates
-    # letters. Checking ground_truth here would silently skip their CSV rows.
+    # if this case produced LLM letters, pull the saved records back out of the
+    # DB and log per-LLM stats for the comparison study - response time, token
+    # counts, completeness_score. reading it back after the fact rather than
+    # capturing inline because run_inference_pipeline() owns the actual save,
+    # and this keeps the script from depending on its internals.
+    # checking the actual model prediction here, not ground_truth - scenario 7's
+    # false positives have ground_truth=normal but the model predicts glaucoma
+    # and does generate letters, so checking ground_truth would silently drop
+    # their CSV rows
     async with AsyncSessionLocal() as db:
         from sqlalchemy import select
         result = await db.execute(
@@ -584,24 +495,16 @@ async def process_case(case: dict, system_user_id: uuid.UUID, summary_rows: list
 
 
 async def generate_safe_patient_code(db, patient_uuid: uuid.UUID) -> str:
-    # Script-local replacement for app.services.patient_service.generate_patient_code().
-    # Keeps the same COUNT(*) + 1 numbering for human readability (so codes
-    # still look like PAT00016, PAT00017, ...) but appends the last 5
-    # characters of the patient's own UUID as a suffix. This guarantees
-    # uniqueness even if COUNT(*) is ever wrong due to rows being deleted
-    # directly in the database outside the app's normal soft-delete flow -
-    # which is exactly what caused a UniqueViolationError during testing
-    # of this script (2 patients had been manually deleted, leaving a gap
-    # that made COUNT(*) + 1 recompute an already-used code).
-    #
-    # Final result looks like: PAT0001636088f
-    #   PAT          - same prefix as production codes
-    #   00016        - same zero-padded count-based number as before
-    #   36088f       - last 5 hex characters of this patient's UUID
-    #
-    # This does NOT touch or modify app/services/patient_service.py -
-    # production patient_code generation is intentionally left exactly
-    # as-is, per explicit decision to make no DB/schema changes here.
+    # local stand-in for patient_service.generate_patient_code(). keeps the
+    # same COUNT(*) + 1 numbering so codes still read like PAT00016, PAT00017,
+    # but tacks on the last 5 chars of the patient's UUID so it can't collide
+    # even if COUNT(*) is off because rows got deleted outside the app's normal
+    # soft-delete flow. that's not hypothetical - it's exactly what caused a
+    # UniqueViolationError while testing this (2 patients had been manually
+    # deleted, leaving a gap that made COUNT(*) + 1 land on an already-used code).
+    # ends up looking like PAT0001636088f - PAT prefix, 00016 same as before,
+    # 36088f being the UUID suffix. doesn't touch patient_service.py itself -
+    # production code generation stays exactly as-is on purpose.
     from sqlalchemy import select, func
     from app.models.patient import Patient
 
@@ -613,32 +516,25 @@ async def generate_safe_patient_code(db, patient_uuid: uuid.UUID) -> str:
 
 
 def calculate_completeness_score(letter_text: str) -> int:
-    # Concept-based completeness check, 0-4, scoring whether the letter
-    # FUNCTIONALLY covers four expected clinical referral components -
-    # NOT a literal header search. Real generated letters use flowing
-    # prose ("Dear Colleague, I am writing to refer...") and never include
-    # literal section headers like "Findings:" or "Impression:" - confirmed
-    # by inspecting real letters during testing. A literal header search
-    # would incorrectly score every real letter 0/4 regardless of quality.
+    # scores 0-4 based on whether the letter functionally covers four expected
+    # referral components - not a literal header search. real letters are
+    # flowing prose ("Dear Colleague, I am writing to refer...") and never use
+    # headers like "Findings:" or "Impression:", confirmed by actually reading
+    # real letters, so a literal search would score everything 0/4 no matter
+    # how good it is.
     #
-    # The 4 concepts checked, each worth 1 point:
-    #   1. Findings   - mentions the AI screening flag/finding and a
-    #                    confidence/percentage figure
-    #   2. Impression  - states a clinical impression or suspicion level
-    #                    (e.g. "suspicious", "suggestive of", "raises
-    #                    concern", "flagged as")
-    #   3. Recommendation - explicitly requests specialist review, further
-    #                    evaluation, or assessment
-    #   4. Disclaimer  - explicitly states this is NOT a definitive
-    #                    diagnosis / is screening-only - this is the
-    #                    dimension most likely to actually differ between
-    #                    LLMs, confirmed by inspecting real Scenario 4
-    #                    output where GPT-4o-mini and LLaMa omitted this
-    #                    explicit framing while GPT-4o and Gemini included it.
+    # the four things checked, one point each: findings (mentions the AI
+    # flag/finding plus a confidence number), impression (states a suspicion
+    # level - "suspicious", "suggestive of", "raises concern", etc),
+    # recommendation (explicitly asks for specialist review/further
+    # evaluation), and disclaimer (explicitly says this isn't a definitive
+    # diagnosis / is screening-only - this last one's the one that actually
+    # seems to vary between LLMs, GPT-4o-mini and LLaMa dropped it in some
+    # scenario 4 letters while GPT-4o and Gemini kept it).
     #
-    # This is intentionally a simple keyword/phrase presence check, not an
-    # LLM-graded score - keeps it deterministic, free, and reproducible
-    # rather than spending more LLM budget to grade LLM output.
+    # deliberately just a keyword/phrase check rather than an LLM-graded
+    # score - keeps it deterministic, free, and reproducible instead of
+    # burning more LLM budget grading LLM output.
 
     text_lower = letter_text.lower()
     score = 0
@@ -745,8 +641,7 @@ async def main():
 
     all_cases_for_scenario = [c for c in SELECTED_CASES if c["scenario"] == target_scenario]
 
-    # --filename mode: retry a single specific failed case only.
-    # Overrides --start-index and --count entirely.
+    # --filename retries just one failed case, overrides --start-index/--count entirely
     if args.filename:
         matched = [c for c in all_cases_for_scenario if c["filename"] == args.filename]
         if not matched:
@@ -761,8 +656,8 @@ async def main():
             f"in Scenario {target_scenario}."
         )
     else:
-        # Apply batching slice - default (no args given) processes all cases,
-        # same as before this feature existed.
+        # batching slice - with no args given this just processes everything,
+        # same as before this feature existed
         start = args.start_index
         end = start + args.count if args.count is not None else len(all_cases_for_scenario)
         cases_for_scenario = all_cases_for_scenario[start:end]
@@ -780,9 +675,8 @@ async def main():
         )
         return
 
-    # Load models once - same as discover script, required before any
-    # inference can run since this is a standalone script outside the
-    # normal FastAPI startup lifespan.
+    # load models once, same as the discover script - needed before inference
+    # can run at all since this is standalone, outside the normal FastAPI startup
     load_all_models()
     logger.info("[seed_llm] All 3 models loaded and ready.")
 
@@ -812,16 +706,14 @@ async def main():
 
         logger.info(f"[seed_llm] Progress: {index}/{len(cases_for_scenario)} cases in scenario {target_scenario} handled.")
 
-        # Optional pause between cases - off by default (pause_seconds=0).
-        # Skipped after the very last case since there's nothing after it
-        # to wait for. See --pause-seconds help text for when to use this.
+        # optional pause between cases, off by default. skip it after the last
+        # case since there's nothing left to wait for
         if args.pause_seconds > 0 and index < len(cases_for_scenario):
             logger.info(f"[seed_llm] Pausing {args.pause_seconds}s before next case...")
             await asyncio.sleep(args.pause_seconds)
 
-    # Append to the summary CSV rather than overwriting it, so multiple
-    # sessions across different scenarios all accumulate into one file.
-    # Write the header only if the file doesn't exist yet.
+    # append rather than overwrite so different sessions/scenarios all pile
+    # into the same file - only write the header if it's not there yet
     file_exists = OUTPUT_CSV_PATH.exists()
     with open(OUTPUT_CSV_PATH, "a", encoding="utf-8", newline="") as f:
         fieldnames = [
@@ -835,10 +727,9 @@ async def main():
         for row in summary_rows:
             writer.writerow(row)
 
-    # Same append pattern for the per-LLM letter data CSV - this is the raw
-    # source file that the separate export_llm_comparison.py script (see
-    # below) reads from to build the blind evaluation export and hidden
-    # mapping file once all 4 scenarios are done.
+    # same append pattern for the per-LLM letter CSV - this is the raw file
+    # export_llm_comparison.py later reads to build the blind evaluation
+    # export and hidden mapping once all scenarios are done
     llm_letters_file_exists = LLM_LETTERS_CSV_PATH.exists()
     with open(LLM_LETTERS_CSV_PATH, "a", encoding="utf-8", newline="") as f:
         fieldnames = [

@@ -1,8 +1,5 @@
-# backend/app/api/routes/feedback.py
-#
-# Feedback submission endpoint.
-# Sends feedback email to ALERT_EMAIL from system settings.
-# No DB persistence - email only.
+# feedback endpoint - just emails ALERT_EMAIL (from settings), nothing gets
+# persisted to the DB
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
@@ -43,10 +40,8 @@ async def submit_feedback(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Accepts feedback from any authenticated user.
-    # Reads ALERT_EMAIL from system settings and sends an email.
-    # Runs the email send as a background task so the response
-    # is immediate regardless of SMTP latency.
+    # any logged-in user can submit; the actual send happens in the background
+    # so we're not stuck waiting on SMTP
 
     try:
         print(f"[feedback] Received feedback from {current_user.user_code} | type={payload.type}")

@@ -1,7 +1,5 @@
-# backend/app/models/user_tokens.py
-#
-# user_tokens - stores authentication tokens for users.
-# Each token is linked to a user and has an expiration time.
+# auth tokens for users - activation links, password resets, that kind of
+# thing. each one belongs to a user and expires eventually.
 
 
 import uuid
@@ -17,7 +15,7 @@ class UserTokens(Base):
     __tablename__ = "user_tokens"
 
     # --- Primary Key ---
-    # UUID prevents ID enumeration attacks (cannot guess other users by incrementing)
+    # UUID so ids aren't guessable by incrementing
     token_id  = Column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -26,7 +24,6 @@ class UserTokens(Base):
     )
 
     # --- Foreign Keys ---
-    # Links to the user who owns the token
     user_id  = Column(
         UUID(as_uuid=True),
         ForeignKey("users.user_id", ondelete="RESTRICT"),
@@ -35,40 +32,36 @@ class UserTokens(Base):
     )
 
     # --- token ---
-    # Human-readable identifier for the token e.g. TOK0001
-    # unique=True ensures no duplicate tokens
     token = Column(String(255), unique=True, nullable=False, index=True)
 
 
     # --- token_type  ----
-    # Type of token (e.g. activation, password_reset) - useful for managing multiple token types
+    # lets us reuse this table for different purposes instead of one table per type
     token_type = Column(
         Enum("activation", "password_reset", name="token_type_enum"),
         nullable=False,
-    )    
+    )
 
     # --- MFA tokens ---
-    # For tokens used in Multi-Factor Authentication (MFA), we can add fields like:
-    mfa_secret = Column(String(255), nullable=True)  # Store MFA secret
-    
+    # placeholder for when we add MFA - not used yet
+    mfa_secret = Column(String(255), nullable=True)
+
 
 
     # --- Token Status ---
-    # is_used=False indicates the token has been used
     is_used  = Column(Boolean, default=False, nullable=False)
 
     # --- Expiry ---
-    # Token expiry datetime - set at creation time by the application
+    # set by the app at creation time
     expires_at = Column(DateTime, nullable=False)
 
     # --- Audit Trail: When ---
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
     # --- Audit Trail: Who ---
-    # Optionally track which user created/updated the token (useful for admin actions)
+    # only really used for admin-triggered tokens
     created_by = Column(UUID(as_uuid=True), nullable=True)
 
     def __repr__(self):
-        # Safe representation - never includes password
         return f"<UserTokens token_id={self.token_id} user_id={self.user_id}>"

@@ -1,7 +1,4 @@
-// frontend/src/components/screening-results/ModelPerformanceReference.jsx
-// Compact held-out test-set model performance reference for Screening Result.
-// This component does not use live patient outcomes.
-// It only displays frozen evaluation metrics returned by /models/performance.
+// shows the held-out test-set metrics from /models/performance - frozen numbers, not live patient outcomes
 
 import { useEffect, useMemo, useState } from "react";
 import API from "../../api";

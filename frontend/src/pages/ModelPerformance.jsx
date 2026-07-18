@@ -1,8 +1,4 @@
-// src/pages/ModelPerformance.jsx
-// Model Performance page - Tailwind CSS implementation.
-// Matches mock UI pg-models exactly.
-// Static data from evaluation_results.json - no API calls needed.
-
+// numbers here fall back to evaluation_results.json snapshot if the API call fails
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import API from "../api/index";
@@ -66,7 +62,7 @@ const FALLBACK_MODELS = {
 const MODEL_KEYS = ["efficientnetb0", "vgg16", "efficientnetv2", "ensemble"];
 
 function formatPercent(value, digits = 2) {
-  // Keeps metric display clean, e.g. 83.74% instead of 83.74000000000001%.
+  // rounds off the floating point noise, e.g. 83.74000000000001% -> 83.74%
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "N/A";
   }
@@ -75,7 +71,7 @@ function formatPercent(value, digits = 2) {
 }
 
 function formatNumber(value, digits = 2) {
-  // Used for F1 and other decimal metrics.
+  // for F1 and other plain decimal metrics
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "N/A";
   }

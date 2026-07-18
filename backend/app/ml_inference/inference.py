@@ -1,11 +1,8 @@
-# backend/app/ml_inference/inference.py
-#
-# Core ML inference pipeline.
-# Runs model inference based on the current INFERENCE_MODE setting.
-# Clinical Mode  - ensemble only, sensitivity-first threshold.
-# Research Mode  - all 3 models + ensemble, all results saved.
-# Saves results to screening_results table.
-# Updates screening status on completion or failure.
+# the core inference pipeline - runs models based on whatever INFERENCE_MODE
+# is currently set to. Clinical mode just cares about the ensemble result
+# with the sensitivity-first threshold; research mode runs all 3 models plus
+# the ensemble and saves everything. results go to screening_results, and
+# screening status gets updated either way (complete or failed).
 
 import uuid
 import numpy as np
@@ -34,7 +31,7 @@ from app.ml_inference.preprocessing import preprocess_image_for_model
 from app.ml_inference.ohts import get_ohts_result
 from app.models.patient import Patient
 from app.utils.settings_helper import get_setting, get_setting_bool
-from app.ml_inference.llm_referral import generate_referral_letters # LLM referral letter generation - called after inference if glaucoma predicted
+from app.ml_inference.llm_referral import generate_referral_letters # generates the referral letter after inference, only if glaucoma predicted
 
 from app.ml_inference.ohts import get_ohts_result, get_ohts_tiers
 
@@ -46,8 +43,8 @@ from app.utils.settings_helper import get_setting
 from app.services.segmentation_service import extract_cdr_classical
 
 
-# Sensitivity-first thresholds per model - confirmed from evaluation_results.json
-# These match the thresholds used during evaluation reporting.
+# thresholds tuned for sensitivity, pulled from evaluation_results.json -
+# keep these in sync with whatever's reported in the evaluation writeup
 SENSITIVITY_THRESHOLDS = {
     "efficientnetb0": 0.52,
     "vgg16": 0.47,
@@ -61,8 +58,7 @@ async def get_inference_mode(db: AsyncSession) -> str:
 
 
 def sigmoid(x: float) -> float:
-    # Convert raw logit output to probability (0 to 1 range).
-    # Required because VGG16 outputs logits, not probabilities.
+    # need this because VGG16 spits out raw logits, not probabilities
     return 1 / (1 + math.exp(-x))
 
 def run_single_model(model_name: str, image_path: str) -> dict:
@@ -72,7 +68,7 @@ def run_single_model(model_name: str, image_path: str) -> dict:
     img_array = preprocess_image_for_model(image_path, model_name)
     raw_score = float(model.predict(img_array, verbose=0)[0][0])
 
-    # Apply sigmoid to normalise all outputs to 0-1 probability range
+    # normalise to a 0-1 probability so all models are comparable
     confidence_score = sigmoid(raw_score)
 
     prediction = "glaucoma" if confidence_score >= threshold else "normal"
@@ -86,9 +82,8 @@ def run_single_model(model_name: str, image_path: str) -> dict:
 
 
 def run_ensemble(individual_results: list[dict]) -> dict:
-    # Average the confidence scores from all three models.
-    # Apply ensemble sensitivity threshold.
-    # Ensemble is always the authoritative clinical output.
+    # averages the three model scores and checks against the ensemble
+    # threshold - this is the result we treat as authoritative clinically
 
     avg_score = sum(r["confidence_score"] for r in individual_results) / len(individual_results)
     threshold = SENSITIVITY_THRESHOLDS["ensemble"]
@@ -108,7 +103,7 @@ async def save_result(
     result: dict,
     created_by: uuid.UUID,
 ) -> ScreeningResult:
-    # Save a single model result to the screening_results table.
+    # writes one model's result into screening_results
 
     record = ScreeningResult(
         screening_id=screening_id,
@@ -128,18 +123,13 @@ async def run_inference_pipeline(
     image_path: str,
     db: AsyncSession,
     created_by: uuid.UUID,
-    mode: str | None = None, # Optional mode parameter to override global setting, used for testing. If None, will read from settings.
+    mode: str | None = None, # lets tests override the global setting directly; otherwise we read it from settings
 ) -> None:
-    # Main inference pipeline - called as a background task after image upload.
-    # Steps:
-    # 1. Read inference mode from system_settings
-    # 2. Run models based on mode
-    # 3. Compute ensemble
-    # 4. Save all results to screening_results
-    # 5. Update screening status to complete
-    # On any error - update screening status to failed
+    # runs as a background task once an image is uploaded - reads the mode,
+    # runs the right models, computes the ensemble, saves everything, and
+    # marks the screening complete (or failed if something blows up)
 
-    # Fetch the screening record
+    # grab the screening record
     result = await db.execute(
         select(Screening).where(Screening.screening_id == screening_id)
     )
@@ -150,11 +140,11 @@ async def run_inference_pipeline(
         return
 
     try:
-        # Use explicit mode when admin seeding passes one.
-        # Otherwise use the current system setting for normal screening flow.
+        # explicit mode wins (used by admin seeding), otherwise fall back to
+        # whatever's configured for the normal screening flow
         active_mode = mode or await get_inference_mode(db)
-        # Initialize default_cnn_model - used in final log regardless of mode
-        # Research Mode always uses ensemble, Clinical Mode reads from settings below
+        # default until clinical mode overrides it below - research mode
+        # always sticks with ensemble anyway
         default_cnn_model = "ensemble"
         if active_mode not in {"clinical", "research"}:
             logger.warning(
@@ -175,23 +165,16 @@ async def run_inference_pipeline(
             active_mode,
         )
 
-        # Fetch patient data for OHTS scoring
+        # patient data for OHTS scoring
         patient_result = await db.execute(
             select(Patient).where(Patient.patient_id == screening.patient_id)
         )
         patient = patient_result.scalar_one_or_none()
 
-
-        # Step 2 - Read inference mode
-        #Remove these two lines, because mode is already read and saved above.
-        #mode = await get_inference_mode(db)
-        #logger.info(f"Running in {mode} mode for screening {screening_id}")
-
-        # Step 3 - Run models based on mode
         individual_results = []
 
         if active_mode == "research":
-            # Research Mode - run all three models
+            # research mode - just run all three, straightforward
             for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
                 logger.info(f"Running {model_name}...")
                 res = run_single_model(model_name, image_path)
@@ -199,35 +182,30 @@ async def run_inference_pipeline(
                 await save_result(db, screening_id, res, created_by)
 
         else:
-                    # Clinical Mode - always run all 3 models + ensemble regardless
-                    # of DEFAULT_CNN_MODEL setting. We need all results to:
-                    #   1. Compute the ensemble average
-                    #   2. Have all individual results available for disagreement detection
-                    # DEFAULT_CNN_MODEL only determines WHICH result is saved as the
-                    # clinical reference and which model's prediction is shown to the
-                    # clinician - not what runs.
+                    # clinical mode still runs all 3 models regardless of what
+                    # DEFAULT_CNN_MODEL says - we need every result to compute
+                    # the ensemble average and to check for disagreement between
+                    # models. DEFAULT_CNN_MODEL only decides which result gets
+                    # shown to the clinician as the reference, not what runs.
                     for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
                         res = run_single_model(model_name, image_path)
                         individual_results.append(res)
 
-        # Step 4 - Compute ensemble and determine clinical reference result
         ensemble_result = run_ensemble(individual_results)
 
-        # Read DEFAULT_CNN_MODEL from settings to determine which result
-        # to save as the clinical reference in Clinical Mode.
-        # Research Mode always uses ensemble - this setting has no effect there.
+        # DEFAULT_CNN_MODEL decides which result becomes the clinical
+        # reference in clinical mode - research mode ignores this entirely
         default_cnn_model = "ensemble"
         if active_mode == "clinical":
             default_cnn_model = await get_setting(
                 db, "DEFAULT_CNN_MODEL", default="ensemble"
             )
 
-        # Determine the clinical reference result based on the setting
         if active_mode == "clinical" and default_cnn_model in SENSITIVITY_THRESHOLDS:
-            # Single model selected - find its result from individual_results
+            # a specific model was picked - pull its result out
             clinical_result = next(
                 (r for r in individual_results if r["model_used"] == default_cnn_model),
-                ensemble_result  # fallback to ensemble if model not found
+                ensemble_result  # fall back to ensemble if somehow not found
             )
             logger.info(
                 f"[inference] Clinical reference: {default_cnn_model} "
@@ -236,12 +214,11 @@ async def run_inference_pipeline(
                 f"screening_id={screening_id}"
             )
         else:
-            # Ensemble is the clinical reference (default)
+            # default case - ensemble is the reference
             clinical_result = ensemble_result
 
-        # Save the clinical reference result
-        # model_used is set to the actual model name so the result page
-        # can show which model was used as the clinical reference
+        # model_used gets the real model name here so the result page can
+        # show which one was actually used as the clinical reference
         clinical_result_to_save = {
             **clinical_result,
             "model_used": "ensemble" if default_cnn_model == "ensemble" else default_cnn_model,
@@ -252,19 +229,15 @@ async def run_inference_pipeline(
         disagreement_model_name = None
         disagreement_conf = None
 
-        # Disagreement detection - Clinical Mode only
-        # Compare the clinical reference model's prediction against all OTHER models.
-        # If any other model crossed its own sensitivity threshold but the clinical
-        # reference predicted normal, flag it as a disagreement.
-        # Uses SENSITIVITY_THRESHOLDS - locked evaluation results, not from DB.
+        # disagreement check, clinical mode only: if the clinical reference
+        # says normal but some other model crossed its own threshold, flag it.
+        # uses the locked SENSITIVITY_THRESHOLDS, not whatever's in the DB.
         if active_mode == "clinical" and clinical_result["prediction"] == "normal":
-            # Build list of all results to compare against the clinical reference
             all_results = individual_results + [ensemble_result]
             for res in all_results:
                 model_name = res["model_used"]
-                # Skip the clinical reference model itself
                 if model_name == default_cnn_model:
-                    continue
+                    continue  # don't compare the reference against itself
                 model_threshold = SENSITIVITY_THRESHOLDS.get(model_name, 0.50)
                 if res["confidence_score"] >= model_threshold:
                     if disagreement_conf is None or res["confidence_score"] > disagreement_conf:
@@ -278,7 +251,7 @@ async def run_inference_pipeline(
                         f"({clinical_result['confidence_score']:.4f})"
                     )
 
-        # Save disagreement data onto the ensemble result record
+        # stash the disagreement info on the ensemble record
         if has_disagreement:
             result = await db.execute(
                 select(ScreeningResult).where(
@@ -298,22 +271,19 @@ async def run_inference_pipeline(
                     f"model={disagreement_model_name} conf={disagreement_conf:.4f}"
                 )
 
-        # Fetch OHTS tiers from system settings
         tiers = await get_ohts_tiers(db)
 
-        # Calculate OHTS risk score using patient clinical data
         ohts_result = None
         if patient:
             ohts_result = get_ohts_result(
                 dob=patient.dob,
                 iop=patient.iop,
                 cct=patient.cct,
-                cdr=None,   # Populated by segmentation module when built
-                vcd=None,   # Populated by segmentation module when built
+                cdr=None,   # segmentation module fills this in once it's built
+                vcd=None,   # same here
                 tiers=tiers,
             )
 
-        # Update ensemble result record with OHTS score
         if ohts_result:
             result = await db.execute(
                 select(ScreeningResult).where(
@@ -330,19 +300,17 @@ async def run_inference_pipeline(
                 logger.info(f"OHTS score: {ohts_result['ohts_score']} tier: {ohts_result['ohts_tier']}")
 
 
-        # Step 5 - Generate Grad-CAM++ heatmaps
         heatmaps = {}
         gradcam_enabled = await get_setting_bool(db, "GRADCAM_ENABLED", default=True)
 
         if gradcam_enabled:
-            heatmaps = {}      # stores numpy arrays for ensemble
-            gradcam_paths = {} # stores file paths for saving to DB
+            heatmaps = {}      # numpy arrays, used later for the ensemble heatmap
+            gradcam_paths = {} # file paths, these go into the DB
 
             for model_name in ["efficientnetb0", "vgg16", "efficientnetv2"]:
                 model = get_model(model_name)
                 img_array = preprocess_image_for_model(image_path, model_name)
-                
-                # Get heatmap array and save path separately
+
                 from app.ml_inference.gradcam import (
                     compute_gradcam_efficientnet,
                     compute_gradcam_vgg16,
@@ -358,10 +326,9 @@ async def run_inference_pipeline(
                     heatmap = compute_gradcam_vgg16(model, img_array)
                 else:
                     heatmap = compute_gradcam_efficientnet(model, img_array, layer_name)
-                
-                heatmaps[model_name] = heatmap  # numpy array for ensemble
-                
-                # Save individual overlay
+
+                heatmaps[model_name] = heatmap  # keep the array for the ensemble step
+
                 overlay = overlay_heatmap_on_image(image_path, heatmap)
                 filename = f"{screening_id}_{model_name}_gradcam.png"
                 save_path = os.path.join("uploads/gradcam", filename)
@@ -369,7 +336,7 @@ async def run_inference_pipeline(
                 cv2.imwrite(save_path, overlay)
                 gradcam_paths[model_name] = save_path
 
-                # Update individual model result with its gradcam path
+                # attach the gradcam path to this model's result row
                 result = await db.execute(
                     select(ScreeningResult).where(
                         ScreeningResult.screening_id == screening_id,
@@ -382,13 +349,12 @@ async def run_inference_pipeline(
 
                 logger.info(f"Grad-CAM++ generated for {model_name}")
 
-            # Generate ensemble heatmap using numpy arrays
             ensemble_gradcam_path = generate_ensemble_gradcam(
                 heatmaps=heatmaps,
                 original_image_path=image_path,
                 screening_id=screening_id,
             )
-            # Update ensemble result record with Grad-CAM path
+            # attach the ensemble gradcam path too
             result = await db.execute(
                 select(ScreeningResult).where(
                     ScreeningResult.screening_id == screening_id,
@@ -401,15 +367,13 @@ async def run_inference_pipeline(
                 ensemble_record.gradcam_path = ensemble_gradcam_path            
             logger.info(f"Ensemble Grad-CAM++ saved: {ensemble_gradcam_path}")
 
-            # Extract CDR using ensemble heatmap and original fundus image
-            # Resize all heatmaps to same size before averaging for CDR extraction
+            # need all heatmaps at the same size before averaging for CDR extraction
             target_size = (224, 224)
             resized_heatmaps = [
                 cv2.resize(hm, target_size) for hm in heatmaps.values()
             ]
             averaged_heatmap = np.mean(resized_heatmaps, axis=0)
 
-            # Extract CDR using averaged heatmap and original fundus image
             logger.info(
                 "CDR extraction started | screening_id=%s | image_path=%s | ensemble_gradcam_path=%s | heatmap_shape=%s",
                 screening_id,
@@ -429,7 +393,6 @@ async def run_inference_pipeline(
                 segmentation_result,
             )
 
-            # Update ensemble result record with CDR values
             if not ensemble_record:
                 logger.warning(
                     "CDR not saved because ensemble record was not found | screening_id=%s",
@@ -456,9 +419,8 @@ async def run_inference_pipeline(
                 )
 
 
-        # Step 6 - Generate referral letter if prediction is glaucoma        
-        # Generate referral letter based on the clinical reference result
-        # (which may be ensemble or a single model depending on settings)
+        # letter generation runs off the clinical reference result, which
+        # could be the ensemble or a single model depending on settings
         if clinical_result["prediction"] == "glaucoma":
             patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
 
@@ -474,8 +436,8 @@ async def run_inference_pipeline(
             )
             signed_by = f"{clinician_name}\n{clinician_title}"
 
-            # Read DEFAULT_CLINICAL_LLM from settings
-            # Research Mode always uses all 4 LLMs regardless of this setting
+            # research mode always fires all 4 LLMs, this setting only
+            # matters for clinical mode
             if active_mode == "clinical":
                 default_llm = await get_setting(
                     db, "DEFAULT_CLINICAL_LLM", default="gpt4o"
@@ -497,9 +459,9 @@ async def run_inference_pipeline(
             )
 
             if active_mode == "clinical":
-                # Clinical Mode - create a separate record for GPT-4o letter.
-                # Ensemble record stays clean with llm_used = NULL.
-                # This ensures llm_used IS NULL filter always finds the clinical result.
+                # separate record for the GPT-4o letter, keeps the ensemble
+                # record's llm_used = NULL so that filter always finds the
+                # clinical result reliably
                 if default_llm  in letters:
                     llm_record = ScreeningResult(
                         screening_id=screening_id,
@@ -523,7 +485,7 @@ async def run_inference_pipeline(
                     logger.info("Clinical Mode - GPT-4o letter saved as separate record.")
 
             else:
-                # Research Mode - create separate record per LLM
+                # research mode - one record per LLM
                 for llm_name, result_data in letters.items():
                     llm_record = ScreeningResult(
                         screening_id=screening_id,
@@ -547,11 +509,8 @@ async def run_inference_pipeline(
 
             logger.info(f"Referral letters generated: {list(letters.keys())}")
 
-        # Step 7 - Send high-risk notification email
-        # Notify if glaucoma predicted regardless of OHTS availability.
-        # If OHTS is available, also check tier matches threshold.
-        # Generate referral letter based on the clinical reference result
-        # (which may be ensemble or a single model depending on settings)
+        # high-risk email notification - fires on glaucoma prediction, and
+        # if OHTS data is present we also check the tier is above threshold
         if clinical_result["prediction"] == "glaucoma":
             notification_email = await get_setting(
                 db, "NOTIFICATION_EMAIL",
@@ -561,7 +520,7 @@ async def run_inference_pipeline(
             should_notify = False
 
             if ohts_result:
-                # OHTS available - check tier against threshold
+                # we have OHTS data, so gate on the tier threshold
                 notification_threshold = await get_setting(
                     db, "NOTIFICATION_THRESHOLD",
                     default="critical,possible"
@@ -570,7 +529,7 @@ async def run_inference_pipeline(
                 if ohts_result["ohts_tier"] in threshold_tiers:
                     should_notify = True
             else:
-                # No OHTS data - notify on glaucoma prediction alone
+                # no OHTS data, so a glaucoma prediction alone is enough
                 should_notify = True
 
             if should_notify:
@@ -589,7 +548,7 @@ async def run_inference_pipeline(
 
                 logger.info(f"High-risk notification sent to {notification_email}")
 
-        # Final - Update status to complete and commit everything in one transaction
+        # everything's done, commit it all as one transaction
         screening.status = "complete"
         screening.updated_at = datetime.utcnow()
         await db.commit()
@@ -611,7 +570,7 @@ async def run_inference_pipeline(
 
 
     except Exception as e:
-        # On any failure - mark screening as failed and log the error
+        # whatever went wrong, mark it failed and log it
         logger.error(f"Inference failed for screening {screening_id}: {str(e)}", exc_info=True)
         screening.status = "failed"
         screening.updated_at = datetime.utcnow()

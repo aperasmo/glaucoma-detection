@@ -1,7 +1,4 @@
-// src/pages/ResearchResults.jsx
-// LLM Evaluation Results Dashboard - Admin only.
-// Reveals LLM identities and shows full comparison after scoring is complete.
-
+// admin-only dashboard - unblinds the LLM identities and shows the full comparison once scoring wraps up
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";

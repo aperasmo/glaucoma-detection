@@ -1,8 +1,5 @@
-# backend/app/api/routes/auth.py
-#
-# Authentication routes - registration, activation, login.
-# All public endpoints - no authentication required to access these.
-# Returns JWT token on successful login.
+# auth routes - registration, activation, login. all public, no auth needed to hit these.
+# successful login returns a JWT.
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,10 +39,9 @@ async def register_user(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    # Admin creates a new user account.
-    # Account is inactive until the user clicks the activation link.
-    # Activation email is sent automatically after creation.
-    # TODO: Add admin-only protection after auth middleware is ready.
+    # admin creates the account, but it stays inactive until the user clicks the
+    # activation link we email them
+    # TODO: lock this down to admin-only once auth middleware is ready
 
     try:
         new_user, activation_token = await create_user(
@@ -53,7 +49,7 @@ async def register_user(
             user_data=user_data,
             created_by=None,  # Will be replaced with current admin's user_id after auth is wired
         )
-        # Send activation email as a background task - does not block the response.
+        # fire this off in the background so the request doesn't wait on email sending
         background_tasks.add_task(
             send_activation_email,
             recipient_email=new_user.email,
@@ -72,8 +68,7 @@ async def register_user(
 
 @router.get("/activate", status_code=status.HTTP_200_OK)
 async def activate_account(token: str, db: AsyncSession = Depends(get_db)):
-    # Activate a user account using the token from the activation email.
-    # Called when the user clicks the activation link.
+    # activates the account via the token from the activation email
 
     try:
         user = await activate_user(db=db, token=token)
@@ -92,17 +87,14 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    # Authenticate user and return JWT access token.
-    # Accepts OAuth2 standard form data - email as username, password.
-    # Returns bearer token on success.
-    # Blocks inactive accounts from logging in.
-    # Tracks failed login attempts - locks account after 5 failures.
+    # OAuth2 form login (email goes in as "username"). blocks inactive accounts
+    # and locks the account out after 5 failed attempts.
 
     try:
-        # Fetch user by email
         user = await get_user_by_email(db, form_data.username)
 
-        # Reject if user not found - same generic message, never reveal which one failed
+        # same generic error whether the email doesn't exist or the password is wrong -
+        # don't want to leak which one it was
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,7 +102,7 @@ async def login(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Reject if account is already locked due to past failed attempts
+        # already locked from a previous run of failed attempts
         if user.is_locked:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -120,19 +112,17 @@ async def login(
                 },
             )
 
-        # Reject inactive accounts (admin deactivated, not lockout related)
+        # separate from lockout - this is an account an admin deactivated
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is inactive. Please activate your account first or contact your System Administrator.",
             )
 
-        # Verify password
         if not verify_password(form_data.password, user.hashed_password):
-            # Increment failed attempts counter
             user.failed_login_attempts += 1
 
-            # Lock the account if 5 failed attempts reached
+            # 5 strikes and the account gets locked
             if user.failed_login_attempts >= 5:
                 user.is_locked = True
                 user.is_active = False
@@ -142,7 +132,7 @@ async def login(
                     f"Account locked due to failed login attempts: {user.email}"
                 )
 
-                # Send lockout notification email
+                # let the admins know this happened
                 notification_email = await get_setting(
                     db, "NOTIFICATION_EMAIL",
                     default="aiglaucomascreeningsystem@gmail.com"
@@ -173,11 +163,10 @@ async def login(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Login successful - reset failed attempts counter
+        # made it through - clear the failed attempts counter
         user.failed_login_attempts = 0
         await db.commit()
 
-        # Generate JWT token with user_id as the subject
         access_token = create_access_token(data={"sub": str(user.user_id)})
 
         logger.info(f"Login successful: {user.email}")
@@ -203,22 +192,14 @@ async def login(
             detail="Login failed due to a server error.",
         )
 
-# Add these to your existing top-of-file imports (remove if already present):
-# from zoneinfo import ZoneInfo
-# from datetime import datetime
-# from fastapi import Request
-
-
 @router.post("/demo-login", status_code=status.HTTP_200_OK)
 async def demo_login(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    # Date-gated demo bypass endpoint for oral presentation.
-    # Only active on 13-14 July 2026 (Pacific/Auckland timezone).
-    # Auto-logs in as USR00004 without requiring credentials.
-    # Returns a real JWT token identical in shape to /auth/login.
-    # Outside the active window - returns plain 401, no hints this route exists.
+    # bypass login for the oral presentation - only works on 13-14 July 2026 (NZ time),
+    # auto logs in as USR00004. outside that window it just 401s like the route
+    # doesn't exist, no hints given.
 
     try:
         nz_now = datetime.now(ZoneInfo("Pacific/Auckland"))
@@ -231,7 +212,6 @@ async def demo_login(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Fetch the demo account
         result = await db.execute(
             select(User).where(User.user_code == "USR00004")
         )
@@ -277,8 +257,7 @@ async def demo_login(
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 async def get_me(current_user: User = Depends(get_current_user)):
-    # Returns the currently logged in user's profile.
-    # Protected - requires valid JWT token.
+    # profile for whoever's token this is - needs a valid JWT
     return {
         "user_id": str(current_user.user_id),
         "user_code": current_user.user_code,

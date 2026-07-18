@@ -1,7 +1,4 @@
-// src/components/Layout.jsx
-// Main layout wrapper - Tailwind CSS implementation.
-// Sidebar with grouped nav, top bar, page content area.
-
+// app shell: sidebar nav, top bar, and the content area pages render into
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -63,22 +60,20 @@ function Layout({ title, actions, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  {/* THEME */}
   const { currentTheme, themes } = useTheme();
   const isDarkTheme = themes[currentTheme]?.mode === "dark";
   const logoSrc = isDarkTheme
     ? "/assets/glaucoma-ai-logo-dark.png"
     : "/assets/glaucoma-ai-logo-light.png";
 
-  // Active screening mode shown globally in the top bar.
-  // This reads the current system setting, not the saved mode of a past screening.
+  // this is the live system setting, not whatever mode a past screening was saved under
   const { getSetting } = useSettings();
   const activeMode = getSetting("INFERENCE_MODE", "clinical");
 
 const [evaluationComplete, setEvaluationComplete] = useState(false);
 
-// Feedback modal state
-const [showFeedback, setShowFeedback] = useState(false); 
+// feedback modal
+const [showFeedback, setShowFeedback] = useState(false);
 const [feedback, setFeedback] = useState({ 
   name: user?.full_name || "",
   email: "",
@@ -309,8 +304,7 @@ useEffect(() => {
                         <span
                           className="w-4 h-4 shrink-0 opacity-90"
                           style={{
-                            // CSS mask keeps SVG icons theme-aware.
-                            // The icon uses the current sidebar text colour instead of a fixed PNG colour.
+                            // masking the icon lets it pick up currentColor instead of being stuck as a fixed PNG colour
                             backgroundColor: "currentColor",
                             WebkitMask: `url(${item.icon}) center / contain no-repeat`,
                             mask: `url(${item.icon}) center / contain no-repeat`,
@@ -385,8 +379,7 @@ useEffect(() => {
             {title || location.pathname.replace("/", "").replace(/^\w/, c => c.toUpperCase())}
           </span>
 
-          {/* Global active mode indicator.
-            Theme-aware colours: uses app theme tokens instead of fixed colours. */}
+          {/* uses theme tokens so it doesn't look off in dark mode */}
           <div className="px-3 py-1 rounded-full text-xs font-semibold border border-border2 bg-surface2 text-text1 whitespace-nowrap">
             Mode: {activeMode === "research" ? "Research" : "Clinical"}
           </div>

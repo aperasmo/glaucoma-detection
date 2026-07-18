@@ -1,8 +1,5 @@
-# backend/app/services/screening_service.py
-#
-# Business logic for screening management.
-# Handles screening creation, image saving, and status updates.
-# ML inference is triggered as a background task after image is saved.
+# screening creation, image saving, status updates. ML inference kicks off
+# as a background task once the image is on disk.
 
 import uuid
 import os
@@ -25,46 +22,37 @@ from app.models.screening_result import ScreeningResult
 
 logger = get_logger(__name__)
 
-# Local folder where uploaded fundus images are stored.
-# In production this will be replaced with AWS S3.
+# stores locally for now - swap for S3 when we move to production
 UPLOAD_DIR = "uploads/screenings"
 
 
 def ensure_upload_dir():
-    # Create the upload directory if it does not exist.
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def validate_image_file(file: UploadFile) -> None:
-    # Validate the uploaded file is jpg or png.
-    # Checks both the file extension and the MIME type.
-    # Defence in depth - both checks must pass.
+    # checking both extension and MIME type since either one alone can be spoofed
 
     allowed_extensions = {".jpg", ".jpeg", ".png"}
     allowed_mime_types = {"image/jpeg", "image/png"}
 
-    # Check file extension
     filename = file.filename or ""
     ext = os.path.splitext(filename)[-1].lower()
     if ext not in allowed_extensions:
         raise ValueError("Only JPG and PNG images are accepted.")
 
-    # Check MIME type
     if file.content_type not in allowed_mime_types:
         raise ValueError("Invalid file type. Only JPG and PNG images are accepted.")
 
 
 async def save_image(file: UploadFile, screening_id: uuid.UUID) -> str:
-    # Save the uploaded image to the local uploads folder.
-    # Filename is the screening UUID to avoid collisions and guessing.
-    # Returns the relative file path for storage in the database.
-
+    # returns the relative path so it can be stored on the screening record
     ensure_upload_dir()
 
     filename = file.filename or "image.jpg"
     ext = os.path.splitext(filename)[-1].lower()
 
-    # Use screening UUID as filename - prevents duplicate names and path traversal attacks
+    # naming the file after the screening UUID sidesteps collisions and path traversal
     save_path = os.path.join(UPLOAD_DIR, f"{screening_id}{ext}")
 
     with open(save_path, "wb") as buffer:
@@ -74,8 +62,6 @@ async def save_image(file: UploadFile, screening_id: uuid.UUID) -> str:
 
 
 async def get_screening_by_id(db: AsyncSession, screening_id: uuid.UUID):
-    # Fetch a single screening by UUID.
-    # Returns None if not found.
     result = await db.execute(
         select(Screening).where(Screening.screening_id == screening_id)
     )
@@ -83,8 +69,7 @@ async def get_screening_by_id(db: AsyncSession, screening_id: uuid.UUID):
 
 
 async def get_screenings_by_patient(db: AsyncSession, patient_id: uuid.UUID):
-    # Fetch all screenings for a specific patient.
-    # Ordered by created_at descending - most recent first.
+    # newest first
     result = await db.execute(
         select(Screening)
         .where(Screening.patient_id == patient_id)
@@ -99,21 +84,14 @@ async def create_screening(
     image_file: UploadFile,
     created_by: uuid.UUID,
 ) -> Screening:
-    # Create a new screening record and save the uploaded image.
-    # Steps:
-    # 1. Validate the image file type
-    # 2. Create the screening record with status=pending
-    # 3. Save the image using the screening UUID as filename
-    # 4. Return the screening object for background ML trigger
-
-    # Step 1 - Validate image type before doing anything else
+    # reject bad files before we touch the DB at all
     validate_image_file(image_file)
 
-    # Step 2 - Create screening record first to get the UUID
+    # create the row first so we've got a screening_id to name the image file after
     new_screening = Screening(
         patient_id=screening_data.patient_id,
         screened_by=created_by,
-        image_path="",  # Filled in after image is saved
+        image_path="",  # set once the image is actually saved below
         eye_side=screening_data.eye_side,
         status="pending",
         remarks=screening_data.remarks,
@@ -121,9 +99,8 @@ async def create_screening(
         updated_by=created_by,
     )
     db.add(new_screening)
-    await db.flush()  # Get the screening_id before saving the image
+    await db.flush()  # need the generated screening_id before we can save the image
 
-    # Step 3 - Save the image using screening UUID as filename
     image_path = await save_image(image_file, new_screening.screening_id)
     new_screening.image_path = image_path
 
@@ -136,9 +113,7 @@ async def update_screening_status(
     status: str,
     updated_by: uuid.UUID,
 ) -> Screening:
-    # Update the status of a screening during the ML pipeline.
-    # Called internally by the ML inference background task.
-
+    # called by the ML background task as it moves through the pipeline
     screening = await get_screening_by_id(db, screening_id)
     if not screening:
         raise ValueError("Screening not found.")
@@ -156,9 +131,8 @@ async def get_all_screenings(
     limit: int = 10,
     status: str = None,
 ) -> list:
-    # Fetch all screenings across all patients with patient name and
-    # ensemble result joined. Optionally filter by status.
-
+    # every screening across all patients, with patient name + ensemble result
+    # joined in; status filter is optional
     query = (
         select(
             Screening.screening_id,
@@ -211,9 +185,7 @@ async def get_all_screenings(
 
 
 async def get_recent_screenings(db: AsyncSession, limit: int = 5) -> list:
-    # Fetch last N complete screenings with ensemble result data joined.
-    # Used for the Dashboard recent screenings panel.
-
+    # feeds the dashboard's recent screenings panel
     query = (
         select(
             Screening.screening_id,
@@ -259,18 +231,16 @@ async def get_recent_screenings(db: AsyncSession, limit: int = 5) -> list:
 
 
 async def get_dashboard_stats(db: AsyncSession) -> dict:
-    # Fetch summary statistics for the Dashboard.
-    # Single query per stat - efficient and straightforward.
+    # one query per stat - simple, if a bit chatty on the DB
 
     from datetime import date
 
-    # Total active patients
     total_patients = await db.execute(
         select(func.count()).select_from(Patient).where(Patient.is_active == True)
     )
     total_patients = total_patients.scalar()
 
-    # Total glaucoma positive screenings (ensemble only)
+    # ensemble only, not the per-model rows
     glaucoma_positive = await db.execute(
         select(func.count()).select_from(ScreeningResult).where(
             ScreeningResult.model_used == "ensemble",
@@ -280,7 +250,6 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     )
     glaucoma_positive = glaucoma_positive.scalar()
 
-    # Screenings today
     screenings_today = await db.execute(
         select(func.count()).select_from(Screening).where(
             cast(Screening.created_at, Date) == date.today()
@@ -288,7 +257,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     )
     screenings_today = screenings_today.scalar()
 
-    # High risk count - glaucoma + OHTS critical or possible
+    # glaucoma-positive plus OHTS critical or possible
     high_risk_count = await db.execute(
         select(func.count()).select_from(ScreeningResult).where(
             ScreeningResult.model_used == "ensemble",

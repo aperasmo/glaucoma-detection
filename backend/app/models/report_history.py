@@ -1,8 +1,6 @@
-# backend/app/models/report_history.py
-#
-# ReportHistory table - stores generated report audit records.
-# Tracks report type, filters, generated user, record count, status, and file name.
-# Used by the Reports module for report history and audit logging.
+# audit log of generated reports - who ran what, with which filters, how many
+# records came back, and whether it succeeded. backs the Reports module's
+# history view.
 
 import uuid
 from datetime import datetime
@@ -36,7 +34,7 @@ class ReportHistory(Base):
     filters_json = Column(JSONB, nullable=False, default=dict)
     record_count = Column(Integer, nullable=False, default=0)
 
-    # success / failed
+    # "success" or "failed"
     status = Column(String(20), nullable=False, index=True)
 
     # --- File and Error Details ---

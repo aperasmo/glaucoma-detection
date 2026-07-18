@@ -1,27 +1,18 @@
-# backend/scripts/extract_scenario7_letters.py
-#
-# PURPOSE
-# ---------------------------------------------------------------------------
-# One-time fix for Scenario 7 (False Positive cases) letters missing from
+# one-time fix for Scenario 7 (false positive cases) letters missing from
 # llm_comparison_letters_raw.csv.
 #
-# Root cause: seed_llm_comparison.py's CSV append step checks
-# `if ground_truth == "glaucoma"` before writing letter rows. Scenario 7
-# cases have label=0 (ground truth=normal) so the condition is False and
-# no rows are written - even though the model predicted glaucoma (FP) and
-# letters were generated and saved to the DB correctly.
+# turns out seed_llm_comparison.py's CSV append step only fires when
+# `ground_truth == "glaucoma"`. Scenario 7 cases are label=0 (ground truth
+# normal) so that check is False and no rows got written, even though the
+# model predicted glaucoma (that's the FP) and the letters were generated
+# and saved to the DB just fine.
 #
-# This script reads the Scenario 7 letters directly from the DB and appends
-# them to the existing llm_comparison_letters_raw.csv without re-running
-# any inference or LLM calls.
+# this just pulls the Scenario 7 letters back out of the DB and appends
+# them to the existing CSV - no inference, no LLM calls, no DB writes,
+# just a read + CSV append, so it's safe to run.
 #
-# SAFE TO RUN - read from DB, append to CSV only. No DB writes...
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN
-# -----------------------------------------------------------------------
+# run with:
 #   docker exec -it glaucoma_backend python -m scripts.extract_scenario7_letters
-# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -45,8 +36,8 @@ logger = get_logger(__name__)
 OUTPUT_DIR = Path(__file__).parent / "output"
 LLM_LETTERS_CSV_PATH = OUTPUT_DIR / "llm_comparison_letters_raw.csv"
 
-# Scenario 7 confidence scores - used to match cases in the DB
-# since we don't have screening_ids stored in the CSV for Scenario 7 yet
+# used to match cases in the DB since we don't have screening_ids for
+# Scenario 7 stored in the CSV yet
 SCENARIO7_CONFIDENCES = [
     0.9892, 0.8869, 0.8768, 0.8554, 0.6967,
     0.6859, 0.6548, 0.5448, 0.5431, 0.5412,
@@ -72,7 +63,7 @@ async def main():
         logger.info("[extract_s7] Starting Scenario 7 letter extraction from DB...")
 
         async with AsyncSessionLocal() as db:
-            # Find all Scenario 7 patients by last_name = 'Scenario7'
+            # Scenario 7 patients are tagged with last_name = 'Scenario7'
             result = await db.execute(
                 select(Patient).where(Patient.last_name == "Scenario7")
             )
@@ -87,7 +78,7 @@ async def main():
             letter_rows = []
 
             for patient in patients:
-                # Get screening for this patient
+                # screening for this patient
                 result = await db.execute(
                     select(Screening).where(Screening.patient_id == patient.patient_id)
                 )
@@ -96,7 +87,7 @@ async def main():
                     logger.warning(f"[extract_s7] No screening found for {patient.patient_code}")
                     continue
 
-                # Get ensemble result for OHTS and confidence
+                # ensemble result, for OHTS + confidence
                 result = await db.execute(
                     select(ScreeningResult).where(
                         ScreeningResult.screening_id == screening.screening_id,
@@ -110,7 +101,7 @@ async def main():
                     logger.warning(f"[extract_s7] No ensemble result for {patient.patient_code}")
                     continue
 
-                # Get all LLM letters for this screening
+                # all the LLM letters for this screening
                 result = await db.execute(
                     select(ScreeningResult).where(
                         ScreeningResult.screening_id == screening.screening_id,
@@ -150,7 +141,7 @@ async def main():
 
         logger.info(f"[extract_s7] Extracted {len(letter_rows)} letter rows from DB.")
 
-        # Append to existing CSV
+        # append to the existing CSV
         file_exists = LLM_LETTERS_CSV_PATH.exists()
         with open(LLM_LETTERS_CSV_PATH, "a", encoding="utf-8", newline="") as f:
             fieldnames = [
@@ -167,7 +158,7 @@ async def main():
 
         logger.info(f"[extract_s7] Appended {len(letter_rows)} rows to {LLM_LETTERS_CSV_PATH}")
 
-        # Summary
+        # quick summary
         from collections import Counter
         by_llm = Counter(r['llm_used'] for r in letter_rows)
         logger.info(f"[extract_s7] Letters by LLM: {dict(by_llm)}")

@@ -1,5 +1,4 @@
-// frontend/src/components/screening-results/ResultShared.jsx
-// Shared helpers and presentational components for Screening Result views.
+// helpers and presentational bits shared between the clinical and research screening result views
 
 export const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -35,9 +34,8 @@ export function normaliseSignatoryText(value) {
 export function formatDate(value) {
   if (!value) return "-";
 
-  // Backend datetime values are stored as UTC but may arrive without "Z".
-  // If no timezone is included, append "Z" so JavaScript treats it as UTC,
-  // then convert to New Zealand time for display.
+  // backend stores UTC but doesn't always send the "Z" suffix, so we add it ourselves
+  // before letting JS parse it - otherwise it'd get treated as local time
   const valueText = String(value);
   const hasTimezone =
     valueText.endsWith("Z") ||
@@ -112,8 +110,7 @@ export function getScreeningPredictionLabel(prediction) {
 
 export function PredictionBadge({ prediction, hasDisagreement = false }) {
   const isGlaucoma = prediction?.toLowerCase() === "glaucoma";
-  // Amber badge when normal but model disagreement detected.
-  // hasDisagreement is only passed from Clinical Mode - Research Mode is unaffected.
+  // goes amber when it's normal but a model disagreed - only clinical mode passes hasDisagreement in
   const isDisagreement = !isGlaucoma && hasDisagreement;
 
   const badgeClass = isGlaucoma

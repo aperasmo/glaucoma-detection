@@ -1,8 +1,4 @@
-// src/context/SettingsContext.jsx
-// Global settings store.
-// Loads system settings once when the app starts.
-// Any page/component can call useSettings() to read settings without repeated API calls.
-
+// loads system settings once on startup so pages can just call useSettings() instead of hitting the API each time
 import { useAuth } from "./AuthContext";
 import { createContext, useContext, useEffect, useState } from "react";
 import API from "../api/index";

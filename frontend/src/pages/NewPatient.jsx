@@ -1,7 +1,4 @@
-// src/pages/NewPatient.jsx
-// Create new patient form - Tailwind CSS implementation.
-// Connects to POST /patients/
-
+// posts to /patients/
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";

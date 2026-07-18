@@ -1,6 +1,4 @@
-// frontend/src/components/screening-results/ClinicalScreeningResult.jsx
-// Clinical view for Screening Result.
-// Keeps the clinical workflow simple: ensemble, GPT-4o referral, actions.
+// clinical view of the screening result - keep it simple: ensemble result, GPT-4o referral, actions
 
 import {
   formatDate,
@@ -37,7 +35,7 @@ function ClinicalScreeningResult(props) {
       handleDownloadReferralPdf,
       actionError,
       navigate,
-      // Disagreement letter props from ScreeningResult controller.
+      // these come from the ScreeningResult controller
       isRequestingDisagreement,
       disagreementLetterDone,
       handleRequestDisagreementLetter,
@@ -45,13 +43,12 @@ function ClinicalScreeningResult(props) {
 
   const clinicalResult = getClinicalResult(results);
 
-    // Model disagreement fields from the ensemble screening result.
-    // Backend computes and saves these at inference time - frontend just reads them.
+    // backend already computed these at inference time, we're just reading them here
     const hasDisagreement = clinicalResult?.has_model_disagreement === true;
     const disagreementModel = clinicalResult?.disagreement_model || null;
     const disagreementConfidence = clinicalResult?.disagreement_confidence || null;
 
-    // Display name map for disagreement model - matches backend model key names.
+    // maps the backend's model keys to something readable
     const MODEL_DISPLAY_NAMES = {
       efficientnetb0: "EfficientNetB0",
       vgg16: "VGG16",
@@ -71,9 +68,7 @@ function ClinicalScreeningResult(props) {
           />
         )}
 
-        {/* MODEL DISAGREEMENT NOTICE */}
-        {/* Shown when ensemble says normal but at least one individual model */}
-        {/* crossed its own sensitivity threshold. Backend sets has_model_disagreement. */}
+        {/* pops up when ensemble says normal but one of the individual models crossed its own threshold */}
         {hasDisagreement && disagreementModel && (
           <div className="flex items-start gap-3 px-4 py-3.5 bg-warn/10 border border-warn/30 rounded-xl">
             <span className="text-warn mt-0.5 text-base leading-none">⚠</span>
@@ -208,8 +203,7 @@ function ClinicalScreeningResult(props) {
               </div>
             ) : (
               <>
-                {/* Single letter slot - standard referral or disagreement letter. */}
-                {/* These two states never coexist on the same screening. */}
+                {/* only ever shows one letter here - standard referral or disagreement, never both */}
                 <div className="text-xs text-text1 leading-relaxed whitespace-pre-wrap mb-4 max-h-96 overflow-y-auto pr-1">
                   {primaryReferral.referral_letter}
                 </div>

@@ -1,9 +1,6 @@
-# backend/app/ml_inference/model_loader.py
-#
-# Loads all three models once when the server starts.
-# Models are kept in memory for fast inference.
-# Loading on every request would be too slow for clinical use.
-# Model files must exist in the models/ folder at the project root.
+# loads all three models once at server startup and keeps them in memory -
+# reloading per request would be way too slow for clinical use. the .h5
+# files need to already be sitting in the models/ folder at the project root.
 
 import os
 import tensorflow as tf
@@ -12,7 +9,7 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Base models directory - relative to project root
+# climb up from ml_inference/ to backend/, then into models/
 MODELS_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__),  # ml_inference/
     "..",                        # app/
@@ -20,22 +17,20 @@ MODELS_DIR = os.path.normpath(os.path.join(
     "models",
 ))
 
-# Model file paths - each model in its own subfolder
+# each model lives in its own subfolder
 MODEL_FILES = {
     "efficientnetb0": os.path.join("efficientnetb0", "efficientnetb0_phase2b_best.h5"),
     "vgg16": os.path.join("vgg16", "vgg16_phase2b_best.h5"),
     "efficientnetv2": os.path.join("efficientnetv2", "efficientnetv2_phase2b_best.h5"),
 }
 
-# Global model registry - populated once at startup
-# Key: model name, Value: loaded Keras model
+# name -> loaded Keras model, filled in once at startup
 _models: dict = {}
 
 
 def load_all_models() -> None:
-    # Load all three models into memory.
-    # Called once during FastAPI startup event.
-    # Logs each model as it loads so we can track startup progress.
+    # runs once on FastAPI startup - logging each model as it loads so we
+    # can actually see progress if startup is slow
 
     for name, filename in MODEL_FILES.items():
         model_path = os.path.normpath(os.path.join(MODELS_DIR, filename))
@@ -54,8 +49,7 @@ def load_all_models() -> None:
 
 
 def get_model(name: str):
-    # Retrieve a loaded model by name.
-    # Raises RuntimeError if models have not been loaded yet.
+    # grabs a loaded model by name, blows up if load_all_models() hasn't run yet
 
     if not _models:
         raise RuntimeError("Models not loaded. Call load_all_models() first.")
@@ -67,8 +61,7 @@ def get_model(name: str):
 
 
 def get_all_models() -> dict:
-    # Return all loaded models.
-    # Used in Research Mode to run all three models simultaneously.
+    # research mode needs all three at once, this hands them all back
 
     if not _models:
         raise RuntimeError("Models not loaded. Call load_all_models() first.")

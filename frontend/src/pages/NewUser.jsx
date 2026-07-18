@@ -1,7 +1,4 @@
-// src/pages/NewUser.jsx
-// Create new user form - Tailwind CSS implementation.
-// Admin only. Connects to POST /auth/register
-
+// admin-only, posts to /auth/register
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -72,8 +69,8 @@ function NewUser() {
         password:   form.password,
         role:       form.role,
       });
-      // Wait 2 seconds for backend to complete before navigating
-      await new Promise(resolve => setTimeout(resolve, 4000));      
+      // give the backend a moment to finish up before we navigate away
+      await new Promise(resolve => setTimeout(resolve, 4000));
       navigate("/users", { state: { refetch: Date.now() } });
     } catch (err) {
       const detail = err.response?.data?.detail;

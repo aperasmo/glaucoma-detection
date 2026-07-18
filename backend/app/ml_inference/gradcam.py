@@ -1,11 +1,8 @@
-# backend/app/ml_inference/gradcam.py
-#
-# Grad-CAM++ heatmap generation for all three models.
-# Each model requires a different approach due to architecture differences.
-# EfficientNetB0 and EfficientNetV2 - GradientTape on backbone sub-model.
-# VGG16 - flat model rebuild + tf-keras-vis with ReplaceToLinear().
-# Ensemble heatmap - average of all three model heatmaps.
-# Output is saved as a PNG overlay on the original fundus image.
+# Grad-CAM++ heatmaps for the three models.
+# each one needs a different approach because the architectures aren't the same:
+# EfficientNetB0/V2 use GradientTape straight on the backbone sub-model,
+# VGG16 needs to be flattened first then run through tf-keras-vis with ReplaceToLinear().
+# ensemble heatmap is just the average of the three, saved as a PNG overlay on the fundus image.
 
 import os
 import uuid
@@ -17,10 +14,10 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Folder where Grad-CAM++ heatmap images are saved
+# where the heatmap PNGs get saved
 GRADCAM_DIR = "uploads/gradcam"
 
-# Last convolutional layer names - confirmed from training
+# last conv layer per model - matches what we used during training
 LAST_CONV_LAYERS = {
     "efficientnetb0": "top_conv",
     "vgg16": "block5_conv3",
@@ -29,7 +26,7 @@ LAST_CONV_LAYERS = {
 
 
 def ensure_gradcam_dir():
-    # Create the Grad-CAM output directory if it does not exist.
+    # make sure the output dir exists
     os.makedirs(GRADCAM_DIR, exist_ok=True)
 
 
@@ -38,11 +35,10 @@ def compute_gradcam_efficientnet(
     img_array: np.ndarray,
     layer_name: str,
 ) -> np.ndarray:
-    # Grad-CAM++ for EfficientNetB0 and EfficientNetV2.
-    # Uses GradientTape on the backbone sub-model directly.
-    # Routes backbone output through head layers manually.
+    # for the EfficientNet models we grab gradients straight off the backbone
+    # sub-model and then push the output through the head layers ourselves
 
-    # Find backbone sub-model and head layers
+    # dig out the backbone sub-model plus whatever head layers sit on top
     backbone = None
     head_layers = []
 
@@ -61,7 +57,7 @@ def compute_gradcam_efficientnet(
 
     conv_layer = backbone.get_layer(layer_name)
 
-    # Build grad model from backbone inputs to conv output and backbone output
+    # this model exposes both the conv layer output and the backbone output
     grad_model = tf.keras.Model(
         inputs=backbone.inputs,
         outputs=[conv_layer.output, backbone.output],
@@ -72,7 +68,7 @@ def compute_gradcam_efficientnet(
         conv_outputs, backbone_out = grad_model(inputs)
         tape.watch(conv_outputs)
 
-        # Route through head layers to get final score
+        # push it through the head layers to get the actual prediction score
         x = backbone_out
         for layer in head_layers:
             x = layer(x)
@@ -93,9 +89,9 @@ def compute_gradcam_efficientnet(
 
 
 def compute_gradcam_vgg16(model, img_array: np.ndarray) -> np.ndarray:
-    # Grad-CAM++ for VGG16 using tf-keras-vis.
-    # VGG16 has vanishing gradient problem after fine-tuning.
-    # Fix: rebuild as flat model then use GradcamPlusPlus with ReplaceToLinear().
+    # VGG16 gets vanishing gradients after fine-tuning, so plain GradientTape
+    # doesn't work well here - flattening the model and running it through
+    # tf-keras-vis with ReplaceToLinear() gets around that
 
     from tf_keras_vis.gradcam_plus_plus import GradcamPlusPlus
     from tf_keras_vis.utils.model_modifiers import ReplaceToLinear
@@ -121,15 +117,15 @@ def compute_gradcam_vgg16(model, img_array: np.ndarray) -> np.ndarray:
 
 
 def rebuild_flat_vgg16(model) -> tf.keras.Model:
-    # Rebuild VGG16 as a flat model removing the nested sub-model structure.
-    # Required for tf-keras-vis gradient computation.
+    # flattens VGG16's nested sub-model structure - tf-keras-vis needs this
+    # for its gradient computation to work
 
     inputs = model.input
     x = inputs
 
     for layer in model.layers:
         if hasattr(layer, "layers"):
-            # Expand the sub-model layers into the flat model
+            # unpack the sub-model's layers directly into the flat chain
             for sub_layer in layer.layers:
                 if not isinstance(sub_layer, tf.keras.layers.InputLayer):
                     x = sub_layer(x)
@@ -144,22 +140,17 @@ def overlay_heatmap_on_image(
     heatmap: np.ndarray,
     target_size: tuple = (224, 224),
 ) -> np.ndarray:
-    # Overlay the Grad-CAM++ heatmap on the original fundus image.
-    # Produces a colour heatmap blended with the original image.
-    # Returns the overlay as a numpy array (BGR).
+    # blends the heatmap onto the fundus image, returns a BGR numpy array
 
-    # Read and resize original image
     img = cv2.imread(original_image_path)
     img = cv2.resize(img, target_size)
 
-    # Resize heatmap to match image size
     heatmap_resized = cv2.resize(heatmap, target_size)
 
-    # Convert heatmap to colour map
+    # colourise the heatmap so it's actually visible as an overlay
     heatmap_uint8 = np.uint8(255 * heatmap_resized)
     heatmap_colour = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
 
-    # Blend heatmap with original image
     overlay = cv2.addWeighted(img, 0.6, heatmap_colour, 0.4, 0)
 
     return overlay
@@ -172,23 +163,19 @@ def generate_gradcam_for_screening(
     original_image_path: str,
     screening_id: uuid.UUID,
 ) -> str:
-    # Generate and save a Grad-CAM++ heatmap for a single model.
-    # Returns the saved file path.
+    # generates and saves the heatmap for one model, returns the file path
 
     ensure_gradcam_dir()
 
     layer_name = LAST_CONV_LAYERS[model_name]
 
-    # Compute heatmap using model-specific approach
     if model_name == "vgg16":
         heatmap = compute_gradcam_vgg16(model, img_array)
     else:
         heatmap = compute_gradcam_efficientnet(model, img_array, layer_name)
 
-    # Overlay on original image
     overlay = overlay_heatmap_on_image(original_image_path, heatmap)
 
-    # Save the overlay image
     filename = f"{screening_id}_{model_name}_gradcam.png"
     save_path = os.path.join(GRADCAM_DIR, filename)
     cv2.imwrite(save_path, overlay)
@@ -201,27 +188,22 @@ def generate_ensemble_gradcam(
     original_image_path: str,
     screening_id: uuid.UUID,
 ) -> str:
-    # Generate ensemble heatmap by averaging all three model heatmaps.
-    # Where all models agree on high activation the region stays bright.
-    # Returns the saved file path.
+    # averages the three model heatmaps into one - regions all models
+    # agree on stay bright, everything else fades out
 
     ensure_gradcam_dir()
 
     target_size = (224, 224)
 
-    # Resize all heatmaps to same size
     resized = [cv2.resize(hm, target_size) for hm in heatmaps.values()]
 
-    # Average the heatmaps
     ensemble_heatmap = np.mean(resized, axis=0)
 
     if ensemble_heatmap.max() > 0:
         ensemble_heatmap = ensemble_heatmap / ensemble_heatmap.max()
 
-    # Overlay on original image
     overlay = overlay_heatmap_on_image(original_image_path, ensemble_heatmap)
 
-    # Save the ensemble overlay
     filename = f"{screening_id}_ensemble_gradcam.png"
     save_path = os.path.join(GRADCAM_DIR, filename)
     cv2.imwrite(save_path, overlay)

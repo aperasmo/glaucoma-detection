@@ -1,10 +1,6 @@
-# backend/app/models/screening.py
-#
-# Screening table - records each screening event for a patient.
-# One patient can have multiple screenings over time (longitudinal tracking).
-# Links to patients via patient_id and to users via screened_by.
-# Status is enforced at the database level using PostgreSQL Enum.
-# All changes are tracked via created_by/updated_by for audit trail.
+# one row per screening event. patients can have many of these over time so
+# we can track them longitudinally. links back to the patient and to whoever
+# ran the screening.
 
 import uuid
 from datetime import datetime
@@ -28,7 +24,6 @@ class Screening(Base):
     )
 
     # --- Foreign Keys ---
-    # Links to the patient being screened
     patient_id = Column(
         UUID(as_uuid=True),
         ForeignKey("patients.patient_id", ondelete="RESTRICT"),
@@ -36,7 +31,7 @@ class Screening(Base):
         index=True,
     )
 
-    # Links to the user (nurse/doctor) who performed the screening
+    # the nurse/doctor who ran the screening
     screened_by = Column(
         UUID(as_uuid=True),
         ForeignKey("users.user_id", ondelete="RESTRICT"),
@@ -44,31 +39,25 @@ class Screening(Base):
     )
 
     # --- Image ---
-    # Path to the uploaded fundus image stored on S3 or local storage
+    # where the fundus image lives, S3 or local storage depending on setup
     image_path = Column(Text, nullable=False)
 
     # --- Eye Side ---
-    # Which eye was screened
     eye_side = Column(
         Enum("left", "right", name="eye_side_types"),
         nullable=False,
     )
 
     # --- Status ---
-    # Tracks the screening pipeline progress
-    # pending    - image uploaded, waiting to be processed
-    # processing - ML inference running
-    # complete   - results ready
-    # failed     - something went wrong during processing
+    # pending -> processing -> complete, or failed if something breaks along the way
     status = Column(
         Enum("pending", "processing", "complete", "failed", name="screening_status"),
         nullable=False,
         default="pending",
     )
 
-    # Stores the mode used when this screening was generated.
-    # This prevents a screening from changing view just because the global
-    # INFERENCE_MODE setting is changed later.
+    # locked in at creation time so a screening doesn't silently change
+    # appearance later if the global INFERENCE_MODE setting gets flipped
     inference_mode = Column(
         Enum("clinical", "research", name="inference_modes"),
         nullable=False,
@@ -93,7 +82,7 @@ class Screening(Base):
     updated_by = Column(UUID(as_uuid=True), nullable=True)
 
     # --- Relationships ---
-    # Allows Python-level access: screening.patient, screening.results
+    # gives us screening.patient, screening.results, etc. on the Python side
     patient = relationship("Patient", backref="screenings")
     screened_by_user = relationship("User", backref="screenings")
     results = relationship("ScreeningResult", backref="screening")

@@ -1,8 +1,5 @@
-// src/pages/ReportHighRisk.jsx
-// High Risk Report browser view.
-// Uses GET /screenings/analytics?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
-// High risk logic comes from backend: prediction = glaucoma.
-
+// pulls from /screenings/analytics with a date range - "high risk" here just means the
+// backend already flagged prediction === glaucoma
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";

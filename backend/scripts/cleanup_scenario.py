@@ -1,46 +1,27 @@
-# backend/scripts/cleanup_scenario.py
+# one-off utility, not part of the normal seed/export workflow. use it to
+# completely undo one scenario's seeding run so it can be re-seeded fresh -
+# e.g. after switching LLaMa from llama-4-scout (garbled output) to
+# gpt-oss-120b, we needed Scenario 3 regenerated instead of mixing old
+# broken letters with the new clean ones.
 #
-# PURPOSE - one-off utility, NOT part of the normal seed/export workflow
-# ---------------------------------------------------------------------------
-# Use this when you need to completely undo one scenario's seeding run and
-# start that scenario fresh - e.g. after switching the LLaMa model from
-# llama-4-scout (garbled output) to gpt-oss-120b, and wanting Scenario 3's
-# 6 cases re-generated with the new model instead of mixing old broken
-# letters with new clean ones.
+# wipes only the given scenario's data, in three places, and leaves
+# everything else alone:
+#   1. DB - deletes the screening_results/screenings/patients rows for this
+#      scenario, matched by screening_id from the summary CSV (not by any
+#      guessing, so it can't touch rows it didn't create)
+#   2. images - moves files back out of test_images/glaucoma/scenario{N}_done/
+#      (or normal/) into the bare glaucoma/ or normal/ folder so
+#      seed_llm_comparison.py picks them up again next run
+#   3. CSVs - rewrites both summary and raw-letters CSVs, dropping this
+#      scenario's rows and keeping everyone else's untouched
 #
-# This script removes ONLY the specified scenario's data from 3 places,
-# leaving every other scenario's data completely untouched:
+# filtering is strictly by scenario number throughout (never filename
+# pattern or date range) so this can't accidentally catch the wrong rows.
 #
-#   1. DATABASE - deletes all screening_results, screenings, and patients
-#      that were created for this scenario's cases. Identified by matching
-#      screening_id values found in the summary CSV for this scenario -
-#      NOT by any heuristic guessing, so it only touches exactly the rows
-#      this scenario actually created.
-#
-#   2. IMAGES - moves files back from
-#      test_images/glaucoma/scenario{N}_done/ (or normal/ equivalent)
-#      into the bare test_images/glaucoma/ or test_images/normal/ folder,
-#      so seed_llm_comparison.py will find and re-process them on the next
-#      run for that scenario.
-#
-#   3. CSVs - rewrites both llm_comparison_seed_summary.csv and
-#      llm_comparison_letters_raw.csv, keeping every row NOT belonging to
-#      this scenario, dropping every row that does. Other scenarios'
-#      already-captured data (e.g. Scenarios 5 and 6) is preserved exactly
-#      as-is.
-#
-# THIS DOES NOT TOUCH ANY OTHER SCENARIO'S DATA. Confirmed by filtering
-# strictly on scenario number throughout, never by image filename pattern
-# or date range (which could accidentally catch the wrong rows).
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN
-# -----------------------------------------------------------------------
+# run with:
 #   docker exec -it glaucoma_backend python -m scripts.cleanup_scenario --scenario 3
 #
-# Prompts for confirmation before deleting anything from the database -
-# this is a destructive operation, type-to-confirm is required.
-# ---------------------------------------------------------------------------
+# asks for a typed confirmation before touching the DB since this is destructive.
 
 import os
 import sys
@@ -76,9 +57,7 @@ def parse_args():
 
 
 def get_scenario_screening_ids_and_filenames(scenario: int) -> list[dict]:
-    # Reads the summary CSV and returns the screening_id + filename for
-    # every row belonging to this scenario - this is the authoritative
-    # list of exactly what this scenario actually created.
+    # summary CSV is the source of truth for what this scenario actually created
     if not SUMMARY_CSV_PATH.exists():
         logger.warning(f"[cleanup] {SUMMARY_CSV_PATH} not found - nothing to clean up from CSV side.")
         return []
@@ -97,16 +76,13 @@ async def delete_database_rows(screening_ids: list[str]) -> None:
     from app.models.patient import Patient
 
     async with AsyncSessionLocal() as db:
-        # Step 1 - find the patient_ids linked to these screenings, before
-        # deleting the screenings themselves (need this to delete the
-        # patients afterward).
+        # grab patient_ids first, before we delete the screenings that reference them
         result = await db.execute(
             select(Screening.patient_id).where(Screening.screening_id.in_(screening_ids))
         )
         patient_ids = [row[0] for row in result.all()]
 
-        # Step 2 - delete screening_results first (foreign key dependency
-        # on screening_id).
+        # screening_results has to go first - it has a FK on screening_id
         result = await db.execute(
             select(ScreeningResult).where(ScreeningResult.screening_id.in_(screening_ids))
         )
@@ -115,7 +91,7 @@ async def delete_database_rows(screening_ids: list[str]) -> None:
             await db.delete(r)
         logger.info(f"[cleanup] Deleted {len(results_to_delete)} screening_results rows.")
 
-        # Step 3 - delete screenings.
+        # now the screenings themselves
         result = await db.execute(
             select(Screening).where(Screening.screening_id.in_(screening_ids))
         )
@@ -124,7 +100,7 @@ async def delete_database_rows(screening_ids: list[str]) -> None:
             await db.delete(s)
         logger.info(f"[cleanup] Deleted {len(screenings_to_delete)} screenings rows.")
 
-        # Step 4 - delete patients.
+        # and finally the patients
         result = await db.execute(
             select(Patient).where(Patient.patient_id.in_(patient_ids))
         )
@@ -137,10 +113,8 @@ async def delete_database_rows(screening_ids: list[str]) -> None:
 
 
 def move_images_back(scenario: int, rows: list[dict]) -> None:
-    # Moves each scenario's images from their scenario{N}_done/ subfolder
-    # back to the bare glaucoma/ or normal/ folder. Tries both possible
-    # source folders since we don't store label/ground_truth directly in
-    # this lookup - whichever one actually has the file wins.
+    # try both glaucoma/ and normal/ since we don't track ground_truth here -
+    # whichever folder actually has the file wins
     moved = 0
     for row in rows:
         filename = row["filename"]

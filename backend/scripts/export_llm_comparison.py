@@ -1,44 +1,24 @@
-# backend/scripts/export_llm_comparison.py
+# run this once Scenarios 1-4 are all seeded via seed_llm_comparison.py.
+# doesn't call any LLM or touch the DB or run inference - just reads the raw
+# CSV seed_llm_comparison.py already wrote and spits out two files:
 #
-# PURPOSE (Paper 2 - LLM comparison research)
-# ---------------------------------------------------------------------------
-# Run this ONCE, after all of Scenarios 1-4 have been seeded via
-# seed_llm_comparison.py (i.e. after running --scenario 1, 2, 3, and 4,
-# each in its own session). This script does NOT call any LLM, does NOT
-# touch the database, and does NOT run inference - it only reads the raw
-# CSV that seed_llm_comparison.py already wrote, and produces two files:
+#   1. blind_evaluation_export.csv - the one you actually score. has the
+#      full letter text plus patient/clinical context, but the real LLM
+#      name is swapped for a randomised label (Letter A/B/C/D) per case
+#      so scoring can be done blind.
+#   2. hidden_llm_mapping.csv - don't open this until scoring is done. maps
+#      case_id + label back to the real LLM so scores can be matched to
+#      providers afterward.
 #
-#   1. BLIND EVALUATION EXPORT (for you to actually score)
-#      backend/scripts/output/blind_evaluation_export.csv
-#      Contains all captured letters, full text, patient/clinical context
-#      (name, AI prediction, confidence, OHTS score) for reference - but
-#      the LLM's real identity is stripped and replaced with a randomised
-#      label (Letter A / B / C / D) PER CASE, so you can score blind
-#      without knowing which provider generated which letter.
+# labels are shuffled independently per case rather than fixed (e.g. gpt4o
+# always "A") because a fixed mapping would become guessable after a few
+# cases just from writing style, even without seeing the real name.
 #
-#   2. HIDDEN MAPPING FILE (do NOT look at this until scoring is done)
-#      backend/scripts/output/hidden_llm_mapping.csv
-#      Maps each case_id + label back to the real LLM name, so scores can
-#      be matched back to providers after blind scoring is complete.
-#
-# WHY RANDOMISED PER CASE, NOT FIXED (e.g. gpt4o is always "Letter A"):
-# If gpt4o were always labelled "A" across all 35 cases, a pattern would
-# become recognisable after a few cases even without seeing the real name
-# (e.g. "Letter A is always concise and uses similar phrasing") - defeating
-# the purpose of blinding. Each case gets its own independent random
-# shuffle of which LLM maps to which letter.
-#
-# -----------------------------------------------------------------------
-# HOW TO RUN (inside the Docker container, after Scenarios 1-4 are done)
-# -----------------------------------------------------------------------
+# run with (inside docker, after scenarios 1-4 are done):
 #   docker exec -it glaucoma_backend python -m scripts.export_llm_comparison
 #
-# Safe to re-run - it always reads the full raw CSV fresh and regenerates
-# both output files from scratch (overwrites, does not append), so if you
-# add more cases later (e.g. decide to scale up the study), just re-run
-# this after seeding the new cases and both export files will reflect
-# everything captured so far.
-# ---------------------------------------------------------------------------
+# safe to re-run - always reads the raw CSV fresh and overwrites both output
+# files from scratch, so if more cases get seeded later just run this again.
 
 import csv
 import random
@@ -69,15 +49,15 @@ def main():
             f"been captured, it does not generate new data."
         )
 
-    # Load all raw letter rows
+    # load everything
     with open(RAW_LETTERS_CSV, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
 
     logger.info(f"[export] Loaded {len(rows)} raw LLM letter rows from {RAW_LETTERS_CSV}")
 
-    # Group rows by screening_id, since each case should have exactly 4
-    # letters (one per LLM) that need to be shuffled together as a set.
+    # group by screening_id - each case has (up to) 4 letters, one per LLM,
+    # and they need to be shuffled together as a set
     by_case = defaultdict(list)
     for row in rows:
         by_case[row["screening_id"]].append(row)
@@ -89,12 +69,11 @@ def main():
 
     for screening_id, case_rows in by_case.items():
         if len(case_rows) != 4:
-            # Flag rather than silently skip - a case with fewer than 4
-            # letters likely means one LLM failed for that case (e.g. a
-            # rate limit or transient API error) and was never retried.
+            # worth flagging instead of silently skipping - probably means an
+            # LLM hit a rate limit or transient error for this case and never got retried
             incomplete_cases.append((screening_id, len(case_rows)))
 
-        # Shuffle a fresh random label assignment for THIS case only
+        # fresh shuffle per case, not reused across cases
         labels_for_case = LABELS.copy()
         random.shuffle(labels_for_case)
 
@@ -109,10 +88,9 @@ def main():
                 "ohts_score": row["ohts_score"],
                 "ohts_tier": row["ohts_tier"],
                 "referral_letter": row["referral_letter"],
-                # completeness_score is intentionally included in the blind
-                # export - it's a deterministic, objective keyword-based
-                # check (not an opinion), so seeing it doesn't bias a human
-                # evaluator's own scoring the way seeing the LLM name would.
+                # completeness_score is included on purpose - it's just a
+                # keyword check, not an opinion, so it won't bias the human
+                # scorer the way seeing the LLM name would
                 "auto_completeness_score": row["completeness_score"],
             })
 
@@ -126,7 +104,7 @@ def main():
                 "total_tokens": row["total_tokens"],
             })
 
-    # Write blind export
+    # blind export
     with open(BLIND_EXPORT_CSV, "w", encoding="utf-8", newline="") as f:
         fieldnames = [
             "case_id", "patient_code", "scenario", "label",
@@ -138,7 +116,7 @@ def main():
         for row in blind_rows:
             writer.writerow(row)
 
-    # Write hidden mapping
+    # hidden mapping
     with open(MAPPING_CSV, "w", encoding="utf-8", newline="") as f:
         fieldnames = [
             "case_id", "label", "actual_llm",

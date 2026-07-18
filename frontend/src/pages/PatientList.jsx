@@ -1,6 +1,3 @@
-// src/pages/PatientList.jsx
-// Patient list page - Tailwind CSS implementation.
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";

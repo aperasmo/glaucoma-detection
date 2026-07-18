@@ -1,7 +1,4 @@
-// src/pages/Login.jsx
-// Login page - Tailwind CSS implementation.
-// Connects to POST /auth/login via OAuth2 form data.
-
+// logs in via POST /auth/login (OAuth2 form data, not JSON)
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";

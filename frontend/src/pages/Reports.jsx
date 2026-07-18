@@ -1350,7 +1350,6 @@ function Reports() {
 
   const [patientSelection, setPatientSelection] = useState(null);
 
-  {/* THEME */}
   const { currentTheme, themes } = useTheme();
   const isDarkTheme = themes[currentTheme]?.mode === "dark";
   const logoSrc = "/assets/ai-report-logo.png";
