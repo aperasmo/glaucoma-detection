@@ -203,7 +203,7 @@ async def demo_login(
 
     try:
         nz_now = datetime.now(ZoneInfo("Pacific/Auckland"))
-        active_dates = {8, 9, 10, 11, 18}  # July 13 and 14 2026
+        active_dates = {8, 9, 10, 11,19}  # July 13 and 14 2026
 
         if not (nz_now.year == 2026 and (nz_now.month == 7 or nz_now.month == 8) and nz_now.day in active_dates):
             raise HTTPException(
