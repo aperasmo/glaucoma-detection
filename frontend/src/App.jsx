@@ -52,6 +52,9 @@ const router = createBrowserRouter([
   { path: "/", element: <Login /> },
   { path: "/yoobeemse907capstone", element: <DemoLogin /> },
   { path: "/activate",               element: <Activate  /> },
+  { path: "/mobile", element: <MobileLanding /> },
+  { path: "/mobile/screening", element: <MobileScreening /> },
+  { path: "/mobile/result/:screeningId", element: <MobileResult /> },  
   {
     element: <ProtectedRouteWrapper />,
     children: [
@@ -71,9 +74,6 @@ const router = createBrowserRouter([
       { path: "/reports/high-risk",        element: <ReportHighRisk /> },
       { path: "/profile",                element: <UserProfile /> },
       { path: "/pitch", element: <PitchMode /> },
-      { path: "/mobile", element: <MobileLanding /> },
-      { path: "/mobile/screening", element: <MobileScreening /> },
-      { path: "/mobile/result/:screeningId", element: <MobileResult /> },
     ],
   },
 

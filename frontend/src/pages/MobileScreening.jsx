@@ -67,14 +67,16 @@ function MobileScreening() {
     setLoadingSample(true);
     try {
       // Sample filenames use mixed extensions (.jpg / .png) - try both.
-      let res, ext;
-      try {
-        res = await fetch(`${selectedSample}.jpg`);
-        if (!res.ok) throw new Error();
+    let res, ext;
+      res = await fetch(`${selectedSample}.jpg`);
+      if (res.ok && res.headers.get("content-type")?.startsWith("image/")) {
         ext = "jpg";
-      } catch {
+      } else {
         res = await fetch(`${selectedSample}.png`);
         ext = "png";
+      }
+      if (!res.ok) {
+        throw new Error("Sample image not found.");
       }
       const blob = await res.blob();
       const filename = `${selectedSample.split("/").pop()}.${ext}`;
