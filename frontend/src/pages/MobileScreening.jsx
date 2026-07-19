@@ -1,20 +1,27 @@
 // src/pages/MobileScreening.jsx
-// Mobile conference screening flow - screening form.
-// Route: /mobile/screening - reached after picking Clinical or Research mode.
-// Single name field, sample image picker (reused pattern from NewScreening.jsx),
-// eye side defaulted to "left" (no UI - booth visitors don't need to choose).
+// Mobile conference screening flow - single entry page.
+// Route: /mobile - reached by scanning the QR code at the booth.
+// Auto-logs in silently (demo-login pattern), then shows name + image form.
+// Always runs the full research pipeline via force_mode=research - the
+// visitor never sees the word "Research", it's just "Screening" to them.
 
-import { useState, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import API from "../api/index";
+import { useTheme } from "../theme/ThemeProvider";
 
 function MobileScreening() {
   const navigate = useNavigate();
-  const location = useLocation();
   const fileInputRef = useRef(null);
+  const { login, token } = useAuth();
+  const { currentTheme, themes } = useTheme();
+  const isDarkTheme = themes[currentTheme]?.mode === "dark";
+  const logoSrc = isDarkTheme
+    ? "/assets/glaucoma-ai-logo-dark.png"
+    : "/assets/glaucoma-ai-logo-light.png";
 
-  // Mode picked on the landing page - UI framing only, redirect back if missing.
-  const mobileMode = location.state?.mobileMode;
+  const [authStatus, setAuthStatus] = useState(token ? "ready" : "loading"); // loading | ready | failed
 
   const [name, setName] = useState("");
   const [file, setFile] = useState(null);
@@ -26,7 +33,6 @@ function MobileScreening() {
   const [selectedSample, setSelectedSample] = useState(null);
   const [loadingSample, setLoadingSample] = useState(false);
   const [sampleImages] = useState(() => {
-    // Same 20-image pool as NewScreening.jsx - filenames stay internal, no labels shown.
     const normals = Array.from({ length: 10 }, (_, i) =>
       `/assets/sample-fundus/normal-${String(i + 1).padStart(2, "0")}`
     );
@@ -41,11 +47,29 @@ function MobileScreening() {
     return all;
   });
 
-  // Redirect back to landing if someone lands here without picking a mode first.
-  if (!mobileMode) {
-    navigate("/mobile", { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (token) return;
+    let cancelled = false;
+
+    async function autoLogin() {
+      try {
+        const res = await API.post("/auth/demo-login");
+        const accessToken = res.data.access_token;
+        const userRes = await API.get("/auth/me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (cancelled) return;
+        login(accessToken, userRes.data);
+        setAuthStatus("ready");
+      } catch {
+        if (cancelled) return;
+        setAuthStatus("failed");
+      }
+    }
+
+    autoLogin();
+    return () => { cancelled = true; };
+  }, [login, token]);
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -66,8 +90,7 @@ function MobileScreening() {
     if (!selectedSample) return;
     setLoadingSample(true);
     try {
-      // Sample filenames use mixed extensions (.jpg / .png) - try both.
-    let res, ext;
+      let res, ext;
       res = await fetch(`${selectedSample}.jpg`);
       if (res.ok && res.headers.get("content-type")?.startsWith("image/")) {
         ext = "jpg";
@@ -100,7 +123,6 @@ function MobileScreening() {
     setError(null);
 
     try {
-      // Split single name field into first/last for the patients endpoint.
       const trimmed = name.trim();
       const spaceIndex = trimmed.indexOf(" ");
       const first_name = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
@@ -112,14 +134,12 @@ function MobileScreening() {
       const formData = new FormData();
       formData.append("image", file);
       const screeningRes = await API.post(
-        `/screenings/?patient_id=${patientId}&eye_side=left`,
+        `/screenings/?patient_id=${patientId}&eye_side=left&force_mode=research`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      navigate(`/mobile/result/${screeningRes.data.screening_id}`, {
-        state: { mobileMode },
-      });
+      navigate(`/mobile/result/${screeningRes.data.screening_id}`);
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(
@@ -129,33 +149,33 @@ function MobileScreening() {
     }
   }
 
+  if (authStatus === "loading") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-6">
+        <div className="w-8 h-8 border-2 border-white/10 border-t-accent rounded-full animate-spin mb-4" />
+        <p className="text-sm text-text3">Loading, please wait...</p>
+      </div>
+    );
+  }
+
+  if (authStatus === "failed") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-6 text-center">
+        <p className="text-sm text-text3 mb-2">Something went wrong.</p>
+        <p className="text-xs text-text3">Please try scanning the code again.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg px-5 py-8">
       <div className="w-full max-w-sm mx-auto">
 
-        {/* Back to mode picker + mode indicator */}
-        <div className="flex items-center mb-6">
-          <button
-            onClick={() => navigate("/mobile")}
-            className="text-xs text-text3 flex items-center gap-1 bg-transparent border-0 cursor-pointer font-sans flex-shrink-0"
-          >
-            ← Mode
-          </button>
-          <div className="flex-1 flex justify-center">
-            <span
-              className={`text-xs px-3 py-1 rounded-full border font-medium ${
-                mobileMode === "research"
-                  ? "bg-warn/10 text-warn border-warn/20"
-                  : "bg-accent/10 text-accent2 border-accent/20"
-              }`}
-            >
-              {mobileMode === "research" ? "🔬 Research Mode" : "🏥 Clinical Mode"}
-            </span>
-          </div>
-          <div className="w-10 flex-shrink-0" />
+        <div className="flex flex-col items-center text-center mb-8">
+          <img src={logoSrc} alt="GlaucomaAI" className="h-12 w-auto object-contain mb-3" />
+          <h1 className="text-base font-semibold text-text1">Try a screening</h1>
         </div>
 
-        {/* Name */}
         <div className="mb-5">
           <label className="block text-xs font-medium text-text2 mb-2">
             Your name
@@ -168,7 +188,6 @@ function MobileScreening() {
           />
         </div>
 
-        {/* Fundus image */}
         <div className="mb-6">
           <label className="block text-xs font-medium text-text2 mb-2">
             Fundus image
@@ -227,7 +246,6 @@ function MobileScreening() {
           </div>
         )}
 
-        {/* Run button */}
         <button
           onClick={handleRun}
           disabled={!canRun || loading}
@@ -240,9 +258,11 @@ function MobileScreening() {
           {loading ? "Analysing..." : "▶ Run Screening"}
         </button>
 
+        <p className="text-xs text-text3 text-center mt-6 leading-relaxed">
+          Demo system — for illustration only. Not for clinical use.
+        </p>
       </div>
 
-      {/* SAMPLE IMAGE PICKER MODAL */}
       {showSamplePicker && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
           <div className="bg-surface border border-white/12 rounded-t-2xl sm:rounded-xl w-full sm:max-w-lg overflow-hidden max-h-[85vh] flex flex-col">
@@ -269,7 +289,6 @@ function MobileScreening() {
                         isSelected ? "border-accent" : "border-transparent"
                       }`}
                     >
-                      {/* Preview tries jpg first via CSS background fallback handled at select time */}
                       <img
                         src={`${src}.jpg`}
                         alt=""
@@ -307,7 +326,6 @@ function MobileScreening() {
         </div>
       )}
 
-      {/* Loading overlay */}
       {loading && (
         <div className="fixed inset-0 bg-bg/95 flex flex-col items-center justify-center z-50 px-6 text-center">
           <div className="w-8 h-8 border-2 border-white/10 border-t-accent rounded-full animate-spin mb-4" />

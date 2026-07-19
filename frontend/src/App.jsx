@@ -29,7 +29,7 @@ import ResearchEvaluation from "./pages/ResearchEvaluation";
 import ResearchResults from "./pages/ResearchResults";
 
 import PitchMode from "./pages/PitchMode";
-import MobileLanding from "./pages/MobileLanding";
+
 import MobileScreening from "./pages/MobileScreening";
 import MobileResult from "./pages/MobileResult";
 
@@ -52,9 +52,8 @@ const router = createBrowserRouter([
   { path: "/", element: <Login /> },
   { path: "/yoobeemse907capstone", element: <DemoLogin /> },
   { path: "/activate",               element: <Activate  /> },
-  { path: "/mobile", element: <MobileLanding /> },
-  { path: "/mobile/screening", element: <MobileScreening /> },
-  { path: "/mobile/result/:screeningId", element: <MobileResult /> },  
+  { path: "/mobile", element: <MobileScreening /> },
+  { path: "/mobile/result/:screeningId", element: <MobileResult /> },
   {
     element: <ProtectedRouteWrapper />,
     children: [

@@ -1,23 +1,23 @@
 // src/pages/MobileResult.jsx
 // Mobile conference screening flow - result view.
 // Route: /mobile/result/:screeningId
-// Renders Clinical or Research layout based on mobileMode passed via router state.
-// Reuses ResultShared helpers where possible. Confusion matrix and AUC/Sensitivity/
-// Specificity are hardcoded - locked evaluation results from the 415-image test set,
-// already published on the IEEE poster, no backend endpoint needed.
+// Always renders the full research-style layout (4 models, 4 LLM letters) -
+// backend always ran force_mode=research for this screening, so this data
+// always exists. The word "Research" is never shown to the visitor.
+// Confusion matrix and AUC/Sensitivity/Specificity are hardcoded - locked,
+// static evaluation results from the 415-image test set.
 
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import API from "../api/index";
 import {
   getClinicalResult,
   getModelResult,
+  getReferralResult,
   getGradcamUrl,
   BACKEND,
 } from "../components/screening-results/ResultShared";
 
-// Locked evaluation results - 415-image held-out test set. Static, never changes
-// per screening. See IEEE MIPR poster for source.
 const CONFUSION_MATRIX = { tp: 177, fn: 31, fp: 39, tn: 168 };
 const EVAL_METRICS = { auc: "0.93", sensitivity: "0.85", specificity: "0.80" };
 
@@ -27,6 +27,11 @@ const MODEL_LABELS = {
   efficientnetv2: "EfficientNetV2",
   ensemble: "Ensemble",
 };
+
+const LETTER_TABS = [
+  { keys: ["gpt4o", "gpt4o_mini"], labels: ["GPT-4o", "GPT-4o-mini"] },
+  { keys: ["llama", "gemini"], labels: ["LLaMA", "Gemini 3.5 Flash"] },
+];
 
 function ConfusionMatrixPanel() {
   return (
@@ -62,7 +67,7 @@ function ConfusionMatrixPanel() {
   );
 }
 
-function ImagePair({ data, result, label }) {
+function ImagePair({ data, result }) {
   const gradcamUrl = getGradcamUrl(data, result);
   return (
     <div className="grid grid-cols-2 gap-2 mb-4">
@@ -84,7 +89,7 @@ function ImagePair({ data, result, label }) {
         <div className="text-xs text-text3 text-center mb-1.5 uppercase tracking-wider">Grad-CAM++</div>
         <div className="w-full aspect-square rounded-lg overflow-hidden bg-black flex items-center justify-center">
           {gradcamUrl ? (
-            <img src={gradcamUrl} alt={`${label} Grad-CAM++`} className="w-full h-full object-contain" />
+            <img src={gradcamUrl} alt="Grad-CAM++" className="w-full h-full object-contain" />
           ) : (
             <span className="text-text3 text-xs">Not available</span>
           )}
@@ -97,12 +102,11 @@ function ImagePair({ data, result, label }) {
 function MobileResult() {
   const { screeningId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const mobileMode = location.state?.mobileMode || "clinical";
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [letterTab, setLetterTab] = useState(0);
 
   useEffect(() => {
     let intervalId = null;
@@ -130,7 +134,7 @@ function MobileResult() {
   }, [screeningId]);
 
   function scanAnother() {
-    navigate("/mobile/screening", { state: { mobileMode } });
+    navigate("/mobile");
   }
 
   if (loading) {
@@ -160,7 +164,6 @@ function MobileResult() {
   const results = data?.results || [];
   const clinicalResult = getClinicalResult(results);
   const isGlaucoma = clinicalResult?.prediction?.toLowerCase() === "glaucoma";
-  const hasDisagreement = clinicalResult?.has_model_disagreement === true;
   const confidencePct = clinicalResult?.confidence_score != null
     ? (Number(clinicalResult.confidence_score) * 100).toFixed(1)
     : "—";
@@ -168,166 +171,149 @@ function MobileResult() {
     ? (Number(clinicalResult.threshold_used) * 100).toFixed(0)
     : "50";
 
-  const primaryReferral =
-    results.find(item => item.referral_letter != null && item.llm_used === "gpt4o") ||
-    results.find(item => item.referral_letter != null && item.llm_used !== null) ||
-    null;
+  const models = [
+    { key: "efficientnetb0", result: getModelResult(results, "efficientnetb0") },
+    { key: "vgg16", result: getModelResult(results, "vgg16") },
+    { key: "efficientnetv2", result: getModelResult(results, "efficientnetv2") },
+    { key: "ensemble", result: clinicalResult, reference: true },
+  ];
+
+    const predictionSet = new Set(
+    models
+        .filter(item => item.result)
+        .map(item => item.result.prediction?.toLowerCase())
+        .filter(Boolean)
+    );
+  //const hasDisagreement = clinicalResult?.has_model_disagreement === true;
+  const hasDisagreement = predictionSet.size > 1;
+
+  const activePair = LETTER_TABS[letterTab];
+  const activeLetters = activePair.keys.map((key, i) => ({
+    key,
+    label: activePair.labels[i],
+    result: getReferralResult(results, key),
+  }));
 
   return (
     <div className="min-h-screen bg-bg pb-8">
 
-    {/* Header */}
+      {/* Header */}
       <div className="px-5 py-4 border-b border-white/7 flex items-center justify-between sticky top-0 bg-bg z-10">
         <button
           onClick={() => navigate("/mobile")}
           className="text-xs text-text3 flex items-center gap-1 bg-transparent border-0 cursor-pointer font-sans"
         >
-          ← Mode
+          ← Home
         </button>
-        <span
-          className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
-            mobileMode === "research"
-              ? "bg-warn/10 text-warn border-warn/20"
-              : "bg-accent/10 text-accent2 border-accent/20"
-          }`}
-        >
-          {mobileMode === "research" ? "Research" : "Clinical"}
-        </span>
+        <span className="text-sm font-semibold text-text1">Screening result</span>
+        <span className="w-10" />
       </div>
 
       <div className="px-5 py-5 max-w-sm mx-auto">
 
-        {mobileMode === "clinical" ? (
-          <>
-            <ImagePair data={data} result={clinicalResult} label="Ensemble" />
+        <ImagePair data={data} result={clinicalResult} />
 
-            <div className={`flex items-center gap-2 px-3.5 py-3 rounded-xl border mb-4 ${
-              isGlaucoma
-                ? "bg-neg/10 border-neg/30"
-                : hasDisagreement
-                  ? "bg-warn/10 border-warn/30"
-                  : "bg-pos/10 border-pos/30"
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${
-                isGlaucoma ? "bg-neg" : hasDisagreement ? "bg-warn" : "bg-pos"
-              }`} />
-              <span className={`text-sm font-medium ${
-                isGlaucoma ? "text-neg" : hasDisagreement ? "text-warn" : "text-pos"
-              }`}>
-                {isGlaucoma
-                  ? "Possible glaucoma signs detected"
-                  : hasDisagreement
-                    ? "No glaucoma signs detected - model disagreement detected"
-                    : "No glaucoma signs detected"}
-              </span>
-            </div>
-
-            <div className="bg-surface2 rounded-xl p-3.5 mb-3">
-              <div className="text-xs text-text3 mb-1">Confidence</div>
-              <div className={`text-lg font-bold font-mono mb-1.5 ${isGlaucoma ? "text-neg" : "text-pos"}`}>
-                {confidencePct}%
-              </div>
-              <div className="text-xs text-text3 leading-relaxed">
-                Checked against a {thresholdPct}% cutoff — above that line, the result leans toward possible glaucoma signs.
-              </div>
-            </div>
-
-            <div className="bg-surface2 rounded-xl p-3.5 mb-4">
-              <div className="text-xs text-text3 mb-1">Cup-to-Disc Ratio</div>
-              {clinicalResult?.cdr != null ? (
-                <>
-                  <div className="text-lg font-bold text-text1 font-mono mb-1.5">
-                    {Number(clinicalResult.cdr).toFixed(2)}
-                  </div>
-                  <div className="text-xs text-text3 leading-relaxed">
-                    {Number(clinicalResult.cdr) > 0.7
-                      ? "Larger than typical — worth a closer look. "
-                      : Number(clinicalResult.cdr) >= 0.5
-                        ? "A little larger than typical. "
-                        : "Within a typical range. "}
-                    This measures how much of the optic disc — where the optic nerve meets the eye — appears "cupped in" on this image. It's one of the early signs doctors look for with glaucoma.
-                  </div>
-                </>
-              ) : (
-                <div className="text-xs text-text3 leading-relaxed">
-                  Not available for this image — the system couldn't clearly measure the optic disc. This doesn't affect the main result above.
+        {/* Model comparison - 4 colour-coded cards */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-text3 uppercase tracking-wider">Model comparison</span>
+          {hasDisagreement && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-warn/15 text-warn border border-warn/25">
+              Model disagreement detected
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {models.map(({ key, result, reference }) => {
+            if (!result) return null;
+            const positive = result.prediction?.toLowerCase() === "glaucoma";
+            const conf = result.confidence_score != null
+              ? (Number(result.confidence_score) * 100).toFixed(1)
+              : "—";
+            return (
+              <div
+                key={key}
+                className={`rounded-xl p-3 border relative ${
+                  positive ? "bg-neg/10 border-neg/25" : "bg-pos/10 border-pos/25"
+                }`}
+              >
+                {reference && (
+                  <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-warn/20 text-warn border border-warn/30">
+                    Reference
+                  </span>
+                )}
+                <div className={`text-xs font-medium mb-1 ${positive ? "text-neg" : "text-pos"}`}>
+                  {MODEL_LABELS[key]}
                 </div>
-              )}
-            </div>
-
-            <ConfusionMatrixPanel />
-
-            <div className="bg-surface2 rounded-xl p-3.5 mb-5">
-              <div className="text-xs text-text3 mb-2">Referral letter</div>
-              {primaryReferral ? (
-                <div className="text-xs text-text1 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {primaryReferral.referral_letter}
+                <div className={`text-lg font-bold font-mono mb-0.5 ${positive ? "text-neg" : "text-pos"}`}>
+                  {conf}%
                 </div>
-              ) : (
-                <div className="text-xs text-text3 text-center py-3">
-                  No referral required - normal result.
+                <div className={`text-xs ${positive ? "text-neg/80" : "text-pos/80"}`}>
+                  {positive ? "Possible glaucoma signs" : "No glaucoma signs"}
                 </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-xs text-text3 uppercase tracking-wider mb-2">Model comparison</div>
-            <div className="flex flex-col gap-2 mb-4">
-              {["efficientnetb0", "vgg16", "efficientnetv2"].map(key => {
-                const r = getModelResult(results, key);
-                if (!r) return null;
-                const modelIsGlaucoma = r.prediction?.toLowerCase() === "glaucoma";
-                const conf = r.confidence_score != null ? (Number(r.confidence_score) * 100).toFixed(1) : "-";
-                return (
-                  <div key={key} className="bg-surface2 rounded-xl p-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold text-text1">{MODEL_LABELS[key]}</div>
-                      <div className={`text-xs ${modelIsGlaucoma ? "text-neg" : "text-pos"}`}>
-                        {modelIsGlaucoma ? "Possible glaucoma signs" : "No glaucoma signs"}
-                      </div>
-                    </div>
-                    <div className={`text-sm font-bold font-mono ${modelIsGlaucoma ? "text-neg" : "text-pos"}`}>
-                      {conf}%
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-surface border border-warn/30 rounded-xl p-3 mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-text1">Ensemble</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-warn/15 text-warn border border-warn/20">
-                  Clinical reference
-                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs ${isGlaucoma ? "text-neg" : "text-pos"}`}>
-                  {isGlaucoma ? "Possible glaucoma signs detected" : "No glaucoma signs detected"}
-                </span>
-                <span className={`text-sm font-bold font-mono ${isGlaucoma ? "text-neg" : "text-pos"}`}>
-                  {confidencePct}%
-                </span>
-              </div>
-            </div>
+            );
+          })}
+        </div>
 
-            <ImagePair data={data} result={clinicalResult} label="Ensemble" />
+        <ConfusionMatrixPanel />
 
-            {hasDisagreement && (
-              <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-warn/10 border border-warn/25 mb-4">
-                <span className="text-warn text-xs mt-0.5">⚠</span>
-                <span className="text-xs text-warn/90 leading-relaxed">
-                  Model disagreement detected - {MODEL_LABELS[clinicalResult?.disagreement_model] || "a supporting model"} flagged this image as suspicious.
-                </span>
-              </div>
-            )}
-
-            <ConfusionMatrixPanel />
-          </>
+        {hasDisagreement && (
+          <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-warn/10 border border-warn/25 mb-4">
+            <span className="text-warn text-sm mt-0.5">⚠</span>
+            <span className="text-xs text-warn/90 leading-relaxed">
+              The main result found no glaucoma signs, but {MODEL_LABELS[clinicalResult?.disagreement_model] || "a supporting model"} flagged this image as suspicious.
+            </span>
+          </div>
         )}
 
-        {/* Scan another - same pattern as "Screen Again" on desktop */}
+        {/* Confidence card with threshold explanation */}
+        <div className="bg-surface2 rounded-xl p-3.5 mb-4">
+          <div className="text-xs text-text3 mb-1">Confidence</div>
+          <div className={`text-lg font-bold font-mono mb-1.5 ${isGlaucoma ? "text-neg" : "text-pos"}`}>
+            {confidencePct}%
+          </div>
+          <div className="text-xs text-text3 leading-relaxed">
+            Checked against a {thresholdPct}% cutoff — above that line, the result leans toward possible glaucoma signs.
+          </div>
+        </div>
+
+        {/* Referral letters - tabs, 2 letters side by side per tab */}
+        <div className="text-xs text-text3 uppercase tracking-wider mb-2">Referral letters</div>
+        <div className="flex gap-1.5 mb-3 bg-surface2 p-1 rounded-lg">
+          {LETTER_TABS.map((pair, i) => (
+            <button
+              key={i}
+              onClick={() => setLetterTab(i)}
+              className={`flex-1 py-2.5 rounded-md text-xs font-medium transition-colors border-0 cursor-pointer font-sans ${
+                letterTab === i ? "bg-accent text-white" : "bg-transparent text-text3"
+              }`}
+            >
+              {pair.labels.join(" / ")}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 mb-5">
+          {activeLetters.map(({ key, label, result }) => (
+            <div key={key} className="bg-surface2 rounded-xl overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/7">
+                <span className="text-xs font-semibold text-text1">{label}</span>
+                {result?.generation_time_ms != null && (
+                  <span className="text-xs text-text3 font-mono">
+                    {(result.generation_time_ms / 1000).toFixed(1)}s
+                  </span>
+                )}
+              </div>
+              <div className="px-3 py-2.5 text-xs text-text2 leading-relaxed max-h-56 overflow-y-auto">
+                {result?.referral_letter || (
+                  <span className="text-text3">No referral required — normal result.</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Scan another */}
         <button
           onClick={scanAnother}
           className="w-full py-3.5 rounded-xl text-sm font-semibold border-0 bg-accent text-white cursor-pointer active:scale-[0.98] font-sans"
@@ -336,7 +322,7 @@ function MobileResult() {
         </button>
 
         <p className="text-xs text-text3 text-center mt-6 leading-relaxed">
-          Demo system - for illustration only. Not for clinical use.
+          Demo system — for illustration only. Not for clinical use.
         </p>
       </div>
     </div>

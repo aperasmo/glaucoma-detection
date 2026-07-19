@@ -40,10 +40,11 @@ router = APIRouter(prefix="/screenings", tags=["Screenings"])
 @router.post("/", response_model=ScreeningResponse, status_code=status.HTTP_201_CREATED)
 async def upload_screening(
     patient_id: UUID,
-    eye_side: str,
+    eye_side: str,    
     background_tasks: BackgroundTasks,
     image: UploadFile = File(...),    
     remarks: str = None,
+    force_mode: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin", "nurse")),
 ):
@@ -76,6 +77,7 @@ async def upload_screening(
             screening_id=screening.screening_id,
             image_path=screening.image_path,
              created_by=current_user.user_id,
+             mode=force_mode if force_mode in ("clinical", "research") else None,
         )
 
         return screening
@@ -435,7 +437,7 @@ async def get_screening(
     return screening
 
 
-async def run_ml_inference(screening_id: UUID, image_path: str, created_by: Optional[UUID] = None,):
+async def run_ml_inference(screening_id: UUID, image_path: str, created_by: Optional[UUID] = None, mode: str | None = None,):    
     # runs the full pipeline: the three models + ensemble, Grad-CAM++, OHTS score,
     # the LLM referral letter, then writes everything back and flips the screening
     # to complete
@@ -447,6 +449,7 @@ async def run_ml_inference(screening_id: UUID, image_path: str, created_by: Opti
                 image_path=image_path,
                 db=db,
                 created_by=created_by,
+                mode=mode
             )
     except Exception as e:
         logger.error(f"ML inference pipeline failed for screening {screening_id}: {e}", exc_info=True)
