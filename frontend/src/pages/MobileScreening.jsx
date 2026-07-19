@@ -133,17 +133,26 @@ function MobileScreening() {
     <div className="min-h-screen bg-bg px-5 py-8">
       <div className="w-full max-w-sm mx-auto">
 
-        {/* Mode indicator */}
-        <div className="flex items-center justify-center mb-6">
-          <span
-            className={`text-xs px-3 py-1 rounded-full border font-medium ${
-              mobileMode === "research"
-                ? "bg-warn/10 text-warn border-warn/20"
-                : "bg-accent/10 text-accent2 border-accent/20"
-            }`}
+        {/* Back to mode picker + mode indicator */}
+        <div className="flex items-center mb-6">
+          <button
+            onClick={() => navigate("/mobile")}
+            className="text-xs text-text3 flex items-center gap-1 bg-transparent border-0 cursor-pointer font-sans flex-shrink-0"
           >
-            {mobileMode === "research" ? "🔬 Research Mode" : "🏥 Clinical Mode"}
-          </span>
+            ← Mode
+          </button>
+          <div className="flex-1 flex justify-center">
+            <span
+              className={`text-xs px-3 py-1 rounded-full border font-medium ${
+                mobileMode === "research"
+                  ? "bg-warn/10 text-warn border-warn/20"
+                  : "bg-accent/10 text-accent2 border-accent/20"
+              }`}
+            >
+              {mobileMode === "research" ? "🔬 Research Mode" : "🏥 Clinical Mode"}
+            </span>
+          </div>
+          <div className="w-10 flex-shrink-0" />
         </div>
 
         {/* Name */}

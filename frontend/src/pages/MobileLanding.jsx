@@ -14,8 +14,8 @@ import { useTheme } from "../theme/ThemeProvider";
 
 function MobileLanding() {
   const navigate = useNavigate();
-  const { login } = useAuth();
-  const [status, setStatus] = useState("loading"); // loading | ready | failed
+  const { login, token } = useAuth();
+  const [status, setStatus] = useState(token ? "ready" : "loading"); // loading | ready | failed
   const { currentTheme, themes } = useTheme();
   const isDarkTheme = themes[currentTheme]?.mode === "dark";
   const logoSrc = isDarkTheme
@@ -23,6 +23,10 @@ function MobileLanding() {
     : "/assets/glaucoma-ai-logo-light.png";
 
   useEffect(() => {
+    // Already logged in (e.g. tapped "Change mode" from a later screen) -
+    // skip the login call entirely, go straight to the mode picker.
+    if (token) return;
+
     let cancelled = false;
 
     async function autoLogin() {

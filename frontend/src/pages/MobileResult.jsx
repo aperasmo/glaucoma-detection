@@ -164,6 +164,9 @@ function MobileResult() {
   const confidencePct = clinicalResult?.confidence_score != null
     ? (Number(clinicalResult.confidence_score) * 100).toFixed(1)
     : "—";
+  const thresholdPct = clinicalResult?.threshold_used != null
+    ? (Number(clinicalResult.threshold_used) * 100).toFixed(0)
+    : "50";
 
   const primaryReferral =
     results.find(item => item.referral_letter != null && item.llm_used === "gpt4o") ||
@@ -173,9 +176,14 @@ function MobileResult() {
   return (
     <div className="min-h-screen bg-bg pb-8">
 
-      {/* Header */}
+    {/* Header */}
       <div className="px-5 py-4 border-b border-white/7 flex items-center justify-between sticky top-0 bg-bg z-10">
-        <span className="text-sm font-semibold text-text1">Screening result</span>
+        <button
+          onClick={() => navigate("/mobile")}
+          className="text-xs text-text3 flex items-center gap-1 bg-transparent border-0 cursor-pointer font-sans"
+        >
+          ← Mode
+        </button>
         <span
           className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
             mobileMode === "research"
@@ -209,24 +217,42 @@ function MobileResult() {
                 {isGlaucoma
                   ? "Possible glaucoma signs detected"
                   : hasDisagreement
-                    ? "No glaucoma signs detected — model disagreement detected"
+                    ? "No glaucoma signs detected - model disagreement detected"
                     : "No glaucoma signs detected"}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 mb-4">
-              <div className="bg-surface2 rounded-xl p-3.5">
-                <div className="text-xs text-text3 mb-1">Confidence</div>
-                <div className={`text-lg font-bold font-mono ${isGlaucoma ? "text-neg" : "text-pos"}`}>
-                  {confidencePct}%
-                </div>
+            <div className="bg-surface2 rounded-xl p-3.5 mb-3">
+              <div className="text-xs text-text3 mb-1">Confidence</div>
+              <div className={`text-lg font-bold font-mono mb-1.5 ${isGlaucoma ? "text-neg" : "text-pos"}`}>
+                {confidencePct}%
               </div>
-              <div className="bg-surface2 rounded-xl p-3.5">
-                <div className="text-xs text-text3 mb-1">OHTS</div>
-                <div className="text-lg font-bold text-text1">
-                  {clinicalResult?.ohts_score != null ? `${Number(clinicalResult.ohts_score).toFixed(0)}/16` : "N/A"}
-                </div>
+              <div className="text-xs text-text3 leading-relaxed">
+                Checked against a {thresholdPct}% cutoff — above that line, the result leans toward possible glaucoma signs.
               </div>
+            </div>
+
+            <div className="bg-surface2 rounded-xl p-3.5 mb-4">
+              <div className="text-xs text-text3 mb-1">Cup-to-Disc Ratio</div>
+              {clinicalResult?.cdr != null ? (
+                <>
+                  <div className="text-lg font-bold text-text1 font-mono mb-1.5">
+                    {Number(clinicalResult.cdr).toFixed(2)}
+                  </div>
+                  <div className="text-xs text-text3 leading-relaxed">
+                    {Number(clinicalResult.cdr) > 0.7
+                      ? "Larger than typical — worth a closer look. "
+                      : Number(clinicalResult.cdr) >= 0.5
+                        ? "A little larger than typical. "
+                        : "Within a typical range. "}
+                    This measures how much of the optic disc — where the optic nerve meets the eye — appears "cupped in" on this image. It's one of the early signs doctors look for with glaucoma.
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-text3 leading-relaxed">
+                  Not available for this image — the system couldn't clearly measure the optic disc. This doesn't affect the main result above.
+                </div>
+              )}
             </div>
 
             <ConfusionMatrixPanel />
@@ -239,7 +265,7 @@ function MobileResult() {
                 </div>
               ) : (
                 <div className="text-xs text-text3 text-center py-3">
-                  No referral required — normal result.
+                  No referral required - normal result.
                 </div>
               )}
             </div>
@@ -252,7 +278,7 @@ function MobileResult() {
                 const r = getModelResult(results, key);
                 if (!r) return null;
                 const modelIsGlaucoma = r.prediction?.toLowerCase() === "glaucoma";
-                const conf = r.confidence_score != null ? (Number(r.confidence_score) * 100).toFixed(1) : "—";
+                const conf = r.confidence_score != null ? (Number(r.confidence_score) * 100).toFixed(1) : "-";
                 return (
                   <div key={key} className="bg-surface2 rounded-xl p-3 flex items-center justify-between">
                     <div>
@@ -292,7 +318,7 @@ function MobileResult() {
               <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-warn/10 border border-warn/25 mb-4">
                 <span className="text-warn text-xs mt-0.5">⚠</span>
                 <span className="text-xs text-warn/90 leading-relaxed">
-                  Model disagreement detected — {MODEL_LABELS[clinicalResult?.disagreement_model] || "a supporting model"} flagged this image as suspicious.
+                  Model disagreement detected - {MODEL_LABELS[clinicalResult?.disagreement_model] || "a supporting model"} flagged this image as suspicious.
                 </span>
               </div>
             )}
@@ -310,7 +336,7 @@ function MobileResult() {
         </button>
 
         <p className="text-xs text-text3 text-center mt-6 leading-relaxed">
-          Demo system — for illustration only. Not for clinical use.
+          Demo system - for illustration only. Not for clinical use.
         </p>
       </div>
     </div>
