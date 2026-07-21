@@ -331,8 +331,8 @@ function MIPR2026Result() {
     },
   ];
 
-  return (
-    <div className="min-h-screen bg-bg pb-8">
+  return (    
+    <div className="h-screen bg-bg overflow-y-auto pb-8">
 
       {/* Header */}
       <div className="px-5 py-3.5 border-b border-white/7 sticky top-0 bg-bg z-10 relative">
@@ -363,7 +363,7 @@ function MIPR2026Result() {
         {/* Primary screening result - strengthened, threshold-based wording */}
         <div className="bg-surface2 rounded-xl p-4 mb-4 border border-white/7">
           <div className="text-xs text-text3 uppercase tracking-wider mb-2">
-            Primary Screening Result - Ensemble
+            Ensemble Screening Result
           </div>
           <div className={`text-base font-bold mb-2 ${isGlaucoma ? "text-neg" : "text-pos"}`}>
             {isGlaucoma ? "Above Glaucoma Screening Threshold" : "Below Glaucoma Screening Threshold"}

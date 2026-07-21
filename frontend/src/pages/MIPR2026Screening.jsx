@@ -168,7 +168,7 @@ function MIPR2026Screening() {
   }
 
   return (
-    <div className="min-h-screen bg-bg px-5 py-8">
+    <div className="h-screen bg-bg overflow-y-auto px-5 py-8">
       <div className="w-full max-w-sm mx-auto">
 
         <div className="flex flex-col items-center text-center mb-8">
