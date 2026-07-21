@@ -30,8 +30,8 @@ import ResearchResults from "./pages/ResearchResults";
 
 import PitchMode from "./pages/PitchMode";
 
-import MobileScreening from "./pages/MobileScreening";
-import MobileResult from "./pages/MobileResult";
+import MIPR2026Screening from "./pages/MIPR2026Screening";
+import MIPR2026Result from "./pages/MIPR2026Result";
 
 
 function ProtectedRoute() {
@@ -52,8 +52,8 @@ const router = createBrowserRouter([
   { path: "/", element: <Login /> },
   { path: "/yoobeemse907capstone", element: <DemoLogin /> },
   { path: "/activate",               element: <Activate  /> },
-  { path: "/mobile", element: <MobileScreening /> },
-  { path: "/mobile/result/:screeningId", element: <MobileResult /> },
+  { path: "/MIPR2026", element: <MIPR2026Screening /> },
+  { path: "/MIPR2026/result/:screeningId", element: <MIPR2026Result /> },
   {
     element: <ProtectedRouteWrapper />,
     children: [

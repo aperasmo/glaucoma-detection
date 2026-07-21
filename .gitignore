@@ -109,3 +109,7 @@ LOCAL_DEV_WORKFLOWS.md
 # ============================================
 prepare_test_images.sh
 *.sh
+############################
+# -- AI GIT ASSISTANT --
+############################
+glaucoma-detection.code-workspace

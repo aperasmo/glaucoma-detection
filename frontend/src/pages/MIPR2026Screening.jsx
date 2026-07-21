@@ -1,6 +1,6 @@
-// src/pages/MobileScreening.jsx
+// src/pages/MIPR2026Screening.jsx
 // Mobile conference screening flow - single entry page.
-// Route: /mobile - reached by scanning the QR code at the booth.
+// Route: /MIPR2026 - reached by scanning the QR code at the booth.
 // Auto-logs in silently (demo-login pattern), then shows name + image form.
 // Always runs the full research pipeline via force_mode=research - the
 // visitor never sees the word "Research", it's just "Screening" to them.
@@ -11,7 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import API from "../api/index";
 import { useTheme } from "../theme/ThemeProvider";
 
-function MobileScreening() {
+function MIPR2026Screening() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const { login, token } = useAuth();
@@ -139,7 +139,7 @@ function MobileScreening() {
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      navigate(`/mobile/result/${screeningRes.data.screening_id}`);
+      navigate(`/MIPR2026/result/${screeningRes.data.screening_id}`);
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(
@@ -173,7 +173,8 @@ function MobileScreening() {
 
         <div className="flex flex-col items-center text-center mb-8">
           <img src={logoSrc} alt="GlaucomaAI" className="h-12 w-auto object-contain mb-3" />
-          <h1 className="text-base font-semibold text-text1">Try a screening</h1>
+          <h1 className="text-base font-semibold text-text1">Health-MM • IEEE MIPR 2026</h1>
+          <p className="text-xs text-text3 mt-1">Explainable Fundus-Based AI Glaucoma Screening</p>
         </div>
 
         <div className="mb-5">
@@ -259,7 +260,7 @@ function MobileScreening() {
         </button>
 
         <p className="text-xs text-text3 text-center mt-6 leading-relaxed">
-          Demo system — for illustration only. Not for clinical use.
+          Research prototype for IEEE MIPR 2026. Not for clinical diagnosis or medical decision-making.
         </p>
       </div>
 
@@ -338,4 +339,4 @@ function MobileScreening() {
   );
 }
 
-export default MobileScreening;
+export default MIPR2026Screening;
