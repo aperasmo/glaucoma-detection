@@ -12,9 +12,9 @@ const FALLBACK_MODELS = {
     bestFor: "Explainability — clearest Grad-CAM++ heatmaps",
     description: "A deep learning model pre-trained on millions of general images, then re-trained on 4,148 fundus photographs to detect glaucoma. It has 5.3 million internal parameters fine-tuned to recognise glaucoma patterns in eye images. Best choice when the clinician needs to understand why the AI made its decision.",
     thresholds: [
-      { label: "Default (0.5)", value: "0.50", sens: "Lower", spec: "Higher", active: false },
-      { label: "Youden's J (optimal balance)", value: "0.512", sens: "~87%", spec: "~79%", active: false },
-      { label: "Sensitivity-first reference", value: "0.52", sens: "85.4%", spec: "~76%", active: true },
+      { label: "Default (0.5)", value: "0.50", sens: "88.6%", spec: "73.0%", active: false },
+      { label: "Youden's J (optimal balance)", value: "0.512", sens: "87.8%", spec: "75.7%", active: false },
+      { label: "Sensitivity-first (locked)", value: "0.52", sens: "85.4%", spec: "76.4%", active: true },
     ],
   },
   vgg16: {
@@ -25,9 +25,9 @@ const FALLBACK_MODELS = {
     bestFor: "Highest individual AUC",
     description: "An older but highly reliable architecture with 138 million parameters, originally developed by Oxford University. Despite its age, it achieves the highest individual AUC of 0.9198 on our dataset. Its depth and conservative prediction style make it excellent at minimising false alarms while maintaining high sensitivity.",
     thresholds: [
-      { label: "Default (0.5)", value: "0.50", sens: "Lower", spec: "Higher", active: false },
-      { label: "Youden's J (optimal balance)", value: "0.468", sens: "~87%", spec: "~79%", active: false },
-      { label: "Sensitivity-first reference", value: "0.47", sens: "85.4%", spec: "~79%", active: true },
+      { label: "Default (0.5)", value: "0.50", sens: "80.5%", spec: "81.5%", active: false },
+      { label: "Youden's J (optimal balance)", value: "0.468", sens: "86.2%", spec: "79.1%", active: false },
+      { label: "Sensitivity-first (locked)", value: "0.47", sens: "85.4%", spec: "79.1%", active: true },
     ],
   },
   efficientnetv2: {
@@ -38,9 +38,9 @@ const FALLBACK_MODELS = {
     bestFor: "Highest specificity at Youden threshold",
     description: "A newer architecture with 513 layers that focuses on efficiency and accuracy. It has the highest specificity at the Youden threshold (89.7%), meaning it is the best at correctly clearing normal eyes. Useful when reducing unnecessary referrals is the clinical priority.",
     thresholds: [
-      { label: "Default (0.5)", value: "0.50", sens: "Lower", spec: "Higher", active: false },
-      { label: "Youden's J (optimal balance)", value: "0.609", sens: "~87%", spec: "~79%", active: false },
-      { label: "Sensitivity-first reference", value: "0.47", sens: "85.4%", spec: "~74%", active: true },
+      { label: "Default (0.5)", value: "0.50", sens: "82.9%", spec: "76.7%", active: false },
+      { label: "Youden's J (optimal balance)", value: "0.609", sens: "72.4%", spec: "89.7%", active: false },
+      { label: "Sensitivity-first (locked)", value: "0.47", sens: "85.4%", spec: "74.3%", active: true },
     ],
   },
   ensemble: {
@@ -52,9 +52,8 @@ const FALLBACK_MODELS = {
     isActive: true,
     description: "The system combines predictions from all three models by averaging their probability scores. Where all three models agree that a case shows possible glaucoma signs, confidence is highest. This approach provides a more stable screening output than relying on a single model and is used as the clinical reference model for screening outputs. An AUC of 0.9270 indicates excellent discrimination between glaucoma-sign and no-glaucoma-sign cases in the held-out test set.",
     thresholds: [
-      { label: "Default (0.5)", value: "0.50", sens: "Lower", spec: "Higher", active: false },
-      { label: "Youden's J (optimal balance)", value: "0.516", sens: "~87%", spec: "~80%", active: false },
-      { label: "Sensitivity-first reference", value: "0.50", sens: "85.4%", spec: "~80%", active: true },
+      { label: "Default (0.5) / Sensitivity-first (locked)", value: "0.50", sens: "85.4%", spec: "79.8%", active: true },
+      { label: "Youden's J (optimal balance)", value: "0.516", sens: "83.7%", spec: "83.6%", active: false },
     ],
   },
 };
@@ -112,14 +111,14 @@ function mapApiModelToUiModel(model) {
     isActive: model.model_key === "ensemble",
     description: FALLBACK_MODELS[model.model_key]?.description || "",
     thresholds: [
-      {
-        label: "Youden's J threshold",
-        value: Number(model.threshold || 0).toFixed(3),
-        sens: `${(Number(model.sensitivity || 0) * 100).toFixed(1)}%`,
-        spec: `${(Number(model.specificity || 0) * 100).toFixed(1)}%`,
-        active: model.model_key === "ensemble",
-      },
-    ],
+          {
+            label: "Sensitivity-first threshold",
+            value: Number(model.threshold || 0).toFixed(3),
+            sens: `${(Number(model.sensitivity || 0) * 100).toFixed(1)}%`,
+            spec: `${(Number(model.specificity || 0) * 100).toFixed(1)}%`,
+            active: model.model_key === "ensemble",
+          },
+        ],
   };
 }
 
@@ -431,8 +430,9 @@ function ModelPerformance() {
               </div>
               <div className="text-sm text-text2 leading-relaxed">
                 If red or yellow appears in random locations unrelated to the optic disc, the prediction
-                should be treated with more caution. The ensemble heatmap (average of all three models)
-                is the most reliable — it shows only regions where all three models independently agreed.
+                should be treated with more caution. The ensemble heatmap is the average of the three
+                individual model heatmaps. Regions where all three models focus tend to stay brightest,
+                while regions flagged by only one model are dampened rather than removed entirely.
               </div>
             </div>
           </div>
@@ -459,10 +459,14 @@ function ModelPerformance() {
               label: "Preprocessing",
               value: "CLAHE contrast enhancement applied to all images. Backbone-specific normalisation per model. Class weights applied to handle 1:2.4 glaucoma-to-normal imbalance.",
             },
+            // {
+            //   label: "Statistical Validation",
+            //   value: "McNemar's test (mid-p method) was used to compare paired model predictions on the held-out test set. Reference: Fagerland et al. 2013, BMC Medical Research Methodology.",
+            // },
             {
               label: "Statistical Validation",
-              value: "McNemar's test (mid-p method) was used to compare paired model predictions on the held-out test set. Reference: Fagerland et al. 2013, BMC Medical Research Methodology.",
-            },
+              value: "McNemar's test is planned for a later comparative evaluation, once matched per-image output sets are available across all three models. This is reserved as future work rather than completed analysis. Reference: Fagerland et al. 2013, BMC Medical Research Methodology.",
+            },            
           ].map(item => (
             <div key={item.label} className="bg-surface2 border border-white/12 rounded-xl p-4">
               <div className="text-xs font-semibold text-accent2 uppercase tracking-wider mb-2">{item.label}</div>

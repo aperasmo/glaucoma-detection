@@ -246,6 +246,18 @@ def generate_llama_vision(
     }
 
 
+# Module-level - persists across all calls within the same container process.
+# Resets only when the container restarts (which also resets the daily quota).
+# Intentional - container restart and daily quota reset happen together.
+_GEMINI_EXHAUSTED_MODELS: set[str] = set()
+
+GEMINI_FALLBACK_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+]
+
+
 def generate_gemini_vision(
     image_path: str,
     patient_name: str,
@@ -277,12 +289,16 @@ def generate_gemini_vision(
     # only prompt/completion tokens get returned below - thoughts_token_count
     # isn't saved since screening_results doesn't have a column for it and
     # we want the same shape as the other 3 LLMs.
+    #
+    # Fallback chain added July 2026 - skips exhausted models across calls
+    # using module-level _GEMINI_EXHAUSTED_MODELS set. Only 429
+    # RESOURCE_EXHAUSTED triggers fallback. Other errors raise immediately.
 
     from google import genai
     from google.genai import types
+    from google.genai.errors import ClientError
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
     prompt = build_clinical_prompt(
         patient_name, eye_side, confidence_score, ohts_score, ohts_tier
     )
@@ -290,22 +306,48 @@ def generate_gemini_vision(
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
-    response = client.models.generate_content(
-        model="gemini-3.5-flash",
-        contents=[
-            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-            types.Part.from_text(text=prompt),
-        ],
+    # Skip already-exhausted models from previous calls in this process
+    candidates = [m for m in GEMINI_FALLBACK_MODELS if m not in _GEMINI_EXHAUSTED_MODELS]
+
+    if not candidates:
+        raise RuntimeError(
+            f"All Gemini free-tier models exhausted: {_GEMINI_EXHAUSTED_MODELS}. "
+            f"Try again tomorrow or enable billing."
+        )
+
+    for model_name in candidates:
+        try:
+            logger.info(f"[gemini] Trying model: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                    types.Part.from_text(text=prompt),
+                ],
+            )
+            usage = response.usage_metadata
+            logger.info(f"[gemini] Success with {model_name}")
+            return {
+                "letter": response.text,
+                "prompt_tokens": usage.prompt_token_count,
+                "completion_tokens": usage.candidates_token_count,
+                "total_tokens": usage.total_token_count,
+            }
+
+        except ClientError as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                _GEMINI_EXHAUSTED_MODELS.add(model_name)
+                logger.warning(
+                    f"[gemini] {model_name} quota exhausted - added to skip list. "
+                    f"Exhausted models: {_GEMINI_EXHAUSTED_MODELS}"
+                )
+                continue
+            raise
+
+    raise RuntimeError(
+        f"All Gemini free-tier models exhausted: {_GEMINI_EXHAUSTED_MODELS}. "
+        f"Try again tomorrow or enable billing."
     )
-
-    usage = response.usage_metadata
-
-    return {
-        "letter": response.text,
-        "prompt_tokens": usage.prompt_token_count,
-        "completion_tokens": usage.candidates_token_count,
-        "total_tokens": usage.total_token_count,
-    }
 
 
 # maps LLM name -> its generator function

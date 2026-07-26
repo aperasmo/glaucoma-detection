@@ -24,7 +24,8 @@ import {
   BACKEND,
 } from "../components/screening-results/ResultShared";
 
-const CONFUSION_MATRIX = { tp: 177, fn: 31, fp: 39, tn: 168 };
+// const CONFUSION_MATRIX = { tp: 177, fn: 31, fp: 39, tn: 168 };
+const CONFUSION_MATRIX = { tp: 105, fn: 18, fp: 59, tn: 233 };
 const EVAL_METRICS = { auc: "0.93", sensitivity: "0.85", specificity: "0.80" };
 
 const MODEL_LABELS = {
@@ -36,7 +37,7 @@ const MODEL_LABELS = {
 
 const LETTER_TABS = [
   { keys: ["gpt4o", "gpt4o_mini"], labels: ["GPT-4o", "GPT-4o-mini"] },
-  { keys: ["llama", "gemini"], labels: ["LLaMA", "Gemini 3.5 Flash"] },
+  { keys: ["llama", "gemini"], labels: ["GPT-OSS 120B", "Gemini 3.5 Flash"] },
 ];
 
 // ---------------------------------------------------------------------------

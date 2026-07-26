@@ -63,8 +63,10 @@ def _safe_metric(value: Any) -> float | int | None:
 
 
 def _build_model_row(model_key: str, model_data: dict[str, Any]) -> dict[str, Any]:
-    # one row per model, all metrics taken at the Youden threshold
-    youden = model_data.get("youden_threshold", {}) or {}
+    # one row per model, all metrics taken at the sensitivity-first threshold.
+    # this is the operating point the live system actually runs at, so the page
+    # describes real behaviour rather than a balanced reference point
+    sensitivity_first = model_data.get("sensitivity_threshold", {}) or {}
 
     return {
         "model_key": model_key,
@@ -75,20 +77,20 @@ def _build_model_row(model_key: str, model_data: dict[str, Any]) -> dict[str, An
             "ensemble": "Ensemble",
         }.get(model_key, model_key),
         "checkpoint": model_data.get("checkpoint"),
-        "threshold_method": "youden_threshold",
-        "threshold": _safe_metric(youden.get("threshold")),
-        "auc": _safe_metric(youden.get("auc")),
-        "accuracy": _safe_metric(youden.get("accuracy")),
-        "sensitivity": _safe_metric(youden.get("sensitivity")),
-        "specificity": _safe_metric(youden.get("specificity")),
-        "precision": _safe_metric(youden.get("precision")),
-        "npv": _safe_metric(youden.get("npv")),
-        "f1": _safe_metric(youden.get("f1")),
-        "youden_j": _safe_metric(youden.get("youden_j")),
-        "tp": _safe_metric(youden.get("tp")),
-        "tn": _safe_metric(youden.get("tn")),
-        "fp": _safe_metric(youden.get("fp")),
-        "fn": _safe_metric(youden.get("fn")),
+        "threshold_method": "sensitivity_threshold",
+        "threshold": _safe_metric(sensitivity_first.get("threshold")),
+        "auc": _safe_metric(sensitivity_first.get("auc")),
+        "accuracy": _safe_metric(sensitivity_first.get("accuracy")),
+        "sensitivity": _safe_metric(sensitivity_first.get("sensitivity")),
+        "specificity": _safe_metric(sensitivity_first.get("specificity")),
+        "precision": _safe_metric(sensitivity_first.get("precision")),
+        "npv": _safe_metric(sensitivity_first.get("npv")),
+        "f1": _safe_metric(sensitivity_first.get("f1")),
+        "youden_j": _safe_metric(sensitivity_first.get("youden_j")),
+        "tp": _safe_metric(sensitivity_first.get("tp")),
+        "tn": _safe_metric(sensitivity_first.get("tn")),
+        "fp": _safe_metric(sensitivity_first.get("fp")),
+        "fn": _safe_metric(sensitivity_first.get("fn")),
     }
 
 
@@ -100,9 +102,17 @@ async def get_model_performance(
     don't wire this up to live clinical data."""
     evaluation_data = _load_json(EVALUATION_FILE)
 
+    # mcnemar_data = {}
+    # if MCNEMAR_FILE.exists():
+    #     mcnemar_data = _load_json(MCNEMAR_FILE)
+    # mcnemar_results.json is not served on this endpoint. The figures in that
+    # file do not reconcile against evaluation_results.json for three of the
+    # four models, and the paper (Section II-G, Section V) states this analysis
+    # is reserved for future work once matched output sets are available.
+    # Do not re-enable this block until the file is regenerated against the
+    # locked 415-image test set and the numbers are verified against
+    # evaluation_results.json.
     mcnemar_data = {}
-    if MCNEMAR_FILE.exists():
-        mcnemar_data = _load_json(MCNEMAR_FILE)
 
     primary_model_key = "ensemble"
     primary_model = evaluation_data.get(primary_model_key)
@@ -149,19 +159,22 @@ async def get_model_performance(
         "test_size": test_size,
         "primary_model": primary_model_key,
         "primary_model_name": "Ensemble",
-        "threshold_method": "youden_threshold",
-        "threshold_method_label": "Youden threshold",
+        "threshold_method": "sensitivity_threshold",
+        "threshold_method_label": "Sensitivity-first threshold",
         "disclaimer": (
             "These metrics are based on a held-out test set and do not represent "
             "live clinical performance. Live performance tracking requires "
             "clinician-confirmed ground truth for screened patients."
         ),
+    #     "primary_result": primary_result,
+    #     "models": models,
+    #     "mcnemar": {
+    #         "method": mcnemar_data.get("method"),
+    #         "threshold_method": mcnemar_data.get("threshold_method"),
+    #         "significance_level": mcnemar_data.get("significance_level"),
+    #         "results": mcnemar_data.get("results", []),
+    #     },
+    # }
         "primary_result": primary_result,
         "models": models,
-        "mcnemar": {
-            "method": mcnemar_data.get("method"),
-            "threshold_method": mcnemar_data.get("threshold_method"),
-            "significance_level": mcnemar_data.get("significance_level"),
-            "results": mcnemar_data.get("results", []),
-        },
     }
