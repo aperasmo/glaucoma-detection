@@ -136,3 +136,48 @@ resource "azurerm_subnet_network_security_group_association" "main" {
   subnet_id                 = azurerm_subnet.main.id
   network_security_group_id = azurerm_network_security_group.main.id
 }
+# -----------------------------------------------------------------------
+# Public IP
+# -----------------------------------------------------------------------
+# Equivalent to your AWS Elastic IP - a static public address that stays
+# the same even if the VM is stopped and restarted. Without "Static"
+# allocation, Azure would assign a new IP every time the VM restarts,
+# the exact problem the Elastic IP solved on the AWS side.
+#
+# sku = "Standard" is mandatory, not a preference - Azure fully retired
+# the older "Basic" SKU on 30 September 2025, and new Basic public IPs
+# haven't been creatable since March 2025. Standard also brings a real
+# security-by-default behaviour worth knowing: inbound traffic is denied
+# unless explicitly allowed by an NSG - which lines up exactly with the
+# NSG rules already defined above.
+resource "azurerm_public_ip" "main" {
+  name                = "glaucoma-ai-public-ip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+# -----------------------------------------------------------------------
+# Network Interface
+# -----------------------------------------------------------------------
+# The one genuinely new concept without a direct AWS equivalent to think
+# about explicitly. On AWS, EC2 instance launch handles the network
+# connection mostly implicitly - pick a subnet and security group, AWS
+# wires the rest up behind the scenes. On Azure, that connection is its
+# own resource, sitting between the VM and everything else: the subnet
+# it lives inside, and the public IP it's reachable at. The VM, created
+# next, will reference THIS resource - not the subnet or public IP
+# directly.
+resource "azurerm_network_interface" "main" {
+  name                = "glaucoma-ai-nic"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.main.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.main.id
+  }
+}
