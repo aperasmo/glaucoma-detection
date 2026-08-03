@@ -254,8 +254,13 @@ _GEMINI_EXHAUSTED_MODELS: set[str] = set()
 GEMINI_FALLBACK_MODELS = [
     "gemini-3.5-flash",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.6-flash",
 ]
+
+
+# Module-level fallback state is now managed by gemini_state.py
+# (persistent JSON file, 24hr auto-reset, survives container restarts)
+# Removed: _GEMINI_EXHAUSTED_MODELS set and GEMINI_FALLBACK_MODELS list
 
 
 def generate_gemini_vision(
@@ -290,13 +295,25 @@ def generate_gemini_vision(
     # isn't saved since screening_results doesn't have a column for it and
     # we want the same shape as the other 3 LLMs.
     #
-    # Fallback chain added July 2026 - skips exhausted models across calls
-    # using module-level _GEMINI_EXHAUSTED_MODELS set. Only 429
-    # RESOURCE_EXHAUSTED triggers fallback. Other errors raise immediately.
+    # Fallback chain added July 2026 - persistent state managed by
+    # app/ml_inference/gemini_state.py. State saved to
+    # app/data/gemini_model_state.json. Exhausted models auto-reset after
+    # 24 hours. Starts from last successful model if still available (Option B -
+    # re-evaluates all models on each call, prefers last successful).
+    # Only 429 RESOURCE_EXHAUSTED triggers fallback to next model.
+    # Other errors (503, network, auth) raise immediately.
 
     from google import genai
     from google.genai import types
     from google.genai.errors import ClientError
+    from app.ml_inference.gemini_state import (
+        load_state,
+        save_state,
+        get_ordered_candidates,
+        mark_exhausted,
+        mark_success,
+        _check_and_reset_expired,
+    )
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     prompt = build_clinical_prompt(
@@ -306,13 +323,17 @@ def generate_gemini_vision(
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
-    # Skip already-exhausted models from previous calls in this process
-    candidates = [m for m in GEMINI_FALLBACK_MODELS if m not in _GEMINI_EXHAUSTED_MODELS]
+    # Load persistent state and auto-reset any expired exhaustions
+    state = load_state()
+    state = _check_and_reset_expired(state)
+
+    candidates = get_ordered_candidates(state)
+    logger.info(f"[gemini] Candidate models (in order): {candidates}")
 
     if not candidates:
         raise RuntimeError(
-            f"All Gemini free-tier models exhausted: {_GEMINI_EXHAUSTED_MODELS}. "
-            f"Try again tomorrow or enable billing."
+            "All Gemini free-tier models are exhausted. "
+            "Try again in 24 hours or enable billing."
         )
 
     for model_name in candidates:
@@ -326,6 +347,11 @@ def generate_gemini_vision(
                 ],
             )
             usage = response.usage_metadata
+
+            # Save success state - records last successful model
+            state = mark_success(state, model_name)
+            save_state(state)
+
             logger.info(f"[gemini] Success with {model_name}")
             return {
                 "letter": response.text,
@@ -336,17 +362,29 @@ def generate_gemini_vision(
 
         except ClientError as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                _GEMINI_EXHAUSTED_MODELS.add(model_name)
+                # Quota exhausted - mark in persistent state and try next model
+                state = mark_exhausted(state, model_name)
+                save_state(state)
                 logger.warning(
-                    f"[gemini] {model_name} quota exhausted - added to skip list. "
-                    f"Exhausted models: {_GEMINI_EXHAUSTED_MODELS}"
+                    f"[gemini] {model_name} quota exhausted - saved to state, "
+                    f"trying next model."
                 )
                 continue
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                # Server overloaded - do NOT mark as exhausted (quota not spent),
+                # just skip to next model for this call only. State not saved.
+                logger.warning(
+                    f"[gemini] {model_name} temporarily unavailable (503) - "
+                    f"trying next model without marking exhausted."
+                )
+                continue
+            # Any other error - raise immediately, don't try next model
             raise
 
+    # All candidates exhausted during this call
     raise RuntimeError(
-        f"All Gemini free-tier models exhausted: {_GEMINI_EXHAUSTED_MODELS}. "
-        f"Try again tomorrow or enable billing."
+        "All Gemini free-tier models exhausted. "
+        "Try again in 24 hours or enable billing."
     )
 
 

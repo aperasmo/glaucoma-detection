@@ -101,6 +101,7 @@ function Login() {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
+                readOnly
                 required
                 placeholder="you@clinic.com"
                 className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors"
@@ -117,6 +118,7 @@ function Login() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
+                  readOnly
                   required
                   placeholder="••••••••"
                   className="w-full bg-surface2 border border-white/12 rounded-lg px-3 py-2.5 pr-10 text-sm text-text1 outline-none placeholder:text-text3 focus:border-accent transition-colors"

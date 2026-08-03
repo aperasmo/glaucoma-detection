@@ -1,0 +1,135 @@
+# ============================================
+# Python - Backend
+# ============================================
+venv/
+backend_env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment files - never commit secrets
+.env
+*.env
+.env.local
+.env.production
+
+# ML model files - too large for git
+backend/models/
+
+# Uploaded files - runtime data
+# uploads/ is at root level (bind mounted in docker-compose.yml)
+uploads/
+backend/uploads/
+
+# Logs
+backend/logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Alembic - keep migrations but not cache
+alembic/__pycache__/
+
+# ============================================
+# React - Frontend
+# ============================================
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/coverage/
+
+# Vite cache
+frontend/.vite/
+
+# ============================================
+# ML / Notebooks
+# ============================================
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+ml/__pycache__/
+
+# ============================================
+# IDE / OS
+# ============================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ============================================
+# Qodo AI tool
+# ============================================
+.qodo/
+
+# ============================================
+# Docker
+# ============================================
+# Note: .dockerignore files ARE committed - they are needed by Docker builds
+# Only the dev override is excluded since it contains local paths
+docker-compose.override.yml
+
+# Test images - local only, not for version control
+backend/test_images/
+
+# ============================================
+# ZIP FILES
+# ============================================
+*.zip
+
+# ============================================
+# AWS FILES
+# ============================================
+*.pem
+*accessKeys*.csv
+
+# ============================================
+# .MD FILES
+# ============================================
+SESSION_CHEATSHEET.md
+DEPLOYMENT_GUIDE.md
+PROJECT_STRUCTURE.md
+DEPLOYMENT_DOCUMENTATION.md
+LOCAL_DEV_WORKFLOWS.md
+# ============================================
+# .SH FILES
+# ============================================
+prepare_test_images.sh
+*.sh
+############################
+# -- AI GIT ASSISTANT --
+############################
+glaucoma-detection.code-workspace
+
+# ============================================
+# Terraform
+# ============================================
+# Local provider plugin cache - large, machine-specific, and fully
+# reproducible from .terraform.lock.hcl + terraform init. Never commit.
+**/.terraform/
+
+# Variable files often contain real subscription/resource values and
+# sometimes secrets (e.g. a client_secret for a service principal).
+# .tfvars.example (if ever created) is the safe, committed template.
+*.tfvars
+*.tfvars.json
+
+# Crash log Terraform writes if it hits an internal error
+crash.log
+crash.*.log
+
+# Note: .terraform.lock.hcl is INTENTIONALLY NOT ignored - it should be
+# committed so everyone/every session gets the exact same provider version.
