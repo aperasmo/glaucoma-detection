@@ -109,6 +109,21 @@ LOCAL_DEV_WORKFLOWS.md
 # ============================================
 prepare_test_images.sh
 *.sh
+# ============================================
+# Terraform
+# ============================================
+# Local provider plugin cache - large, machine-specific, and fully
+# reproducible from .terraform.lock.hcl + terraform init. Never commit.
+**/.terraform/
+
+# Variable files often contain real subscription/resource values and
+# sometimes secrets (e.g. a client_secret for a service principal).
+*.tfvars
+*.tfvars.json
+
+# Crash log Terraform writes if it hits an internal error
+crash.log
+crash.*.log
 ############################
 # -- AI GIT ASSISTANT --
 ############################
