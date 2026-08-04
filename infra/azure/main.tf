@@ -181,3 +181,85 @@ resource "azurerm_network_interface" "main" {
     public_ip_address_id          = azurerm_public_ip.main.id
   }
 }
+
+# -----------------------------------------------------------------------
+# Virtual Machine
+# -----------------------------------------------------------------------
+# The actual compute instance - everything before this point was
+# supporting infrastructure that didn't run anything by itself.
+#
+# Notice this references azurerm_network_interface.main, not the subnet
+# or public IP directly - matching what the network interface section
+# above explained. The VM has no direct awareness of the subnet or
+# public IP; it only knows about the network interface, which in turn
+# knows about both of those.
+resource "azurerm_linux_virtual_machine" "main" {
+  name                = "glaucoma-ai-azure-vm"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  # Standard_B2s (x64) hit a real capacity restriction in australiaeast
+  # for this subscription - "SkuNotAvailable" on first apply attempt.
+  # Standard_B2ps_v2 is the ARM64-based equivalent (2 vCPU, burstable
+  # B-series) and was confirmed available with no restrictions via
+  # `az vm list-skus`. Not a mistake or workaround - deliberately fine
+  # for a learning project where matching AWS's exact x64 architecture
+  # isn't the point of the exercise.
+  size = "Standard_B2ps_v2"
+
+  # Azure has no equivalent of AWS's preset "ubuntu" user baked into the
+  # image. Whatever username is specified here is the one Azure actually
+  # creates on first boot - "azureuser" is the standard Azure convention,
+  # used throughout Microsoft's own docs and tooling, though it means
+  # your SSH command will look different from the AWS side's "ubuntu@...".
+  admin_username = "azureuser"
+
+  network_interface_ids = [
+    azurerm_network_interface.main.id
+  ]
+
+  # Password login is disabled entirely - SSH key only, matching the
+  # AWS side's security posture with glaucoma-ai-key.pem.
+  disable_password_authentication = true
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/glaucoma-ai-azure-key.pub")
+  }
+
+  # StandardSSD_LRS rather than the cheaper Standard_LRS - the plain
+  # Standard tier is HDD-backed and noticeably sluggish for OS boot/IO,
+  # enough to make the VM genuinely unpleasant to use for what amounts
+  # to a small cost difference. Worth the small extra spend for a VM
+  # you're going to actually SSH into and work on.
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+  }
+
+  # Azure enables "Trusted Launch" (secure boot + vTPM) by default on new
+  # VMs - but ARM64 images explicitly do not support Trusted Launch and
+  # must use the "Standard" security type instead. Confirmed via current
+  # Ubuntu-on-Azure documentation. Leaving these at their true defaults
+  # would fail the apply a second time, for a different reason than the
+  # capacity error above.
+  secure_boot_enabled = false
+  vtpm_enabled         = false
+
+  # sku confirmed directly via `az vm image list-skus` rather than
+  # assumed by pattern from older Ubuntu versions - Canonical's naming
+  # here turned out simpler than 20.04/22.04's convention: just
+  # "server" (x64) vs "server-arm64" (this), with the version already
+  # captured in the offer name itself.
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server-arm64"
+    version   = "latest"
+  }
+
+  tags = {
+    project = "glaucoma-ai-terraform-learning"
+    purpose = "personal learning - not production"
+  }
+}
