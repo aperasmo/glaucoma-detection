@@ -131,5 +131,15 @@ glaucoma-detection.code-workspace
 crash.log
 crash.*.log
 
+# Local state files - only relevant for infra/aws (uses local state
+# deliberately, since setting up a remote backend would itself require
+# an apply). Contains real AWS resource IDs/ARNs/config - never commit,
+# regardless of whether it holds actual secrets or "just" infra details.
+# infra/azure uses remote state (Azure Storage) so this never applies
+# there - no local .tfstate file is ever created in that folder.
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+
 # Note: .terraform.lock.hcl is INTENTIONALLY NOT ignored - it should be
 # committed so everyone/every session gets the exact same provider version.
