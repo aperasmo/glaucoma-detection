@@ -10,6 +10,16 @@ name: Deploy GlaucomaAI to Azure (Manual)
 on:
   workflow_dispatch:
 
+# run-name customizes the title shown in the Actions run list.
+# Push-triggered workflows (like deploy.yml) automatically show the
+# commit message as the title, because a push event carries the commit
+# with it. workflow_dispatch carries no commit data at all - it's just
+# "a human clicked a button" - so without this, every run would show
+# the generic workflow name with no way to tell runs apart at a glance.
+# github.sha still gives the real commit hash being deployed, even
+# though the commit message itself genuinely isn't available here.
+run-name: Deploy to Azure - ${{ github.sha }} by ${{ github.actor }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
