@@ -1,0 +1,67 @@
+name: Deploy GlaucomaAI to Azure (Manual)
+
+# workflow_dispatch = manual trigger only, no automatic run on push.
+# Deliberately different from deploy.yml (AWS), which triggers on every
+# push to main. This Azure VM doesn't always exist - it gets destroyed
+# and rebuilt as a learning exercise, and deallocated/started daily like
+# EC2 - so auto-deploying on every push would fail constantly whenever
+# the VM happens to be off or torn down, and could pollute the AWS
+# deploy status if the two were ever combined into one workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          script: |
+            # set -e = stop immediately if any command fails, so a failed
+            # git pull (or anything else) shows a real red X in Actions
+            # instead of silently continuing and building stale code -
+            # the exact false-green bug we found and fixed on the AWS
+            # workflow earlier in this project.
+            set -e
+
+            cd ~/glaucoma-detection
+
+            echo "Pulling latest code from GitHub..."
+            git pull origin main
+
+            echo "Capturing commit hash for frontend build..."
+            # Computed here, on the VM's real git checkout, where .git
+            # genuinely exists - same reasoning as the AWS workflow.
+            # docker-compose.yml and frontend/Dockerfile already support
+            # this var (${VITE_COMMIT_HASH:-dev}), so this is free.
+            export VITE_COMMIT_HASH=$(git rev-parse --short HEAD)
+            echo "Commit hash: $VITE_COMMIT_HASH"
+
+            echo "Rebuilding backend, frontend, and report-service images..."
+            # db excluded - never rebuilt as part of a routine deploy,
+            # protects the running database and its data volume.
+            docker compose build --no-cache backend frontend report-service
+
+            echo "Stopping and removing old containers before restart..."
+            # rm -f --stop = prevents the "container name already in
+            # use" conflict discovered on the AWS side - stops and
+            # force-removes the old containers before docker compose up
+            # tries to create new ones with the same names.
+            docker compose rm -f --stop backend frontend report-service
+
+            echo "Starting new containers..."
+            # --no-deps = do not restart db
+            docker compose up -d --no-deps backend frontend report-service
+
+            echo "Cleaning up unused Docker images..."
+            docker image prune -f
+
+            echo "Deploy finished successfully."
