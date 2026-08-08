@@ -17,12 +17,18 @@ from app.services.patient_service import (
 )
 from app.core.logger import get_logger
 
+
+from fastapi import Request
+from app.core.limiter import limiter
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
 @router.post("/", response_model=ResponsePatient, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute") # limit to 5 patient registrations per minute per client IP to prevent abuse
 async def register_patient(
+    request: Request,
     patient_data: CreatePatient,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin","nurse")), # admin/nurse only

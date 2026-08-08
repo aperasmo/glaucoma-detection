@@ -31,6 +31,11 @@ from app.ml_inference.llm_referral import generate_referral_letters
 
 from typing import Optional
 import uuid
+
+
+from fastapi import Request
+from app.core.limiter import limiter
+
 logger = get_logger(__name__)
 
 
@@ -38,7 +43,9 @@ router = APIRouter(prefix="/screenings", tags=["Screenings"])
 
 
 @router.post("/", response_model=ScreeningResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute") # limit to 5 uploads per minute per client IP to prevent abuse
 async def upload_screening(
+    request: Request,
     patient_id: UUID,
     eye_side: str,    
     background_tasks: BackgroundTasks,

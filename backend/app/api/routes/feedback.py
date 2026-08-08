@@ -13,6 +13,10 @@ from app.models.user import User
 from app.utils.notifications import send_feedback_notification
 from app.utils.settings_helper import get_setting
 
+
+from fastapi import Request
+from app.core.limiter import limiter
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
@@ -34,7 +38,9 @@ class CreateFeedback(BaseModel):
 
 
 @router.post("/", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def submit_feedback(
+    request: Request,
     payload: CreateFeedback,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),

@@ -30,7 +30,12 @@ from app.api.routes.llm_evaluation import router as evaluation_router # LLM eval
 from app.api.routes.feedback import router as feedback_router
 
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
 logger = get_logger(__name__)
+
+
 
 # title/version come from the settings object and show up in the /docs swagger page
 @asynccontextmanager
@@ -55,6 +60,9 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # serve uploaded images and Grad-CAM++ heatmaps as static files, e.g. http://localhost:8000/uploads/...
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

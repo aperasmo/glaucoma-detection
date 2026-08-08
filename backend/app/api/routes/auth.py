@@ -27,6 +27,11 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 
 
+# Add to imports
+
+from fastapi import Request
+from app.core.limiter import limiter
+
 logger = get_logger(__name__)
 
 
@@ -83,7 +88,9 @@ async def activate_account(token: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute") # limit to 10 login attempts per minute per client IP to mitigate brute-force attacks
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
@@ -193,6 +200,7 @@ async def login(
         )
 
 @router.post("/demo-login", status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
 async def demo_login(
     request: Request,
     db: AsyncSession = Depends(get_db),
