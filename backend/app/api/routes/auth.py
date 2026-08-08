@@ -200,7 +200,7 @@ async def login(
         )
 
 @router.post("/demo-login", status_code=status.HTTP_200_OK)
-@limiter.limit("20/minute")
+@limiter.limit("100/minute") # raised for MIPR2026 shared conference wifi (many attendees behind one gateway IP), was 20/minute
 async def demo_login(
     request: Request,
     db: AsyncSession = Depends(get_db),

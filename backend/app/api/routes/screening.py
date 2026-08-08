@@ -43,7 +43,7 @@ router = APIRouter(prefix="/screenings", tags=["Screenings"])
 
 
 @router.post("/", response_model=ScreeningResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute") # limit to 5 uploads per minute per client IP to prevent abuse
+@limiter.limit("30/minute") # raised for MIPR2026 shared conference wifi (NAT), was 5/minute
 async def upload_screening(
     request: Request,
     patient_id: UUID,
